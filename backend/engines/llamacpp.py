@@ -61,7 +61,7 @@ class LlamaCppEngine(Engine):
         if opts.get("mlock"):
             cmd += ["--mlock"]
         if opts.get("flashAttn") or opts.get("flash_attn"):
-            cmd += ["-fa"]
+            cmd += ["-fa", "on"]
 
         threads = opts.get("threads")
         if threads:

@@ -16,6 +16,8 @@ from typing import Awaitable, Callable
 import httpx
 from loguru import logger
 
+EXCLUDE_TERMS_NEED = ["vulkan", "hip", "sycl", "kompute"]  # NUNCA queremos estos
+
 BIN_ROOT = (
     Path(os.environ["APPDATA"]) / "InferBench" / "binaries"
     if os.name == "nt" and "APPDATA" in os.environ
@@ -65,44 +67,107 @@ def llamacpp_installed() -> bool:
     return llamacpp_binary_path().exists()
 
 
-EXCLUDE_TERMS = ["cudart", "vulkan", "hip", "sycl", "kompute"]
-
-
 def _match_asset(assets: list[dict], terms: list[str]) -> dict | None:
-    """Asset zip cuyo nombre contiene todos los términos y NO contiene términos excluidos.
-
-    Excluimos paquetes auxiliares como `cudart` (solo DLLs del runtime, sin binarios)
-    o builds alternativas (`vulkan`, `hip`, `sycl`, `kompute`).
+    """Asset principal con binarios: incluye todos los términos, excluye builds alternativas
+    y el paquete cudart-only (sin binarios).
     """
+    excludes = EXCLUDE_TERMS_NEED + ["cudart"]
     for a in assets:
         n = a["name"].lower()
-        if not n.endswith(".zip"):
-            continue
-        if any(ex in n for ex in EXCLUDE_TERMS):
+        if not n.endswith(".zip") or any(ex in n for ex in excludes):
             continue
         if all(t in n for t in terms):
             return a
-    # Relajar si no hay match con cuda — caer a CPU
     if "cuda" in terms:
         return _match_asset(assets, [t for t in terms if t != "cuda"])
     return None
 
 
+def _cuda_version(asset_name: str) -> str | None:
+    """Extrae la versión CUDA del nombre del asset (ej. 'cu12.4' o 'cuda-12.4')."""
+    m = re.search(r"cu(?:da)?[-_]?(\d{1,2}\.\d)", asset_name.lower())
+    return m.group(1) if m else None
+
+
+def _match_cudart_asset(assets: list[dict], main_name: str) -> dict | None:
+    """Asset cudart compatible con la versión CUDA del binario principal."""
+    cu_ver = _cuda_version(main_name)
+    candidates = []
+    for a in assets:
+        n = a["name"].lower()
+        if not n.endswith(".zip") or "cudart" not in n or "win" not in n:
+            continue
+        candidates.append(a)
+    if cu_ver:
+        for a in candidates:
+            if cu_ver in a["name"].lower():
+                return a
+    return candidates[0] if candidates else None
+
+
+def _has_cudart_dlls(directory: Path) -> bool:
+    return any(directory.glob("cudart64_*.dll")) or any(directory.glob("cublas64_*.dll"))
+
+
+async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
+                        progress: ProgressCb, label: str) -> None:
+    """Descarga un asset zip y lo extrae en `dest_dir`. Borra el zip al terminar."""
+    url = asset["browser_download_url"]
+    size = asset.get("size", 0)
+    name = asset["name"]
+    logger.info(f"Descargando {label}: {name} ({size / 1e6:.1f} MB)")
+    if progress:
+        await progress({"phase": "download", "name": name, "size": size, "downloaded": 0,
+                        "label": label})
+
+    zip_path = dest_dir / name
+    downloaded = 0
+    last_pct = -1
+    with open(zip_path, "wb") as f:
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            async for chunk in resp.aiter_bytes(chunk_size=131072):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if progress and size:
+                    pct = round(downloaded / size * 100, 1)
+                    if pct - last_pct >= 0.5:
+                        await progress({
+                            "phase": "download", "label": label, "name": name,
+                            "downloaded": downloaded, "size": size, "pct": pct,
+                        })
+                        last_pct = pct
+
+    if progress:
+        await progress({"phase": "extract", "label": label, "name": name})
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(dest_dir)
+    zip_path.unlink()
+
+
 async def install_llamacpp(progress: ProgressCb = None) -> Path:
-    """Descarga y extrae llama.cpp si no existe. Devuelve ruta al binario."""
+    """Descarga y extrae llama.cpp si no existe. Devuelve ruta al binario.
+
+    Para builds CUDA, descarga ADEMÁS el zip cudart con las DLLs del runtime CUDA.
+    Sin esas DLLs, ggml-cuda.dll falla al cargar y el motor cae a CPU silenciosamente.
+    """
     target = _llamacpp_dir()
     exe = target / _exe_name()
-    if exe.exists():
-        return exe
-
     target.mkdir(parents=True, exist_ok=True)
     terms = _llamacpp_variant_terms()
-    logger.info(f"Buscando llama.cpp release con términos {terms}")
+    is_cuda = "cuda" in terms
 
+    # ¿Necesitamos algo?
+    need_main = not exe.exists()
+    need_cudart = is_cuda and not _has_cudart_dlls(target)
+    if not need_main and not need_cudart:
+        return exe
+
+    logger.info(f"Buscando llama.cpp release: terms={terms} need_main={need_main} need_cudart={need_cudart}")
     if progress:
         await progress({"phase": "lookup", "message": "Buscando última release…"})
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
         r = await client.get(
             f"https://api.github.com/repos/{LLAMACPP_REPO}/releases/latest",
             headers={"Accept": "application/vnd.github+json"},
@@ -110,42 +175,28 @@ async def install_llamacpp(progress: ProgressCb = None) -> Path:
         r.raise_for_status()
         release = r.json()
         tag = release.get("tag_name", "?")
-        asset = _match_asset(release.get("assets", []), terms)
-        if not asset:
+        assets = release.get("assets", [])
+
+        main_asset = _match_asset(assets, terms) if need_main else None
+        if need_main and not main_asset:
             raise RuntimeError(
-                f"No se encontró asset compatible en release {tag}. "
-                f"Términos buscados: {terms}"
+                f"No se encontró asset compatible en release {tag}. Términos: {terms}"
             )
 
-        url = asset["browser_download_url"]
-        size = asset.get("size", 0)
-        name = asset["name"]
-        logger.info(f"Descargando {name} ({size / 1e6:.1f} MB) desde {url}")
-        if progress:
-            await progress({"phase": "download", "name": name, "size": size, "downloaded": 0})
+        cudart_asset = None
+        if need_cudart:
+            ref_name = main_asset["name"] if main_asset else (
+                next((a["name"] for a in assets if all(t in a["name"].lower() for t in terms)
+                      and "cudart" not in a["name"].lower()), "")
+            )
+            cudart_asset = _match_cudart_asset(assets, ref_name)
+            if not cudart_asset:
+                logger.warning("No se encontró asset cudart; CUDA podría no inicializarse")
 
-        zip_path = target / name
-        downloaded = 0
-        with open(zip_path, "wb") as f:
-            async with client.stream("GET", url) as resp:
-                resp.raise_for_status()
-                async for chunk in resp.aiter_bytes(chunk_size=131072):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress and size:
-                        await progress({
-                            "phase": "download",
-                            "downloaded": downloaded,
-                            "size": size,
-                            "pct": round(downloaded / size * 100, 1),
-                        })
-
-    if progress:
-        await progress({"phase": "extract"})
-
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(target)
-    zip_path.unlink()
+        if main_asset:
+            await _download_zip(client, main_asset, target, progress, "main")
+        if cudart_asset:
+            await _download_zip(client, cudart_asset, target, progress, "cudart")
 
     # Localizar el binario (algunos releases lo nombran "server.exe")
     candidates = [_exe_name(), "server.exe" if os.name == "nt" else "server"]
@@ -156,14 +207,12 @@ async def install_llamacpp(progress: ProgressCb = None) -> Path:
             break
 
     if not found:
-        # Diagnóstico: listar lo que sí se extrajo
-        contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:20]
+        contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:30]
         raise RuntimeError(
-            f"{_exe_name()} no encontrado tras extraer {name}. "
-            f"Contenido del zip: {contents or '(vacío)'}"
+            f"{_exe_name()} no encontrado tras extraer. "
+            f"Contenido: {contents or '(vacío)'}"
         )
 
-    # Si encontramos "server.exe" pero esperábamos "llama-server.exe", renombrar
     if found.name != _exe_name():
         renamed = found.with_name(_exe_name())
         found.rename(renamed)

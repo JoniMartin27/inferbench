@@ -337,8 +337,9 @@ class BenchmarkRunner:
             ]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
+            # En llama.cpp moderno -fa requiere valor (on|off|auto)
             if optimal.flags.get("flashAttn"):
-                args += ["-fa"]
+                args += ["-fa", "on"]
             if optimal.flags.get("mlock"):
                 args += ["--mlock"]
 

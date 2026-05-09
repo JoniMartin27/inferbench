@@ -21,6 +21,23 @@ async def list_runs() -> list[BenchmarkRun]:
         return list(s.exec(select(BenchmarkRun).order_by(BenchmarkRun.ts.desc())).all())
 
 
+@router.get("/compare/runs", response_model=list[RunDetail])
+async def compare_runs(ids: str) -> list[RunDetail]:
+    """Devuelve detalle completo (run + results) de varios run_ids separados por coma."""
+    run_ids = [i.strip() for i in ids.split(",") if i.strip()]
+    out: list[RunDetail] = []
+    with get_session() as s:
+        for rid in run_ids:
+            run = s.get(BenchmarkRun, rid)
+            if not run:
+                continue
+            results = list(
+                s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == rid)).all()
+            )
+            out.append(RunDetail(run=run, results=results))
+    return out
+
+
 @router.get("/{run_id}", response_model=RunDetail)
 async def get_run(run_id: str) -> RunDetail:
     with get_session() as s:

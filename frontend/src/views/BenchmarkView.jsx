@@ -18,6 +18,7 @@ export default function BenchmarkView() {
   const [engine, setEngine] = useState("llamacpp");
   const [model, setModel] = useState("");
   const [quant, setQuant] = useState("Q4_K_M");
+  const [sweepQuants, setSweepQuants] = useState([]);
   const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
@@ -110,6 +111,70 @@ export default function BenchmarkView() {
     }
   };
 
+  const startSweep = async () => {
+    if (!sweepQuants.length) return;
+    setEvents([{ type: "log", level: "info", text: `Sweep: ${sweepQuants.join(", ")}` }]);
+    setResults([]);
+    setProgress({});
+    try {
+      const base = {
+        engine,
+        model,
+        prompts,
+        auto: !engineIsApi,
+        keep_alive: false,
+        api_key: apiKey || null,
+        notes: `sweep ${sweepQuants.join("+")}`,
+      };
+      const { sweep_id } = await api.startSweep(base, sweepQuants);
+      setEvents((arr) => [...arr, { type: "log", level: "info", text: `Sweep arrancado: ${sweep_id}` }]);
+      pollSweep(sweep_id);
+    } catch (e) {
+      setEvents((arr) => [...arr, { type: "log", level: "error", text: e.message }]);
+    }
+  };
+
+  const pollSweep = async (sweepId) => {
+    let lastRunId = null;
+    while (true) {
+      try {
+        const status = await api.sweepStatus(sweepId);
+        if (status.current && status.current !== lastRunId) {
+          lastRunId = status.current;
+          setEvents((arr) => [
+            ...arr,
+            { type: "log", level: "info", text: `→ run ${lastRunId}` },
+          ]);
+          setRunning(lastRunId);
+          unsubRef.current?.();
+          unsubRef.current = subscribeBenchmark(lastRunId, (evt) => {
+            setEvents((arr) => [...arr.slice(-400), evt]);
+            if (evt.type === "result") setResults((r) => [...r, evt.result]);
+            if (evt.type === "tokens")
+              setProgress({ kind: "tokens", current: evt.current, target: evt.target, tps: evt.tps_current });
+          });
+        }
+        if (status.completed || status.cancelled) {
+          setRunning(null);
+          unsubRef.current?.();
+          unsubRef.current = null;
+          setEvents((arr) => [
+            ...arr,
+            { type: "log", level: "success", text: `Sweep terminado (${status.runs.length} runs)` },
+          ]);
+          return;
+        }
+      } catch (e) {
+        setEvents((arr) => [...arr, { type: "log", level: "warn", text: `poll: ${e.message}` }]);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  };
+
+  const toggleSweepQuant = (q) =>
+    setSweepQuants((s) => (s.includes(q) ? s.filter((x) => x !== q) : [...s, q]));
+
   const togglePrompt = (id) =>
     setPrompts((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
@@ -155,13 +220,34 @@ export default function BenchmarkView() {
               )}
             </Field>
             {!engineIsApi && (
-              <Field label="Cuantización" hint="La app descargará este nivel del repo HF">
-                <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
-                  {QUANTS.map((q) => (
-                    <option key={q}>{q}</option>
-                  ))}
-                </Select>
-              </Field>
+              <>
+                <Field label="Cuantización" hint="Para una sola corrida">
+                  <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
+                    {QUANTS.map((q) => (
+                      <option key={q}>{q}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Sweep" hint="Marca varias para comparar (corre secuencial)">
+                  <div className="flex flex-wrap gap-2">
+                    {QUANTS.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => toggleSweepQuant(q)}
+                        disabled={!!running}
+                        className={`rounded-md border px-2 py-1 text-xs ${
+                          sweepQuants.includes(q)
+                            ? "border-purple-500 bg-purple-500/10 text-purple-200"
+                            : "border-slate-700 text-slate-400"
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              </>
             )}
             {engineIsApi && (
               <Field label="API key">
@@ -203,11 +289,18 @@ export default function BenchmarkView() {
                 No detener el motor al terminar (más rápido si vas a relanzar)
               </label>
             )}
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-2">
               {!running ? (
-                <Button onClick={start} disabled={!model || !prompts.length || !canRun}>
-                  <Play size={14} /> Lanzar benchmark
-                </Button>
+                <>
+                  <Button onClick={start} disabled={!model || !prompts.length || !canRun}>
+                    <Play size={14} /> Lanzar benchmark
+                  </Button>
+                  {sweepQuants.length > 0 && !engineIsApi && (
+                    <Button onClick={startSweep} variant="success" disabled={!model || !canRun}>
+                      <Play size={14} /> Sweep ({sweepQuants.length} quants)
+                    </Button>
+                  )}
+                </>
               ) : (
                 <Button variant="danger" onClick={stop}>
                   <Square size={14} /> Detener

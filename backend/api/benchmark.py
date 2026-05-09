@@ -9,6 +9,8 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from pydantic import BaseModel, Field
+
 from core.benchmark import BenchmarkRequest, BenchmarkRunner
 from core.hardware import detect_hardware
 from db import BenchmarkResult, BenchmarkRun, get_session
@@ -53,6 +55,71 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
         for r in runner.results:
             s.add(BenchmarkResult(run_id=runner.run_id, **r.model_dump()))
         s.commit()
+
+
+class SweepRequest(BaseModel):
+    """Lanza el mismo modelo+motor con N cuantizaciones distintas (sequencialmente)."""
+    base: BenchmarkRequest
+    quants: list[str] = Field(min_length=1)
+
+
+_SWEEPS: dict[str, dict] = {}  # sweep_id → state
+
+
+@router.post("/sweep")
+async def start_sweep(req: SweepRequest) -> dict:
+    import uuid
+
+    sweep_id = uuid.uuid4().hex[:10]
+    state = {"id": sweep_id, "queue": list(req.quants), "runs": [], "current": None,
+             "cancelled": False, "completed": False}
+    _SWEEPS[sweep_id] = state
+
+    async def runner_loop():
+        for quant in req.quants:
+            if state["cancelled"]:
+                break
+            sub_req = req.base.model_copy(update={"quant": quant})
+            runner = BenchmarkRunner(sub_req)
+            _RUNNERS[runner.run_id] = runner
+            state["current"] = runner.run_id
+            state["runs"].append({"run_id": runner.run_id, "quant": quant})
+            with get_session() as s:
+                s.add(BenchmarkRun(
+                    id=runner.run_id, ts=int(time.time()), engine=sub_req.engine,
+                    hw_json=detect_hardware().model_dump_json(),
+                    opts_json=sub_req.model_dump_json(),
+                    notes=f"[sweep {sweep_id}] {sub_req.notes}".strip(),
+                    status="running",
+                ))
+                s.commit()
+            await _run_and_persist(runner)
+        state["current"] = None
+        state["completed"] = True
+
+    asyncio.create_task(runner_loop())
+    return {"sweep_id": sweep_id, "runs_planned": len(req.quants)}
+
+
+@router.get("/sweep/{sweep_id}")
+async def sweep_status(sweep_id: str) -> dict:
+    s = _SWEEPS.get(sweep_id)
+    if not s:
+        raise HTTPException(404, f"sweep desconocido: {sweep_id}")
+    return s
+
+
+@router.post("/sweep/{sweep_id}/stop")
+async def sweep_stop(sweep_id: str) -> dict:
+    s = _SWEEPS.get(sweep_id)
+    if not s:
+        raise HTTPException(404, f"sweep desconocido: {sweep_id}")
+    s["cancelled"] = True
+    if s.get("current"):
+        runner = _RUNNERS.get(s["current"])
+        if runner:
+            runner.cancel()
+    return s
 
 
 @router.post("/{run_id}/stop")

@@ -52,6 +52,16 @@ export const api = {
   listHistory: () => request("/api/history"),
   getHistory: (runId) => request(`/api/history/${runId}`),
   deleteHistory: (runId) => request(`/api/history/${runId}`, { method: "DELETE" }),
+  compareHistory: (ids) => request(`/api/history/compare/runs?ids=${ids.join(",")}`),
+
+  startSweep: (base, quants) =>
+    request("/api/benchmark/sweep", {
+      method: "POST",
+      body: JSON.stringify({ base, quants }),
+    }),
+  sweepStatus: (sweepId) => request(`/api/benchmark/sweep/${sweepId}`),
+  stopSweep: (sweepId) =>
+    request(`/api/benchmark/sweep/${sweepId}/stop`, { method: "POST" }),
 };
 
 // Suscripción SSE a un run de benchmark.

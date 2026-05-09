@@ -75,7 +75,29 @@ class BenchmarkRequest(BaseModel):
     base_url: str | None = None    # override manual (si auto=false)
     api_key: str | None = None
     sampling: dict[str, Any] = Field(default_factory=lambda: {"temperature": 0.7, "top_p": 0.95})
+    engine_opts: dict[str, Any] = Field(default_factory=dict)  # override flags optimizer
     notes: str = ""
+
+
+def _extra_engine_args_static(opts: dict[str, Any]) -> list[str]:
+    """Construye flags llama-server adicionales desde un dict de overrides."""
+    extra: list[str] = []
+    if opts.get("noMmap") is True:
+        extra += ["--no-mmap"]
+    if opts.get("mlock") is True:
+        extra += ["--mlock"]
+    if "flashAttn" in opts:
+        v = opts["flashAttn"]
+        extra += ["-fa", "on" if v else "off"]
+    if "threads" in opts:
+        extra += ["-t", str(int(opts["threads"]))]
+    if "batchSize" in opts:
+        extra += ["--batch-size", str(int(opts["batchSize"]))]
+    if "ubatchSize" in opts:
+        extra += ["--ubatch-size", str(int(opts["ubatchSize"]))]
+    if "cacheReuse" in opts:
+        extra += ["--cache-reuse", str(int(opts["cacheReuse"]))]
+    return extra
 
 
 class ResultPayload(BaseModel):
@@ -202,6 +224,9 @@ class BenchmarkRunner:
 
     def cancel(self) -> None:
         self.cancelled.set()
+
+    def _extra_engine_args(self, opts: dict[str, Any]) -> list[str]:
+        return _extra_engine_args_static(opts)
 
     async def emit(self, evt: dict[str, Any]) -> None:
         await self.queue.put(evt)
@@ -344,14 +369,18 @@ class BenchmarkRunner:
             kv = optimal.kv_cache or "f16"
             moe = optimal.moe_offload
 
+            n_threads = max(2, (psutil.cpu_count(logical=False) or 4))
             args = [
                 "--host", "0.0.0.0",
                 "--port", "8080",
                 "-m", str(gguf_path),
-                "--alias", model.id,  # nombre que /v1/chat/completions aceptará
+                "--alias", model.id,
                 "-c", str(ctx),
                 "-ngl", "99",
                 "-ctk", kv, "-ctv", kv,
+                "-t", str(n_threads),
+                "--batch-size", "2048",
+                "--ubatch-size", "512",
             ]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
@@ -360,6 +389,11 @@ class BenchmarkRunner:
                 args += ["-fa", "on"]
             if optimal.flags.get("mlock"):
                 args += ["--mlock"]
+            if optimal.flags.get("noMmap"):
+                args += ["--no-mmap"]
+            # Permitir override desde el request
+            if self.req.engine_opts:
+                args += self._extra_engine_args(self.req.engine_opts)
 
             await self.emit({"type": "engine.start", "binary": str(binary), "args": args})
             native_runtime.start("llamacpp", exe=binary, args=args, port=8080)

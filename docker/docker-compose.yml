@@ -1,0 +1,37 @@
+# Imágenes pre-tageadas de los motores. La app las lanza individualmente vía Docker SDK,
+# no con docker-compose, pero esto sirve como referencia y para pull manual.
+version: "3.9"
+
+services:
+  llamacpp:
+    image: ghcr.io/ggerganov/llama.cpp:server-cuda
+    profiles: ["manual"]
+    ports: ["8080:8080"]
+    deploy:
+      resources:
+        reservations:
+          devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["manual"]
+    ports: ["11434:11434"]
+    volumes: ["ollama_data:/root/.ollama"]
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    profiles: ["manual"]
+    ports: ["8000:8000"]
+
+  sglang:
+    image: lmsysorg/sglang:latest
+    profiles: ["manual"]
+    ports: ["30000:30000"]
+
+  tgi:
+    image: ghcr.io/huggingface/text-generation-inference:latest
+    profiles: ["manual"]
+    ports: ["8088:80"]
+
+volumes:
+  ollama_data:

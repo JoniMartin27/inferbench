@@ -1,0 +1,38 @@
+[project]
+name = "inferbench-backend"
+version = "0.1.0"
+description = "Backend FastAPI para InferBench"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "psutil>=6.1",
+  "pynvml>=12.0",
+  "docker>=7.1",
+  "httpx>=0.28",
+  "sse-starlette>=2.1",
+  "loguru>=0.7",
+  "keyring>=25.5",
+  "sqlmodel>=0.0.22"
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.7", "black>=24", "pytest>=8", "pytest-asyncio>=0.24"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["api", "core", "engines"]
+include-package-data = false
+py-modules = ["main"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]

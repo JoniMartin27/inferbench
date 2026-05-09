@@ -1,0 +1,38 @@
+[
+  {
+    "id": "reasoning",
+    "name": "Razonamiento lógico",
+    "type": "reasoning",
+    "system": "Eres un asistente que razona paso a paso. Sé conciso pero riguroso.",
+    "prompt": "Tres amigos comparten un alquiler de 1500€. Ana paga el doble que Bea, y Carlos paga el triple que Bea. ¿Cuánto paga cada uno? Explica el razonamiento.",
+    "target_tokens": 256,
+    "reference": "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€."
+  },
+  {
+    "id": "code",
+    "name": "Generación de código",
+    "type": "code",
+    "system": "Eres un asistente experto en programación. Devuelve código Python limpio con docstrings.",
+    "prompt": "Implementa una función `merge_intervals(intervals: list[tuple[int,int]]) -> list[tuple[int,int]]` que fusione intervalos solapados. Incluye 3 ejemplos de uso.",
+    "target_tokens": 512,
+    "reference": "def merge_intervals(intervals): intervals.sort(); result=[]; ..."
+  },
+  {
+    "id": "summary",
+    "name": "Resumen",
+    "type": "summary",
+    "system": "Eres un asistente que resume textos manteniendo todos los datos clave.",
+    "prompt": "Resume en 5 puntos: La inteligencia artificial generativa ha transformado la industria del software en los últimos años. Los grandes modelos de lenguaje, entrenados con cantidades masivas de datos, son capaces de generar código, traducir entre idiomas, redactar documentos y razonar sobre problemas complejos. Sin embargo, plantean retos sobre privacidad, sesgos en los datos de entrenamiento, consumo energético en los centros de datos, y la necesidad de regulación. Empresas y gobiernos de todo el mundo trabajan en frameworks éticos para su despliegue responsable.",
+    "target_tokens": 384,
+    "reference": "IA generativa transforma software; LLMs generan código y razonan; retos: privacidad, sesgos, energía, regulación."
+  },
+  {
+    "id": "chat",
+    "name": "Chat corto",
+    "type": "chat",
+    "system": "Eres un asistente amable y conciso.",
+    "prompt": "Recomiéndame 3 libros de ciencia ficción modernos y dime brevemente de qué van.",
+    "target_tokens": 128,
+    "reference": ""
+  }
+]

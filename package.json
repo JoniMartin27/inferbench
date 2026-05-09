@@ -1,0 +1,16 @@
+{
+  "name": "inferbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Panel local de benchmarks LLM",
+  "workspaces": ["frontend"],
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "cd backend && uvicorn main:app --reload --port 7777",
+    "dev:frontend": "cd frontend && npm run electron:dev",
+    "build": "cd frontend && npm run build && npm run electron:build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

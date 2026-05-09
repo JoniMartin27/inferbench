@@ -1,0 +1,70 @@
+// Cliente HTTP del backend FastAPI en localhost:7777.
+// El frontend (Vite/Electron) se comunica solo a través de este módulo.
+
+export const API_BASE = "http://localhost:7777";
+
+async function request(path, opts = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${path}: ${text}`);
+  }
+  return res.json();
+}
+
+export const api = {
+  health: () => request("/api/health"),
+
+  // Hardware
+  hardware: () => request("/api/hardware"),
+
+  // Engines
+  listEngines: () => request("/api/engines"),
+  getEngine: (id) => request(`/api/engines/${id}`),
+  startEngine: (id, body) =>
+    request(`/api/engines/${id}/start`, { method: "POST", body: JSON.stringify(body) }),
+  stopEngine: (id) => request(`/api/engines/${id}/stop`, { method: "POST" }),
+  engineLogs: (id, tail = 200) => request(`/api/engines/${id}/logs?tail=${tail}`),
+
+  // Models
+  listModels: () => request("/api/models"),
+  modelCompat: ({ engine, quant = "Q4_K_M", kvCache = "f16", contextLen = 4096, moeOffload }) => {
+    const params = new URLSearchParams({ engine, quant, kv_cache: kvCache, context_len: contextLen });
+    if (moeOffload != null) params.set("moe_offload", moeOffload);
+    return request(`/api/models/compat/all?${params}`);
+  },
+
+  // Optimizer
+  optimize: (engine, modelId) =>
+    request("/api/optimize", { method: "POST", body: JSON.stringify({ engine, model_id: modelId }) }),
+
+  // Benchmark + history
+  startBenchmark: (body) =>
+    request("/api/benchmark/run", { method: "POST", body: JSON.stringify(body) }),
+  benchmarkStreamUrl: (runId) => `${API_BASE}/api/benchmark/${runId}/stream`,
+
+  listHistory: () => request("/api/history"),
+  getHistory: (runId) => request(`/api/history/${runId}`),
+  deleteHistory: (runId) => request(`/api/history/${runId}`, { method: "DELETE" }),
+};
+
+// Suscripción SSE a un run de benchmark.
+// onEvent({type, ...data}) recibe cada evento parseado.
+export function subscribeBenchmark(runId, onEvent) {
+  const es = new EventSource(api.benchmarkStreamUrl(runId));
+  const handle = (e) => {
+    try {
+      onEvent(JSON.parse(e.data));
+    } catch {
+      onEvent({ type: e.type, raw: e.data });
+    }
+  };
+  ["start", "phase", "tokens", "result", "log", "done"].forEach((t) =>
+    es.addEventListener(t, handle)
+  );
+  es.onerror = () => es.close();
+  return () => es.close();
+}

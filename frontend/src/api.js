@@ -45,6 +45,8 @@ export const api = {
   // Benchmark + history
   startBenchmark: (body) =>
     request("/api/benchmark/run", { method: "POST", body: JSON.stringify(body) }),
+  stopBenchmark: (runId) =>
+    request(`/api/benchmark/${runId}/stop`, { method: "POST" }),
   benchmarkStreamUrl: (runId) => `${API_BASE}/api/benchmark/${runId}/stream`,
 
   listHistory: () => request("/api/history"),

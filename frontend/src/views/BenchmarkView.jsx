@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Square } from "lucide-react";
 import { api, subscribeBenchmark } from "../api";
 import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../components/ui.jsx";
 
@@ -101,6 +101,15 @@ export default function BenchmarkView() {
     }
   };
 
+  const stop = async () => {
+    if (!running) return;
+    try {
+      await api.stopBenchmark(running);
+    } catch (e) {
+      setEvents((arr) => [...arr, { type: "log", level: "warn", text: `Stop: ${e.message}` }]);
+    }
+  };
+
   const togglePrompt = (id) =>
     setPrompts((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
@@ -194,10 +203,19 @@ export default function BenchmarkView() {
                 No detener el motor al terminar (más rápido si vas a relanzar)
               </label>
             )}
-            <div className="pt-2">
-              <Button onClick={start} disabled={!!running || !model || !prompts.length || !canRun}>
-                <Play size={14} /> {running ? `Ejecutando…` : "Lanzar benchmark"}
-              </Button>
+            <div className="flex gap-2 pt-2">
+              {!running ? (
+                <Button onClick={start} disabled={!model || !prompts.length || !canRun}>
+                  <Play size={14} /> Lanzar benchmark
+                </Button>
+              ) : (
+                <Button variant="danger" onClick={stop}>
+                  <Square size={14} /> Detener
+                </Button>
+              )}
+              {running && (
+                <span className="self-center text-xs text-slate-500">run {running}</span>
+              )}
             </div>
             {!engineIsApi && engine === "llamacpp" && !running && (
               <p className="text-xs text-slate-500">

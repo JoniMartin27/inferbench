@@ -1,4 +1,4 @@
-"""Endpoints /api/benchmark — POST /run + GET /stream/{run_id} (SSE)."""
+"""Endpoints /api/benchmark — POST /run, GET /stream/{run_id} (SSE), POST /stop/{run_id}."""
 from __future__ import annotations
 
 import asyncio
@@ -53,6 +53,15 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
         for r in runner.results:
             s.add(BenchmarkResult(run_id=runner.run_id, **r.model_dump()))
         s.commit()
+
+
+@router.post("/{run_id}/stop")
+async def stop_run(run_id: str) -> dict:
+    runner = _RUNNERS.get(run_id)
+    if not runner:
+        raise HTTPException(404, f"run_id desconocido o ya finalizado: {run_id}")
+    runner.cancel()
+    return {"run_id": run_id, "cancelled": True}
 
 
 @router.get("/{run_id}/stream")

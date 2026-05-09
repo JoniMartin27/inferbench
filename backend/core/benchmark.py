@@ -197,7 +197,11 @@ class BenchmarkRunner:
         self.hw = detect_hardware()
         self.is_api = req.engine in API_ENGINES
         self.base_url = req.base_url or DEFAULT_BASE_URLS.get(req.engine)
-        self._owns_engine = False  # si nosotros arrancamos el motor, lo paramos al final
+        self._owns_engine = False
+        self.cancelled = asyncio.Event()
+
+    def cancel(self) -> None:
+        self.cancelled.set()
 
     async def emit(self, evt: dict[str, Any]) -> None:
         await self.queue.put(evt)
@@ -210,26 +214,40 @@ class BenchmarkRunner:
             if self.req.auto and not self.is_api:
                 try:
                     await self._bootstrap()
+                except asyncio.CancelledError:
+                    raise
                 except Exception as e:
                     logger.exception("bootstrap failed")
                     await self.emit({"type": "log", "level": "error", "text": f"Bootstrap: {e}"})
                     await self.emit({"type": "done", "run_id": self.run_id, "error": str(e)})
                     return
 
+            if self.cancelled.is_set():
+                await self.emit({"type": "log", "level": "warn", "text": "Cancelado antes de iniciar"})
+                await self.emit({"type": "done", "run_id": self.run_id, "cancelled": True})
+                return
+
             headers = {"Content-Type": "application/json"}
             if self.req.api_key:
                 headers["Authorization"] = f"Bearer {self.req.api_key}"
 
             for prompt in prompts:
+                if self.cancelled.is_set():
+                    await self.emit({"type": "log", "level": "warn", "text": "Benchmark cancelado"})
+                    break
                 await self._run_one(prompt, headers)
 
-            await self.emit({"type": "done", "run_id": self.run_id})
+            await self.emit({
+                "type": "done",
+                "run_id": self.run_id,
+                "cancelled": self.cancelled.is_set(),
+            })
         except Exception as e:
             logger.exception("benchmark failed")
             await self.emit({"type": "log", "level": "error", "text": f"Fatal: {e}"})
             await self.emit({"type": "done", "run_id": self.run_id, "error": str(e)})
         finally:
-            if self._owns_engine and not self.req.keep_alive:
+            if self._owns_engine and (not self.req.keep_alive or self.cancelled.is_set()):
                 try:
                     await self.emit({"type": "log", "level": "info", "text": "Deteniendo motor…"})
                     native_runtime.stop(self.req.engine)
@@ -386,6 +404,8 @@ class BenchmarkRunner:
             async for kind, data in _stream_openai_chat(
                 self.base_url, model_for_engine, prompt, self.req.sampling, headers
             ):
+                if self.cancelled.is_set():
+                    break
                 now = time.perf_counter()
                 if kind == "first_token":
                     ttft_ms = int((now - t0) * 1000)
@@ -412,6 +432,9 @@ class BenchmarkRunner:
         except Exception as e:
             error = str(e)
             await self.emit({"type": "log", "level": "error", "text": f"{prompt.id}: {error}"})
+
+        if self.cancelled.is_set() and not error:
+            error = "cancelado"
 
         elapsed_total = time.perf_counter() - t0
         gen_time = elapsed_total - (ttft_ms or 0) / 1000.0

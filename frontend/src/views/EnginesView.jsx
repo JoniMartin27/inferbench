@@ -21,7 +21,21 @@ export default function EnginesView({ dockerDown }) {
     setBusy((b) => ({ ...b, [id]: true }));
     setError(null);
     try {
+      const engine = engines.find((e) => e.meta.id === id);
       const f = forms[id] || {};
+      const wanted = f.runtime || engine?.meta?.default_runtime;
+      const rt = engine?.runtimes?.find((r) => r.runtime === wanted);
+
+      // Auto-instalar si el runtime nativo aún no está listo
+      if (wanted === "native" && rt && !rt.ready) {
+        setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
+        await installEngine(id, (evt) => {
+          setInstalling((s) => ({ ...s, [id]: evt }));
+        });
+        setInstalling((s) => ({ ...s, [id]: null }));
+        await refresh();
+      }
+
       const body = {
         model_path: f.model_path || null,
         runtime: f.runtime || null,
@@ -37,6 +51,7 @@ export default function EnginesView({ dockerDown }) {
       await refresh();
     } catch (e) {
       setError(e.message);
+      setInstalling((s) => ({ ...s, [id]: null }));
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }
@@ -83,7 +98,7 @@ export default function EnginesView({ dockerDown }) {
     <>
       <PageHeader
         title="Motores"
-        subtitle="Arranca o detén motores en modo nativo (sin Docker) o vía contenedor"
+        subtitle="Pulsa Arrancar y la app instala lo que falte automáticamente"
         actions={
           <Button variant="ghost" onClick={refresh}>
             <RefreshCw size={14} /> Refrescar
@@ -91,26 +106,14 @@ export default function EnginesView({ dockerDown }) {
         }
       />
       <div className="space-y-4 p-8">
-        {dockerDown && anyNativeAvailable && (
-          <div className="rounded border border-emerald-700/40 bg-emerald-950/30 p-4 text-sm text-emerald-100">
-            <p className="font-semibold">Modo nativo disponible.</p>
-            <p className="mt-1 opacity-80">
-              No tienes Docker, pero puedes arrancar <strong>llama.cpp</strong> directamente como
-              proceso nativo. Pulsa <em>Instalar binario</em> en la tarjeta de llama.cpp y la app
-              descargará la release oficial de GitHub (~50–200 MB según variante CUDA/CPU).
-              {!anyNativeReady && " Aún no hay binarios descargados."}
-            </p>
-          </div>
-        )}
-        {dockerDown && !anyNativeAvailable && (
-          <div className="rounded border border-amber-700/40 bg-amber-950/30 p-4 text-sm text-amber-100">
-            <p className="font-semibold">Docker no está corriendo.</p>
-            <p className="mt-1 opacity-80">
-              Los motores que solo tienen runtime Docker (Ollama, vLLM, SGLang, TGI) requieren Docker.
-              Las APIs cloud funcionan sin Docker desde la pestaña Benchmark.
-            </p>
-          </div>
-        )}
+        <div className="rounded border border-indigo-700/40 bg-indigo-950/20 p-4 text-sm text-indigo-100">
+          <p className="font-semibold">Instalación al primer click.</p>
+          <p className="mt-1 opacity-80">
+            Pulsa <strong>Arrancar</strong> en cualquier motor: si falta el binario nativo (llama.cpp)
+            o la imagen Docker, se descargará automáticamente. Para benchmarks end-to-end (binario +
+            modelo + ejecución en un solo click), usa la pestaña <strong>Benchmark</strong>.
+          </p>
+        </div>
         {error && (
           <div className="rounded border border-rose-700/40 bg-rose-950/40 p-3 text-sm text-rose-200">
             {error}
@@ -244,24 +247,20 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
         </div>
         {!isApi && (
           <div className="flex gap-2">
-            {nativeNeedsInstall && (
-              <Button variant="ghost" onClick={onInstall} disabled={!!installProgress}>
-                {installProgress ? <Spinner /> : <Download size={14} />} Instalar binario
-              </Button>
-            )}
             {!isRunning ? (
               <Button
                 onClick={onStart}
-                disabled={busy || nativeNeedsInstall || dockerUnready}
-                title={
-                  nativeNeedsInstall
-                    ? "Instala el binario nativo primero"
-                    : dockerUnready
-                    ? "Docker no disponible"
-                    : ""
-                }
+                disabled={busy || dockerUnready}
+                title={dockerUnready ? "Docker no disponible" : ""}
               >
-                {busy ? <Spinner /> : <Play size={14} />} Arrancar
+                {busy ? (
+                  <Spinner />
+                ) : nativeNeedsInstall ? (
+                  <Download size={14} />
+                ) : (
+                  <Play size={14} />
+                )}{" "}
+                {nativeNeedsInstall ? "Instalar y arrancar" : "Arrancar"}
               </Button>
             ) : (
               <Button variant="danger" onClick={onStop} disabled={busy}>

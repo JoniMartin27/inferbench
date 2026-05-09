@@ -23,6 +23,18 @@ class ProcessStatus(BaseModel):
 
 _PROCS: dict[str, subprocess.Popen] = {}
 _LOG_FILES: dict[str, Path] = {}
+_LOADED: dict[str, dict] = {}  # engine_id → {model, quant, ...} actualmente servido
+
+
+def set_loaded(engine_id: str, info: dict | None) -> None:
+    if info is None:
+        _LOADED.pop(engine_id, None)
+    else:
+        _LOADED[engine_id] = info
+
+
+def get_loaded(engine_id: str) -> dict | None:
+    return _LOADED.get(engine_id)
 
 
 def _log_dir() -> Path:
@@ -84,6 +96,7 @@ def start(
 
 def stop(engine_id: str) -> ProcessStatus:
     proc = _PROCS.pop(engine_id, None)
+    _LOADED.pop(engine_id, None)
     if proc and proc.poll() is None:
         try:
             if sys.platform == "win32":

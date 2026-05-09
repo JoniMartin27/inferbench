@@ -293,10 +293,32 @@ class BenchmarkRunner:
         gguf_path = model_manager.gguf_path(model, self.req.quant)
         await self.emit({"type": "log", "level": "success", "text": f"Modelo: {gguf_path.name}"})
 
-        # 3. Motor: si ya está corriendo, reusarlo; si no, arrancar
+        # 3. Motor: reusar si está corriendo CON el mismo modelo+quant; si no, reiniciar
         st = native_runtime.status("llamacpp")
-        if st.state == "running":
-            await self.emit({"type": "log", "level": "info", "text": "Motor ya estaba corriendo"})
+        loaded = native_runtime.get_loaded("llamacpp")
+        same_model = (
+            loaded is not None
+            and loaded.get("model") == self.req.model
+            and loaded.get("quant") == self.req.quant
+        )
+        if st.state == "running" and not same_model:
+            await self.emit({
+                "type": "log",
+                "level": "info",
+                "text": (
+                    f"Reiniciando motor: cargado={loaded or 'desconocido'} "
+                    f"→ pedido={self.req.model}/{self.req.quant}"
+                ),
+            })
+            native_runtime.stop("llamacpp")
+            st = native_runtime.status("llamacpp")
+
+        if st.state == "running" and same_model:
+            await self.emit({
+                "type": "log",
+                "level": "info",
+                "text": f"Reusando motor con {loaded['model']}/{loaded['quant']}",
+            })
         else:
             # Calcular config óptima a partir de hardware + modelo
             optimal = get_optimal_config("llamacpp", model.id, self.hw)
@@ -304,8 +326,15 @@ class BenchmarkRunner:
             kv = optimal.kv_cache or "f16"
             moe = optimal.moe_offload
 
-            args = ["--host", "0.0.0.0", "--port", "8080", "-m", str(gguf_path),
-                    "-c", str(ctx), "-ngl", "99", "-ctk", kv, "-ctv", kv]
+            args = [
+                "--host", "0.0.0.0",
+                "--port", "8080",
+                "-m", str(gguf_path),
+                "--alias", model.id,  # nombre que /v1/chat/completions aceptará
+                "-c", str(ctx),
+                "-ngl", "99",
+                "-ctk", kv, "-ctv", kv,
+            ]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
             if optimal.flags.get("flashAttn"):
@@ -315,6 +344,10 @@ class BenchmarkRunner:
 
             await self.emit({"type": "engine.start", "binary": str(binary), "args": args})
             native_runtime.start("llamacpp", exe=binary, args=args, port=8080)
+            native_runtime.set_loaded(
+                "llamacpp",
+                {"model": model.id, "quant": self.req.quant, "ctx": ctx, "kv": kv},
+            )
             self._owns_engine = True
 
             await self.emit({"type": "log", "level": "info", "text": "Esperando motor listo…"})

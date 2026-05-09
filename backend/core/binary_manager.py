@@ -65,11 +65,20 @@ def llamacpp_installed() -> bool:
     return llamacpp_binary_path().exists()
 
 
+EXCLUDE_TERMS = ["cudart", "vulkan", "hip", "sycl", "kompute"]
+
+
 def _match_asset(assets: list[dict], terms: list[str]) -> dict | None:
-    """Asset zip cuyo nombre contiene todos los términos (case-insensitive)."""
+    """Asset zip cuyo nombre contiene todos los términos y NO contiene términos excluidos.
+
+    Excluimos paquetes auxiliares como `cudart` (solo DLLs del runtime, sin binarios)
+    o builds alternativas (`vulkan`, `hip`, `sycl`, `kompute`).
+    """
     for a in assets:
         n = a["name"].lower()
         if not n.endswith(".zip"):
+            continue
+        if any(ex in n for ex in EXCLUDE_TERMS):
             continue
         if all(t in n for t in terms):
             return a
@@ -138,12 +147,30 @@ async def install_llamacpp(progress: ProgressCb = None) -> Path:
         zf.extractall(target)
     zip_path.unlink()
 
-    # Localizar el binario y moverlo al directorio raíz si está anidado
-    found = next(target.rglob(_exe_name()), None)
+    # Localizar el binario (algunos releases lo nombran "server.exe")
+    candidates = [_exe_name(), "server.exe" if os.name == "nt" else "server"]
+    found = None
+    for cand in candidates:
+        found = next(target.rglob(cand), None)
+        if found:
+            break
+
     if not found:
-        raise RuntimeError(f"{_exe_name()} no encontrado tras extraer")
+        # Diagnóstico: listar lo que sí se extrajo
+        contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:20]
+        raise RuntimeError(
+            f"{_exe_name()} no encontrado tras extraer {name}. "
+            f"Contenido del zip: {contents or '(vacío)'}"
+        )
+
+    # Si encontramos "server.exe" pero esperábamos "llama-server.exe", renombrar
+    if found.name != _exe_name():
+        renamed = found.with_name(_exe_name())
+        found.rename(renamed)
+        found = renamed
+
+    # Mover binarios al directorio raíz si están anidados
     if found.parent != target:
-        # Mover toda la carpeta de binarios al raíz
         for item in found.parent.iterdir():
             dest = target / item.name
             if dest.exists():

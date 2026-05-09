@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { PageHeader, Card, Stat, Badge } from "../components/ui.jsx";
 
-export default function Dashboard() {
+export default function Dashboard({ dockerDown }) {
   const [hw, setHw] = useState(null);
   const [engines, setEngines] = useState([]);
   const [history, setHistory] = useState([]);
@@ -29,6 +29,17 @@ export default function Dashboard() {
         subtitle="Estado general de tu entorno de benchmarking local"
       />
       <div className="grid gap-6 p-8 md:grid-cols-4">
+        {dockerDown && (
+          <div className="md:col-span-4 rounded-lg border border-indigo-700/40 bg-indigo-950/30 p-4 text-sm text-indigo-100">
+            <p className="font-semibold">Sin Docker: arranca llama.cpp en modo nativo.</p>
+            <p className="mt-1 opacity-80">
+              Ve a <strong>Motores</strong> y pulsa "Instalar binario" en llama.cpp. La app descargará
+              la release oficial de GitHub para tu plataforma (Windows + CUDA si tienes NVIDIA) y
+              podrás arrancarlo como proceso nativo, sin Docker. El resto de motores locales sí
+              requieren Docker; los motores API cloud funcionan con tu API key.
+            </p>
+          </div>
+        )}
         <Card>
           <Stat
             label="GPU principal"

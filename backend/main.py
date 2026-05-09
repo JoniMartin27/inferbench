@@ -24,7 +24,8 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    from core.docker_mgr import availability
+    return {"status": "ok", "version": "0.1.0", "docker": availability()}
 
 
 app.include_router(hardware_router)

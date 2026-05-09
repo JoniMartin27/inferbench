@@ -9,7 +9,11 @@
     "size_base_gb": 2.4,
     "max_ctx": 131072,
     "license": "llama3",
-    "tags": ["chat", "small"]
+    "tags": ["chat", "small"],
+    "hf_gguf": {
+      "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+      "file_template": "Llama-3.2-1B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "llama-3.2-3b",
@@ -21,7 +25,11 @@
     "size_base_gb": 6.4,
     "max_ctx": 131072,
     "license": "llama3",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+      "file_template": "Llama-3.2-3B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "llama-3.1-8b",
@@ -33,7 +41,11 @@
     "size_base_gb": 16.0,
     "max_ctx": 131072,
     "license": "llama3",
-    "tags": ["chat", "popular"]
+    "tags": ["chat", "popular"],
+    "hf_gguf": {
+      "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+      "file_template": "Meta-Llama-3.1-8B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "qwen2.5-7b",
@@ -45,7 +57,11 @@
     "size_base_gb": 15.2,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
+      "file_template": "Qwen2.5-7B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "qwen2.5-14b",
@@ -57,7 +73,11 @@
     "size_base_gb": 29.4,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2.5-14B-Instruct-GGUF",
+      "file_template": "Qwen2.5-14B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "qwen2.5-32b",
@@ -69,7 +89,11 @@
     "size_base_gb": 65.0,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["chat", "large"]
+    "tags": ["chat", "large"],
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2.5-32B-Instruct-GGUF",
+      "file_template": "Qwen2.5-32B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "qwen2.5-coder-7b",
@@ -81,7 +105,11 @@
     "size_base_gb": 15.2,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["code"]
+    "tags": ["code"],
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
+      "file_template": "Qwen2.5-Coder-7B-Instruct-{quant}.gguf"
+    }
   },
   {
     "id": "qwen3-30b-a3b",
@@ -117,7 +145,11 @@
     "size_base_gb": 14.5,
     "max_ctx": 32768,
     "license": "apache-2.0",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/Mistral-7B-Instruct-v0.3-GGUF",
+      "file_template": "Mistral-7B-Instruct-v0.3-{quant}.gguf"
+    }
   },
   {
     "id": "mixtral-8x7b",
@@ -141,7 +173,11 @@
     "size_base_gb": 18.5,
     "max_ctx": 8192,
     "license": "gemma",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/gemma-2-9b-it-GGUF",
+      "file_template": "gemma-2-9b-it-{quant}.gguf"
+    }
   },
   {
     "id": "gemma-2-27b",
@@ -153,7 +189,11 @@
     "size_base_gb": 54.4,
     "max_ctx": 8192,
     "license": "gemma",
-    "tags": ["chat"]
+    "tags": ["chat"],
+    "hf_gguf": {
+      "repo": "bartowski/gemma-2-27b-it-GGUF",
+      "file_template": "gemma-2-27b-it-{quant}.gguf"
+    }
   },
   {
     "id": "phi-3.5-mini",
@@ -165,7 +205,11 @@
     "size_base_gb": 7.6,
     "max_ctx": 131072,
     "license": "mit",
-    "tags": ["chat", "small"]
+    "tags": ["chat", "small"],
+    "hf_gguf": {
+      "repo": "bartowski/Phi-3.5-mini-instruct-GGUF",
+      "file_template": "Phi-3.5-mini-instruct-{quant}.gguf"
+    }
   },
   {
     "id": "deepseek-r1-distill-qwen-7b",
@@ -177,6 +221,10 @@
     "size_base_gb": 15.2,
     "max_ctx": 131072,
     "license": "mit",
-    "tags": ["reasoning"]
+    "tags": ["reasoning"],
+    "hf_gguf": {
+      "repo": "bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF",
+      "file_template": "DeepSeek-R1-Distill-Qwen-7B-{quant}.gguf"
+    }
   }
 ]

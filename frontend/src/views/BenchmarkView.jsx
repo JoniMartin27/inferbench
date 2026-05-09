@@ -10,59 +10,86 @@ const ALL_PROMPTS = [
   { id: "chat", label: "Chat" },
 ];
 
+const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
+
 export default function BenchmarkView() {
   const [engines, setEngines] = useState([]);
   const [models, setModels] = useState([]);
   const [engine, setEngine] = useState("llamacpp");
   const [model, setModel] = useState("");
+  const [quant, setQuant] = useState("Q4_K_M");
   const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
-  const [baseUrl, setBaseUrl] = useState("");
+  const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [running, setRunning] = useState(null); // run_id
+  const [running, setRunning] = useState(null);
   const [events, setEvents] = useState([]);
   const [results, setResults] = useState([]);
-  const [progress, setProgress] = useState({ current: 0, target: 0, tps: 0, ttft: null });
+  const [progress, setProgress] = useState({});
   const unsubRef = useRef(null);
 
   useEffect(() => {
     api.listEngines().then(setEngines).catch(() => {});
     api.listModels().then((m) => {
       setModels(m);
-      if (m[0]) setModel(m[0].id);
+      if (!model && m[0]) setModel(m[0].id);
     });
     return () => unsubRef.current?.();
   }, []);
 
+  const selectedEngine = engines.find((e) => e.meta.id === engine);
+  const engineIsApi = selectedEngine?.meta.type === "api";
+  const selectedModel = models.find((m) => m.id === model);
+  const modelHasGguf = !!selectedModel?.hf_gguf;
+  const apiNeedsKey = engineIsApi && !apiKey;
+  // Para llamacpp en modo auto, el motor no necesita estar arrancado: la app lo arranca solo.
+  const canRun = engineIsApi
+    ? !apiNeedsKey
+    : engine === "llamacpp"
+    ? modelHasGguf
+    : selectedEngine?.status?.state === "running";
+
   const start = async () => {
     setEvents([]);
     setResults([]);
-    setProgress({ current: 0, target: 0, tps: 0, ttft: null });
+    setProgress({});
     try {
       const { run_id } = await api.startBenchmark({
         engine,
         model,
+        quant,
         prompts,
-        base_url: baseUrl || null,
+        auto: !engineIsApi,
+        keep_alive: keepAlive,
         api_key: apiKey || null,
       });
       setRunning(run_id);
       unsubRef.current = subscribeBenchmark(run_id, (evt) => {
-        setEvents((arr) => [...arr.slice(-200), evt]);
+        setEvents((arr) => [...arr.slice(-300), evt]);
+
+        // Progreso del bootstrap
+        if (evt.type === "engine.install") {
+          setProgress({ kind: "engine.install", ...evt });
+        }
+        if (evt.type === "model.download") {
+          setProgress({ kind: "model.download", ...evt });
+        }
+        if (evt.type === "engine.ready") {
+          setProgress({ kind: "engine.ready" });
+        }
+
+        // Progreso por prompt
         if (evt.type === "tokens") {
-          setProgress((p) => ({
-            ...p,
+          setProgress({
+            kind: "tokens",
             current: evt.current,
             target: evt.target,
             tps: evt.tps_current,
-          }));
+          });
         }
         if (evt.phase === "ttft") {
-          setProgress((p) => ({ ...p, ttft: evt.ttft_ms }));
+          setProgress((p) => ({ ...p, kind: "tokens", ttft: evt.ttft_ms }));
         }
-        if (evt.type === "result") {
-          setResults((r) => [...r, evt.result]);
-          setProgress({ current: 0, target: 0, tps: 0, ttft: null });
-        }
+        if (evt.type === "result") setResults((r) => [...r, evt.result]);
         if (evt.type === "done") {
           setRunning(null);
           unsubRef.current?.();
@@ -81,7 +108,7 @@ export default function BenchmarkView() {
     <>
       <PageHeader
         title="Benchmark"
-        subtitle="Ejecuta la suite contra el motor activo y observa el progreso live"
+        subtitle="La app descarga binario + modelo, arranca el motor y ejecuta la suite con un solo click"
       />
       <div className="grid gap-6 p-8 lg:grid-cols-2">
         <Card title="Configuración">
@@ -108,26 +135,35 @@ export default function BenchmarkView() {
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
+                    {!m.hf_gguf ? " · sin auto-descarga" : ""}
                   </option>
                 ))}
               </Select>
+              {!engineIsApi && !modelHasGguf && (
+                <p className="mt-1 text-xs text-amber-300">
+                  Este modelo no tiene fuente GGUF auto-descargable. Elige otro o pásalo manualmente.
+                </p>
+              )}
             </Field>
-            <Field label="Base URL (opcional)" hint="auto: usa puerto por defecto del motor local">
-              <Input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="http://localhost:8080"
-                disabled={!!running}
-              />
-            </Field>
-            <Field label="API key (solo motores cloud)">
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                disabled={!!running}
-              />
-            </Field>
+            {!engineIsApi && (
+              <Field label="Cuantización" hint="La app descargará este nivel del repo HF">
+                <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
+                  {QUANTS.map((q) => (
+                    <option key={q}>{q}</option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            {engineIsApi && (
+              <Field label="API key">
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  disabled={!!running}
+                />
+              </Field>
+            )}
             <Field label="Prompts">
               <div className="flex flex-wrap gap-2">
                 {ALL_PROMPTS.map((p) => (
@@ -147,11 +183,28 @@ export default function BenchmarkView() {
                 ))}
               </div>
             </Field>
+            {!engineIsApi && (
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={keepAlive}
+                  onChange={(e) => setKeepAlive(e.target.checked)}
+                  disabled={!!running}
+                />
+                No detener el motor al terminar (más rápido si vas a relanzar)
+              </label>
+            )}
             <div className="pt-2">
-              <Button onClick={start} disabled={!!running || !model || !prompts.length}>
-                <Play size={14} /> {running ? `Ejecutando ${running}…` : "Lanzar suite"}
+              <Button onClick={start} disabled={!!running || !model || !prompts.length || !canRun}>
+                <Play size={14} /> {running ? `Ejecutando…` : "Lanzar benchmark"}
               </Button>
             </div>
+            {!engineIsApi && engine === "llamacpp" && !running && (
+              <p className="text-xs text-slate-500">
+                Si es la primera vez: ~100MB de binario + tamaño del GGUF. La app cachea ambos en{" "}
+                <code>%APPDATA%\InferBench\</code>.
+              </p>
+            )}
           </div>
         </Card>
 
@@ -184,11 +237,7 @@ export default function BenchmarkView() {
                       <td className="py-2 pr-3 tabular-nums">{r.quality}</td>
                       <td className="py-2 pr-3 tabular-nums">{r.ctx_used}</td>
                       <td className="py-2 pr-3">
-                        {r.error ? (
-                          <Badge tone="rose">error</Badge>
-                        ) : (
-                          <Badge tone="emerald">ok</Badge>
-                        )}
+                        {r.error ? <Badge tone="rose">error</Badge> : <Badge tone="emerald">ok</Badge>}
                       </td>
                     </tr>
                   ))}
@@ -208,24 +257,10 @@ function RunningPanel({ events, progress, running }) {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [events]);
 
-  const pct = progress.target > 0 ? Math.min(100, (progress.current / progress.target) * 100) : 0;
-
   return (
-    <Card title="Ejecución live">
-      <div className="grid grid-cols-3 gap-4 pb-4">
-        <Stat label="TTFT" value={progress.ttft != null ? `${progress.ttft} ms` : "—"} tone="accent" />
-        <Stat label="tok/s actual" value={progress.tps || "—"} tone="success" />
-        <Stat
-          label="Progreso"
-          value={progress.target ? `${progress.current}/${progress.target}` : "—"}
-        />
-      </div>
-      <div className="h-1.5 overflow-hidden rounded bg-slate-800">
-        <div
-          className="h-full bg-indigo-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+    <Card title="Ejecución">
+      <BootstrapProgress progress={progress} />
+      <TokensProgress progress={progress} />
 
       <div
         ref={logRef}
@@ -233,7 +268,7 @@ function RunningPanel({ events, progress, running }) {
       >
         {events.length === 0 && (
           <p className="text-slate-600">
-            {running ? "Esperando eventos…" : "Lanza una suite para ver el log."}
+            {running ? "Esperando eventos…" : "Configura y pulsa Lanzar benchmark."}
           </p>
         )}
         {events.map((e, i) => (
@@ -244,6 +279,85 @@ function RunningPanel({ events, progress, running }) {
   );
 }
 
+function BootstrapProgress({ progress }) {
+  if (progress.kind === "engine.install") {
+    return (
+      <PhasePanel label="Descargando binario llama.cpp" progress={progress} color="indigo" />
+    );
+  }
+  if (progress.kind === "model.download") {
+    return (
+      <PhasePanel label={`Descargando ${progress.name || "GGUF"}`} progress={progress} color="purple" />
+    );
+  }
+  if (progress.kind === "engine.ready") {
+    return (
+      <div className="rounded border border-emerald-700/40 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+        ✓ Motor listo
+      </div>
+    );
+  }
+  return null;
+}
+
+function PhasePanel({ label, progress, color }) {
+  const pct = progress.pct || 0;
+  const dl = progress.downloaded || 0;
+  const sz = progress.size || 0;
+  const colors = {
+    indigo: "border-indigo-700/40 bg-indigo-950/20 text-indigo-200",
+    purple: "border-purple-700/40 bg-purple-950/20 text-purple-200",
+  };
+  return (
+    <div className={`rounded border p-3 text-sm ${colors[color]}`}>
+      <div className="flex items-center justify-between">
+        <span>{label}</span>
+        <span className="text-xs opacity-70">
+          {fmtBytes(dl)}
+          {sz ? ` / ${fmtBytes(sz)}` : ""} · {pct}%
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded bg-slate-800">
+        <div
+          className={`h-full transition-all ${color === "purple" ? "bg-purple-500" : "bg-indigo-500"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TokensProgress({ progress }) {
+  if (progress.kind !== "tokens") return null;
+  const pct = progress.target ? Math.min(100, (progress.current / progress.target) * 100) : 0;
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-4 pb-3">
+        <Stat label="TTFT" value={progress.ttft != null ? `${progress.ttft} ms` : "—"} tone="accent" />
+        <Stat label="tok/s actual" value={progress.tps || "—"} tone="success" />
+        <Stat
+          label="Progreso"
+          value={progress.target ? `${progress.current}/${progress.target}` : "—"}
+        />
+      </div>
+      <div className="h-1.5 overflow-hidden rounded bg-slate-800">
+        <div className="h-full bg-indigo-500 transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function fmtBytes(n) {
+  if (!n) return "0";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n.toFixed(i ? 1 : 0)} ${u[i]}`;
+}
+
 function LogLine({ evt }) {
   if (evt.type === "log") {
     const color =
@@ -251,8 +365,30 @@ function LogLine({ evt }) {
         ? "text-rose-400"
         : evt.level === "warn"
         ? "text-amber-300"
+        : evt.level === "success"
+        ? "text-emerald-300"
         : "text-slate-400";
     return <div className={color}>[log] {evt.text}</div>;
+  }
+  if (evt.type === "engine.install") {
+    return (
+      <div className="text-indigo-300">
+        [bin] {evt.phase} {evt.pct != null ? `${evt.pct}%` : ""} {evt.name || ""}
+      </div>
+    );
+  }
+  if (evt.type === "model.download") {
+    return (
+      <div className="text-purple-300">
+        [model] {evt.phase} {evt.pct != null ? `${evt.pct}%` : ""} {evt.name || ""}
+      </div>
+    );
+  }
+  if (evt.type === "engine.start") {
+    return <div className="text-cyan-300">[engine] start {evt.binary}</div>;
+  }
+  if (evt.type === "engine.ready") {
+    return <div className="text-emerald-300">[engine] ready · {evt.base_url}</div>;
   }
   if (evt.type === "phase") {
     return (

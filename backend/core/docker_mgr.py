@@ -42,6 +42,47 @@ def _client():
         raise DockerUnavailableError(f"Docker daemon no accesible: {e}") from e
 
 
+def _docker_cli_installed() -> bool:
+    import shutil
+
+    return shutil.which("docker") is not None
+
+
+def availability() -> dict:
+    """Devuelve el estado de Docker en el sistema (sin lanzar excepciones)."""
+    if docker is None:
+        return {
+            "available": False,
+            "installed": False,
+            "reason": "Docker SDK no instalado en el backend",
+            "hint": "pip install docker",
+        }
+    cli_installed = _docker_cli_installed()
+    try:
+        client = docker.from_env()
+        client.ping()
+        info = client.version()
+        return {
+            "available": True,
+            "installed": True,
+            "version": info.get("Version"),
+            "api_version": info.get("ApiVersion"),
+            "platform": (info.get("Platform") or {}).get("Name"),
+        }
+    except Exception as e:
+        msg = str(e).split("\n")[0][:200]
+        return {
+            "available": False,
+            "installed": cli_installed,
+            "reason": msg,
+            "hint": (
+                "Arranca Docker Desktop"
+                if cli_installed
+                else "Instalar Docker Desktop"
+            ),
+        }
+
+
 def container_name(engine_id: str) -> str:
     return f"{CONTAINER_PREFIX}{engine_id}"
 

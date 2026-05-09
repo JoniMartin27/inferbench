@@ -48,8 +48,29 @@ export default function App() {
 
   const Current = NAV.find((n) => n.id === active)?.View || Dashboard;
 
+  const dockerDown =
+    health.status === "ok" && health.docker && health.docker.available === false;
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      {dockerDown && (
+        <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-900/60 px-6 py-2 text-xs text-slate-400">
+          <span>
+            <span className="font-medium text-slate-300">Docker no disponible</span> ·
+            llama.cpp puede arrancarse en modo nativo desde la pestaña Motores. Otros motores
+            locales (Ollama, vLLM, SGLang, TGI) requieren Docker.
+          </span>
+          <a
+            href="https://docs.docker.com/get-docker/"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded border border-slate-700 px-2 py-0.5 hover:border-slate-500"
+          >
+            Instalar Docker
+          </a>
+        </div>
+      )}
+      <div className="flex flex-1 overflow-hidden">
       <aside className="flex w-56 flex-col border-r border-slate-800 bg-slate-950/80">
         <div className="border-b border-slate-800 px-5 py-5">
           <div className="text-xl font-semibold tracking-tight">
@@ -90,8 +111,9 @@ export default function App() {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-        <Current />
+        <Current dockerDown={dockerDown} />
       </main>
+      </div>
     </div>
   );
 }

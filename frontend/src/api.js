@@ -28,6 +28,7 @@ export const api = {
     request(`/api/engines/${id}/start`, { method: "POST", body: JSON.stringify(body) }),
   stopEngine: (id) => request(`/api/engines/${id}/stop`, { method: "POST" }),
   engineLogs: (id, tail = 200) => request(`/api/engines/${id}/logs?tail=${tail}`),
+  engineInstallStreamUrl: (id) => `${API_BASE}/api/engines/${id}/install`,
 
   // Models
   listModels: () => request("/api/models"),
@@ -62,9 +63,46 @@ export function subscribeBenchmark(runId, onEvent) {
       onEvent({ type: e.type, raw: e.data });
     }
   };
-  ["start", "phase", "tokens", "result", "log", "done"].forEach((t) =>
-    es.addEventListener(t, handle)
-  );
+  [
+    "start",
+    "phase",
+    "tokens",
+    "result",
+    "log",
+    "done",
+    "engine.install",
+    "model.download",
+    "engine.start",
+    "engine.ready",
+  ].forEach((t) => es.addEventListener(t, handle));
   es.onerror = () => es.close();
   return () => es.close();
+}
+
+// Suscripción a la instalación de binarios nativos.
+// Nota: el navegador EventSource solo soporta GET, así que arrancamos la instalación con fetch
+// y consumimos manualmente el stream SSE.
+export async function installEngine(engineId, onEvent) {
+  const res = await fetch(`${API_BASE}/api/engines/${engineId}/install`, { method: "POST" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
+      if (!dataLine) continue;
+      try {
+        onEvent(JSON.parse(dataLine.slice(6)));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }

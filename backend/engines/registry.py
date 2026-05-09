@@ -13,7 +13,10 @@ class _ApiOnlyEngine(Engine):
 
 
 def _api_meta(eid: str, name: str, desc: str) -> EngineMeta:
-    return EngineMeta(id=eid, name=name, type="api", optimizable=False, description=desc)
+    return EngineMeta(
+        id=eid, name=name, type="api", optimizable=False, description=desc,
+        runtimes=[], default_runtime="docker",
+    )
 
 
 _REGISTRY: dict[str, Engine] = {}
@@ -26,18 +29,18 @@ def _register(engine: Engine) -> None:
 # Local (M2 implementa solo llamacpp; el resto se añadirán en sus propios hitos)
 _register(LlamaCppEngine())
 
-# Stubs locales pendientes (visibles en la lista pero no arrancables aún)
+# Stubs locales pendientes (visibles en la lista pero solo Docker)
+class _PendingLocal(Engine):
+    def build_command(self, req):  # type: ignore[override]
+        raise NotImplementedError(f"Motor {self.meta.id} aún no implementado")
+
+
 for stub_id, stub_name, stub_image, stub_port in [
     ("ollama", "Ollama", "ollama/ollama:latest", 11434),
     ("vllm", "vLLM", "vllm/vllm-openai:latest", 8000),
     ("sglang", "SGLang", "lmsysorg/sglang:latest", 30000),
     ("tgi", "HF TGI", "ghcr.io/huggingface/text-generation-inference:latest", 8088),
 ]:
-
-    class _PendingLocal(Engine):
-        def build_command(self, req):  # type: ignore[override]
-            raise NotImplementedError(f"Motor {self.meta.id} aún no implementado")
-
     _register(
         _PendingLocal(
             EngineMeta(
@@ -47,7 +50,9 @@ for stub_id, stub_name, stub_image, stub_port in [
                 default_port=stub_port,
                 image=stub_image,
                 optimizable=True,
-                description="Pendiente de implementación.",
+                description="Pendiente de implementación. Requiere Docker.",
+                runtimes=["docker"],
+                default_runtime="docker",
             )
         )
     )

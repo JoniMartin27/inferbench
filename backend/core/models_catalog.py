@@ -10,6 +10,11 @@ from pydantic import BaseModel
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "models.json"
 
 
+class HfGguf(BaseModel):
+    repo: str
+    file_template: str  # debe contener {quant}, ej. "Llama-3.2-3B-Instruct-{quant}.gguf"
+
+
 class Model(BaseModel):
     id: str
     name: str
@@ -21,6 +26,7 @@ class Model(BaseModel):
     max_ctx: int
     license: str = ""
     tags: list[str] = []
+    hf_gguf: HfGguf | None = None  # fuente para auto-descarga
 
 
 @lru_cache(maxsize=1)

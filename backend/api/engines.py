@@ -35,13 +35,16 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
     for rt in meta.runtimes:
         if rt == "native":
             if meta.id == "llamacpp":
-                st = binary_manager.llamacpp_status()
+                fully = binary_manager.llamacpp_fully_installed()
+                exe_only = binary_manager.llamacpp_installed()
+                if fully:
+                    detail = "Binario + CUDA listos"
+                elif exe_only:
+                    detail = "Binario sin DLLs CUDA — descarga pendiente"
+                else:
+                    detail = "Listo para descargar"
                 out.append(
-                    RuntimeAvailability(
-                        runtime="native",
-                        ready=st["installed"],
-                        detail="Binario instalado" if st["installed"] else "Listo para descargar",
-                    )
+                    RuntimeAvailability(runtime="native", ready=fully, detail=detail)
                 )
             else:
                 out.append(RuntimeAvailability(runtime="native", ready=False, detail="No implementado"))

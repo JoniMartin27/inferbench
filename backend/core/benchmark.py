@@ -249,13 +249,13 @@ class BenchmarkRunner:
         if model is None:
             raise RuntimeError(f"Modelo desconocido: {self.req.model}")
 
-        # 1. Binario nativo
-        if not binary_manager.llamacpp_installed():
-            await self.emit({"type": "log", "level": "info", "text": "Instalando llama.cpp…"})
+        # 1. Binario nativo + DLLs CUDA si aplica
+        # install_llamacpp es idempotente: descarga solo lo que falte (binario y/o cudart)
+        async def bin_progress(evt):
+            await self.emit({"type": "engine.install", **evt})
 
-            async def bin_progress(evt):
-                await self.emit({"type": "engine.install", **evt})
-
+        if not binary_manager.llamacpp_fully_installed():
+            await self.emit({"type": "log", "level": "info", "text": "Preparando llama.cpp…"})
             await binary_manager.install_llamacpp(progress=bin_progress)
             await self.emit({"type": "log", "level": "success", "text": "Binario listo"})
         binary = binary_manager.llamacpp_binary_path()

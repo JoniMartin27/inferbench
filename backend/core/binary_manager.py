@@ -67,6 +67,16 @@ def llamacpp_installed() -> bool:
     return llamacpp_binary_path().exists()
 
 
+def llamacpp_fully_installed() -> bool:
+    """True si binario + (cudart si CUDA variant) están presentes."""
+    if not llamacpp_binary_path().exists():
+        return False
+    terms = _llamacpp_variant_terms()
+    if "cuda" in terms and not _has_cudart_dlls(_llamacpp_dir()):
+        return False
+    return True
+
+
 def _match_asset(assets: list[dict], terms: list[str]) -> dict | None:
     """Asset principal con binarios: incluye todos los términos, excluye builds alternativas
     y el paquete cudart-only (sin binarios).

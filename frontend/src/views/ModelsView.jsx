@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play } from "lucide-react";
+import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play, Filter, Sparkles } from "lucide-react";
 import { api } from "../api";
 import {
   PageHeader,
@@ -32,6 +32,9 @@ export default function ModelsView({ onNavigate }) {
   const [searchDirs, setSearchDirs] = useState({ known: [], extra: [] });
   const [showDirs, setShowDirs] = useState(false);
   const [extraInput, setExtraInput] = useState("");
+  const [onlyCompatible, setOnlyCompatible] = useState(true);
+  const [familyFilter, setFamilyFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const refreshLocal = async () => {
     setLocalLoading(true);
@@ -296,6 +299,19 @@ export default function ModelsView({ onNavigate }) {
           </Card>
         )}
 
+        <CatalogTable
+          rows={rows}
+          loading={loading}
+          onlyCompatible={onlyCompatible}
+          setOnlyCompatible={setOnlyCompatible}
+          familyFilter={familyFilter}
+          setFamilyFilter={setFamilyFilter}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          optimize={optimize}
+          optimizing={optimizing}
+        />
+        {false && (
         <Card title={`Catálogo (${rows.length} modelos)`}>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -355,9 +371,168 @@ export default function ModelsView({ onNavigate }) {
             </table>
           </div>
         </Card>
+        )}
       </div>
       )}
     </>
+  );
+}
+
+function CatalogTable({ rows, loading, onlyCompatible, setOnlyCompatible, familyFilter, setFamilyFilter, searchQuery, setSearchQuery, optimize, optimizing }) {
+  const STATUS_RANK = { ok: 0, moe: 1, partial: 2, cpu: 3, fail: 4, api: 5 };
+  const families = Array.from(new Set(rows.map((r) => r.model.family))).sort();
+
+  const filtered = rows
+    .filter((r) => {
+      if (onlyCompatible && ["fail"].includes(r.status)) return false;
+      if (familyFilter !== "all" && r.model.family !== familyFilter) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return (
+          r.model.name.toLowerCase().includes(q) ||
+          r.model.id.toLowerCase().includes(q) ||
+          r.model.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const ra = STATUS_RANK[a.status] ?? 99;
+      const rb = STATUS_RANK[b.status] ?? 99;
+      if (ra !== rb) return ra - rb;
+      return a.model.params_b - b.model.params_b;
+    });
+
+  const stats = rows.reduce(
+    (acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    },
+    {}
+  );
+
+  return (
+    <Card
+      title={`Catálogo (${filtered.length} de ${rows.length})`}
+      actions={
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <Badge tone="emerald">{stats.ok || 0} GPU</Badge>
+          <Badge tone="purple">{stats.moe || 0} MoE</Badge>
+          <Badge tone="amber">{stats.partial || 0} Mixto</Badge>
+          <Badge tone="rose">{stats.fail || 0} No cabe</Badge>
+        </div>
+      }
+    >
+      <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-slate-800 pb-3">
+        <label className="flex items-center gap-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={onlyCompatible}
+            onChange={(e) => setOnlyCompatible(e.target.checked)}
+            className="accent-indigo-500"
+          />
+          <Filter size={12} /> Solo modelos que puedo correr
+        </label>
+        <select
+          value={familyFilter}
+          onChange={(e) => setFamilyFilter(e.target.value)}
+          className="rounded border border-slate-700 bg-slate-900/40 px-2 py-1 text-xs"
+        >
+          <option value="all">Todas las familias</option>
+          {families.map((f) => (
+            <option key={f}>{f}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="Buscar (nombre, tag…)"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 min-w-[200px] rounded border border-slate-700 bg-slate-900/40 px-3 py-1 text-xs"
+        />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr className="border-b border-slate-800">
+              <th className="py-2 pr-3">Modelo</th>
+              <th className="py-2 pr-3">Familia</th>
+              <th className="py-2 pr-3">Tipo</th>
+              <th className="py-2 pr-3">Params</th>
+              <th className="py-2 pr-3">Tamaño</th>
+              <th className="py-2 pr-3">Total ~</th>
+              <th className="py-2 pr-3">Max ctx</th>
+              <th className="py-2 pr-3">Compat</th>
+              <th className="py-2 pr-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={9} className="py-6 text-center text-slate-500">
+                  Calculando…
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr>
+                <td colSpan={9} className="py-6 text-center text-slate-500">
+                  Sin resultados. Desactiva "solo compatibles" para ver todos.
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              filtered.map(({ model, status, model_size_gb, estimated_total_gb, max_context }) => (
+                <tr key={model.id} className="border-b border-slate-900 hover:bg-slate-900/40">
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{model.name}</span>
+                      {model.tags.includes("popular") && (
+                        <Sparkles size={12} className="text-amber-300" title="popular" />
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-500">{model.id}</div>
+                    {model.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {model.tags.filter((t) => t !== "popular").map((t) => (
+                          <span key={t} className="rounded bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-slate-300 capitalize">{model.family}</td>
+                  <td className="py-2 pr-3">
+                    {model.is_moe ? (
+                      <Badge tone="purple">MoE · {model.active_b}B act</Badge>
+                    ) : (
+                      <Badge>dense</Badge>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 tabular-nums text-slate-300">{model.params_b}B</td>
+                  <td className="py-2 pr-3 tabular-nums text-slate-300">{model_size_gb} GB</td>
+                  <td className="py-2 pr-3 tabular-nums text-slate-300">{estimated_total_gb} GB</td>
+                  <td className="py-2 pr-3 tabular-nums text-slate-300">{max_context.toLocaleString()}</td>
+                  <td className="py-2 pr-3">
+                    <Badge tone={compatTone(status)}>{compatLabel(status)}</Badge>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <button
+                      onClick={() => optimize(model.id)}
+                      className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-indigo-400 hover:text-indigo-200"
+                      title="Optimizar para mi hardware"
+                    >
+                      {optimizing === model.id ? <Spinner /> : <Zap size={12} />} Optimizar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 

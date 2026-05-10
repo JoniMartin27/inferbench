@@ -28,7 +28,7 @@ export default function Dashboard({ onNavigate }) {
   const [hw, setHw] = useState(null);
   const [engines, setEngines] = useState([]);
   const [history, setHistory] = useState([]);
-  const [recommended, setRecommended] = useState({ fullGpu: [], moe: [] });
+  const [recs, setRecs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,21 +36,13 @@ export default function Dashboard({ onNavigate }) {
       api.hardware().catch(() => null),
       api.listEngines().catch(() => []),
       api.listHistory().catch(() => []),
-      api
-        .modelCompat({ engine: "llamacpp", quant: "Q4_K_M", kvCache: "q8_0", contextLen: 4096, moeOffload: 27 })
-        .catch(() => []),
+      api.getRecommendations(15).catch(() => []),
     ])
-      .then(([h, e, hist, compat]) => {
+      .then(([h, e, hist, recRows]) => {
         setHw(h);
         setEngines(e);
         setHistory(hist);
-        // Top recomendados — separar full-GPU vs MoE-offload
-        const fullGpu = compat
-          .filter((c) => c.status === "ok")
-          .sort((a, b) => b.model.params_b - a.model.params_b)
-          .slice(0, 5);
-        const moe = compat.filter((c) => c.status === "moe").slice(0, 3);
-        setRecommended({ fullGpu, moe });
+        setRecs(recRows);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -59,6 +51,10 @@ export default function Dashboard({ onNavigate }) {
   const operational = engines.filter(
     (e) => e.runtimes?.some((r) => r.ready) || e.meta.type === "api"
   ).length;
+
+  const fullGpu = recs.filter((r) => r.config.status === "ok");
+  const moe = recs.filter((r) => r.config.status === "moe");
+  const partial = recs.filter((r) => r.config.status === "partial").slice(0, 4);
 
   return (
     <>
@@ -135,23 +131,23 @@ export default function Dashboard({ onNavigate }) {
         {/* Full-GPU */}
         <Card variant="success" title="100% GPU — máxima velocidad" icon={Zap}>
           <p className="mb-3 text-xs text-slate-400">
-            Estos modelos caben enteros en tu VRAM. Velocidad máxima (50-200+ tok/s típico).
+            Caben enteros en tu VRAM con la cuantización más alta posible. Velocidad máxima (50-200+ tok/s típico).
           </p>
           {loading && (
             <div className="space-y-2">
-              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
           )}
-          {!loading && recommended.fullGpu.length === 0 && (
+          {!loading && fullGpu.length === 0 && (
             <Empty
               icon={Zap}
-              title="Tu GPU es muy pequeña para los modelos del catálogo"
-              body="Considera modelos más cuantizados o usa MoE offload."
+              title="Tu GPU es muy pequeña para los modelos del catálogo con status full-GPU"
+              body="Mira la sección MoE offload o GPU+CPU."
             />
           )}
-          {!loading && recommended.fullGpu.length > 0 && (
+          {!loading && fullGpu.length > 0 && (
             <div className="grid gap-2 lg:grid-cols-2">
-              {recommended.fullGpu.map((row) => (
+              {fullGpu.map((row) => (
                 <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="emerald" />
               ))}
             </div>
@@ -159,17 +155,36 @@ export default function Dashboard({ onNavigate }) {
         </Card>
 
         {/* MoE offload */}
-        {recommended.moe.length > 0 && (
+        {(loading || moe.length > 0) && (
           <Card variant="accent" title="MoE offload — modelos enormes con --n-cpu-moe" icon={Sparkles}>
             <p className="mb-3 text-xs text-slate-400">
-              Modelos MoE de hasta 30B+ params totales que caben en tu VRAM gracias a mover las capas
-              expert a CPU. Velocidad razonable porque pocos params se activan por token.
+              Modelos MoE con expertos en CPU y atención en GPU. Pocos parámetros activos por token → velocidad razonable con modelos enormes.
             </p>
-            <div className="grid gap-2 lg:grid-cols-2">
-              {recommended.moe.map((row) => (
-                <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="purple" />
-              ))}
-            </div>
+            {loading && <Skeleton className="h-16 w-full" />}
+            {!loading && (
+              <div className="grid gap-2 lg:grid-cols-2">
+                {moe.map((row) => (
+                  <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="purple" />
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* GPU + CPU parcial */}
+        {(loading || partial.length > 0) && (
+          <Card title="GPU + CPU — offload parcial de capas" icon={Activity}>
+            <p className="mb-3 text-xs text-slate-400">
+              No caben enteros en VRAM. Se usa -ngl para poner las capas que caben en GPU y el resto en CPU. Tok/s más bajos pero ejecutable.
+            </p>
+            {loading && <Skeleton className="h-16 w-full" />}
+            {!loading && (
+              <div className="grid gap-2 lg:grid-cols-2">
+                {partial.map((row) => (
+                  <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="amber" />
+                ))}
+              </div>
+            )}
           </Card>
         )}
 
@@ -307,18 +322,21 @@ function Row({ k, v }) {
 }
 
 function ModelRecRow({ row, onNavigate, accent }) {
-  const { model, status, model_size_gb, max_context } = row;
+  const { model, config, techniques, engine_note } = row;
   const accents = {
     emerald: "from-emerald-500/20 to-cyan-500/20 text-emerald-300",
     purple: "from-purple-500/20 to-indigo-500/20 text-purple-300",
+    amber: "from-amber-500/20 to-orange-500/20 text-amber-300",
   };
+  // Primera técnica es siempre la de cuantización (la más informativa)
+  const topTech = techniques[0];
   return (
     <button
-      onClick={() => onNavigate?.("benchmark", { model: model.id })}
+      onClick={() => onNavigate?.("benchmark", { config })}
       className="group flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-left transition hover:border-indigo-500/60 hover:bg-slate-900/70"
     >
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accents[accent]}`}>
-        {compatIcon(status)}
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accents[accent] || accents.emerald}`}>
+        {compatIcon(config.status)}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 truncate font-medium">
@@ -326,12 +344,21 @@ function ModelRecRow({ row, onNavigate, accent }) {
           {model.tags?.includes("popular") && <Sparkles size={11} className="shrink-0 text-amber-300" />}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <Badge tone={compatTone(status)}>{compatLabel(status)}</Badge>
+          <Badge tone={compatTone(config.status)}>{compatLabel(config.status)}</Badge>
+          {config.quant && <Badge tone="indigo">{config.quant}</Badge>}
+          {config.engine !== "llamacpp" && <Badge tone="amber">{config.engine}</Badge>}
           <Badge tone="slate">{model.params_b}B</Badge>
-          <Badge tone="slate">{model_size_gb} GB</Badge>
           {model.is_moe && <Badge tone="purple">MoE</Badge>}
-          <span className="text-slate-500">ctx {max_context.toLocaleString()}</span>
+          {config.context_len > 0 && (
+            <span className="text-slate-500">ctx {config.context_len.toLocaleString()}</span>
+          )}
         </div>
+        {topTech && (
+          <div className="mt-1 truncate text-[10px] text-slate-500">{topTech}</div>
+        )}
+        {engine_note && (
+          <div className="mt-0.5 truncate text-[10px] text-amber-400">{engine_note}</div>
+        )}
       </div>
       <ArrowRight size={14} className="shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-indigo-300" />
     </button>

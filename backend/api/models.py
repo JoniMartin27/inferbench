@@ -81,7 +81,6 @@ async def compat_all(
     rows: list[CompatRow] = []
     for m in load_models():
         size = compat.get_model_size_gb(m, opts.quant)
-        kv_kb = compat.get_kv_per_token_mb(m, opts.kv_cache) * 1024 / 1024  # MB→ ya MB; queremos KB
         kv_kb = compat.get_kv_per_token_mb(m, opts.kv_cache) * 1024  # MB→KB
         total = size + opts.context_len * compat.get_kv_per_token_gb(m, opts.kv_cache) + 0.6
         status = compat.check_compat(

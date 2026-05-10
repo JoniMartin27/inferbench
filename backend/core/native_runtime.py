@@ -78,14 +78,18 @@ def start(
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     logger.info(f"native start [{engine_id}]: {exe} {' '.join(args)}")
-    proc = subprocess.Popen(
-        [str(exe), *args],
-        env=full_env,
-        stdout=log_fd,
-        stderr=subprocess.STDOUT,
-        creationflags=creationflags,
-        cwd=str(exe.parent),
-    )
+    try:
+        proc = subprocess.Popen(
+            [str(exe), *args],
+            env=full_env,
+            stdout=log_fd,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+            cwd=str(exe.parent),
+        )
+    except Exception:
+        log_fd.close()
+        raise
     _PROCS[engine_id] = proc
     st = status(engine_id)
     st.image = str(exe)

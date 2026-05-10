@@ -94,9 +94,9 @@ def read_gguf_metadata(path: Path, max_header_bytes: int = 16 * 1024 * 1024) -> 
 
     kv: dict[str, Any] = {"_gguf_version": version, "_tensor_count": tensor_count}
     for _ in range(kv_count):
-        key, offset = _read_string(data, offset)
-        value_type, = struct.unpack_from("<I", data, offset); offset += 4
         try:
+            key, offset = _read_string(data, offset)
+            value_type, = struct.unpack_from("<I", data, offset); offset += 4
             value, offset = _read_value(data, offset, value_type)
         except (struct.error, IndexError, ValueError):
             break  # header truncado o tipo desconocido — devolver lo que ya tenemos

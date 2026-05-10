@@ -138,12 +138,14 @@ async def stream_run(run_id: str) -> EventSourceResponse:
         raise HTTPException(404, f"run_id desconocido: {run_id}")
 
     async def event_gen() -> AsyncIterator[dict[str, Any]]:
-        while True:
-            evt = await runner.queue.get()
-            if evt.get("type") == "_eof":
-                yield {"event": "done", "data": json.dumps({"run_id": run_id})}
-                _RUNNERS.pop(run_id, None)
-                return
-            yield {"event": evt.get("type", "message"), "data": json.dumps(evt)}
+        try:
+            while True:
+                evt = await runner.queue.get()
+                if evt.get("type") == "_eof":
+                    yield {"event": "done", "data": json.dumps({"run_id": run_id})}
+                    return
+                yield {"event": evt.get("type", "message"), "data": json.dumps(evt)}
+        finally:
+            _RUNNERS.pop(run_id, None)
 
     return EventSourceResponse(event_gen())

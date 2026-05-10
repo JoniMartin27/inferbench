@@ -10,7 +10,13 @@ const ALL_PROMPTS = [
   { id: "chat", label: "Chat" },
 ];
 
-const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
+const QUANTS = [
+  "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
+  "Q3_K_M", "IQ3_M", "Q2_K", "IQ2_M", "IQ2_XS", "IQ2_XXS", "IQ1_M", "IQ1_S",
+];
+
+// Mapea kv_cache del optimizador → preset de compresión del frontend
+const KV_TO_COMPRESSION = { f16: "quality", q8_0: "balanced", q5_0: "compressed", q4_0: "aggressive" };
 
 const COMPRESSION_PRESETS = [
   { id: "quality",    label: "Calidad",     kvK: "f16",  kvV: "f16",    nkvo: false, swaFull: false, factor: 1.0,  desc: "Sin compresión KV — máxima precisión." },
@@ -31,9 +37,23 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
   const [compression, setCompression] = useState("balanced");
   const [customCtx, setCustomCtx] = useState(""); // override de contexto
 
-  // Si llegamos con un GGUF local seleccionado, lo aplicamos
+  // Aplicar config de navegación (desde Dashboard u otras vistas)
   useEffect(() => {
-    if (navPayload?.localModel) {
+    if (navPayload?.config) {
+      // Viene con la config completa del optimizador
+      const cfg = navPayload.config;
+      setLocalModel(null);
+      setModel(cfg.model_id);
+      setEngine(cfg.engine || "llamacpp");
+      if (cfg.quant) setQuant(cfg.quant);
+      // kv_cache q4_0 + nkvo=true → "extreme"; q4_0 sin nkvo → "aggressive"
+      const compression =
+        cfg.kv_cache === "q4_0" && cfg.flags?.nkvo
+          ? "extreme"
+          : KV_TO_COMPRESSION[cfg.kv_cache] || "balanced";
+      setCompression(compression);
+      if (cfg.context_len > 0) setCustomCtx(String(cfg.context_len));
+    } else if (navPayload?.localModel) {
       const m = navPayload.localModel;
       setLocalModel(m);
       if (m.quant) setQuant(m.quant);

@@ -45,6 +45,7 @@ export const api = {
   // Optimizer
   optimize: (engine, modelId) =>
     request("/api/optimize", { method: "POST", body: JSON.stringify({ engine, model_id: modelId }) }),
+  getRecommendations: (top = 15) => request(`/api/optimize/recommendations?top=${top}`),
 
   // Benchmark + history
   startBenchmark: (body) =>

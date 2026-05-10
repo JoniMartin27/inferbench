@@ -28,15 +28,20 @@ const NAV = [
 ];
 
 export default function App() {
-  // El usuario nuevo arranca en la Guía. Si ya ha visitado la app, retoma donde lo dejó.
   const [active, setActive] = useState(() => {
     return localStorage.getItem("inferbench:lastView") || "guide";
   });
+  const [navPayload, setNavPayload] = useState(null);
   const [health, setHealth] = useState({ status: "checking" });
 
   useEffect(() => {
     localStorage.setItem("inferbench:lastView", active);
   }, [active]);
+
+  const navigate = (view, payload = null) => {
+    setActive(view);
+    setNavPayload(payload);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -105,7 +110,7 @@ export default function App() {
           {NAV.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActive(id)}
+              onClick={() => navigate(id)}
               className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
                 active === id
                   ? "bg-indigo-500/15 text-indigo-200"
@@ -121,7 +126,7 @@ export default function App() {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-        <Current dockerDown={dockerDown} onNavigate={setActive} />
+        <Current dockerDown={dockerDown} onNavigate={navigate} navPayload={navPayload} />
       </main>
       </div>
     </div>

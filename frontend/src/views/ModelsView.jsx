@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud } from "lucide-react";
+import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play } from "lucide-react";
 import { api } from "../api";
 import {
   PageHeader,
@@ -17,7 +17,7 @@ import {
 const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
 const KV_OPTS = ["f16", "q8_0", "q4_0"];
 
-export default function ModelsView() {
+export default function ModelsView({ onNavigate }) {
   const [engines, setEngines] = useState([]);
   const [engine, setEngine] = useState("llamacpp");
   const [quant, setQuant] = useState("Q4_K_M");
@@ -167,6 +167,7 @@ export default function ModelsView() {
                       <th className="py-2 pr-3">Capas</th>
                       <th className="py-2 pr-3">Ctx</th>
                       <th className="py-2 pr-3">Origen</th>
+                      <th className="py-2 pr-3"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -204,6 +205,15 @@ export default function ModelsView() {
                           >
                             {shortenPath(m.dir)}
                           </span>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <button
+                            onClick={() => onNavigate?.("benchmark", { localModel: m })}
+                            className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-emerald-400 hover:text-emerald-200"
+                            title="Lanzar benchmark con este GGUF"
+                          >
+                            <Play size={12} /> Benchmark
+                          </button>
                         </td>
                       </tr>
                     ))}

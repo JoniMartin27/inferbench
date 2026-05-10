@@ -19,6 +19,17 @@ export default function BenchmarkView() {
   const [model, setModel] = useState("");
   const [quant, setQuant] = useState("Q4_K_M");
   const [sweepQuants, setSweepQuants] = useState([]);
+  const [localModel, setLocalModel] = useState(null);
+
+  // Si llegamos desde ModelsView con un GGUF local seleccionado, lo aplicamos
+  useEffect(() => {
+    if (navPayload?.localModel) {
+      const m = navPayload.localModel;
+      setLocalModel(m);
+      if (m.quant) setQuant(m.quant);
+      setEngine("llamacpp");
+    }
+  }, [navPayload]);
   const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
@@ -42,11 +53,11 @@ export default function BenchmarkView() {
   const selectedModel = models.find((m) => m.id === model);
   const modelHasGguf = !!selectedModel?.hf_gguf;
   const apiNeedsKey = engineIsApi && !apiKey;
-  // Para llamacpp en modo auto, el motor no necesita estar arrancado: la app lo arranca solo.
+  // Para llamacpp en modo auto: o tenemos GGUF local, o el modelo del catálogo tiene hf_gguf
   const canRun = engineIsApi
     ? !apiNeedsKey
     : engine === "llamacpp"
-    ? modelHasGguf
+    ? !!localModel || modelHasGguf
     : selectedEngine?.status?.state === "running";
 
   const start = async () => {
@@ -56,12 +67,14 @@ export default function BenchmarkView() {
     try {
       const { run_id } = await api.startBenchmark({
         engine,
-        model,
+        model: localModel ? (localModel.architecture || "local") + "-local" : model,
         quant,
         prompts,
         auto: !engineIsApi,
         keep_alive: keepAlive,
         api_key: apiKey || null,
+        local_path: localModel ? localModel.path : null,
+        notes: localModel ? `local: ${localModel.filename}` : "",
       });
       setRunning(run_id);
       unsubRef.current = subscribeBenchmark(run_id, (evt) => {
@@ -200,26 +213,57 @@ export default function BenchmarkView() {
                 ))}
               </Select>
             </Field>
-            <Field label="Modelo">
-              <Select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={!!running}
-              >
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                    {!m.hf_gguf ? " · sin auto-descarga" : ""}
-                  </option>
-                ))}
-              </Select>
-              {!engineIsApi && !modelHasGguf && (
-                <p className="mt-1 text-xs text-amber-300">
-                  Este modelo no tiene fuente GGUF auto-descargable. Elige otro o pásalo manualmente.
-                </p>
-              )}
-            </Field>
-            {!engineIsApi && (
+            {localModel ? (
+              <Field label="GGUF local seleccionado">
+                <div className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-emerald-200">
+                        {localModel.name || localModel.filename}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-slate-400" title={localModel.path}>
+                        {localModel.path}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+                        {localModel.architecture && <Badge tone="indigo">{localModel.architecture}</Badge>}
+                        {localModel.quant && <Badge>{localModel.quant}</Badge>}
+                        <Badge tone="slate">{localModel.size_gb} GB</Badge>
+                        {localModel.params_b && <Badge tone="slate">{localModel.params_b}B</Badge>}
+                        {localModel.is_moe && <Badge tone="purple">MoE</Badge>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setLocalModel(null)}
+                      className="text-xs text-slate-500 hover:text-rose-300"
+                      disabled={!!running}
+                    >
+                      cambiar
+                    </button>
+                  </div>
+                </div>
+              </Field>
+            ) : (
+              <Field label="Modelo">
+                <Select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={!!running}
+                >
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                      {!m.hf_gguf ? " · sin auto-descarga" : ""}
+                    </option>
+                  ))}
+                </Select>
+                {!engineIsApi && !modelHasGguf && (
+                  <p className="mt-1 text-xs text-amber-300">
+                    Este modelo no tiene fuente GGUF auto-descargable. Elige otro o usa Modelos → Locales.
+                  </p>
+                )}
+              </Field>
+            )}
+            {!engineIsApi && !localModel && (
               <>
                 <Field label="Cuantización" hint="Para una sola corrida">
                   <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>

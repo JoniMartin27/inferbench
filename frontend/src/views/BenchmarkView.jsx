@@ -12,6 +12,14 @@ const ALL_PROMPTS = [
 
 const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
 
+const COMPRESSION_PRESETS = [
+  { id: "quality",    label: "Calidad",     kvK: "f16",  kvV: "f16",    nkvo: false, swaFull: false, factor: 1.0,  desc: "Sin compresión KV — máxima precisión." },
+  { id: "balanced",   label: "Equilibrado", kvK: "q8_0", kvV: "q8_0",   nkvo: false, swaFull: false, factor: 0.5,  desc: "KV q8_0 — 50% menos memoria, calidad casi idéntica." },
+  { id: "compressed", label: "Comprimido",  kvK: "q8_0", kvV: "iq4_nl", nkvo: false, swaFull: false, factor: 0.38, desc: "K=q8_0 + V=iq4_nl — ~60% menos. Buena para contextos largos." },
+  { id: "aggressive", label: "Agresivo",    kvK: "q4_0", kvV: "q4_0",   nkvo: false, swaFull: false, factor: 0.25, desc: "KV q4_0 — 75% menos memoria. Algo de calidad sacrificada." },
+  { id: "extreme",    label: "Extremo",     kvK: "q4_0", kvV: "q4_0",   nkvo: true,  swaFull: false, factor: 0.25, desc: "q4_0 + KV en RAM (no-kv-offload). Libera VRAM al máximo." },
+];
+
 export default function BenchmarkView({ dockerDown, navPayload }) {
   const [engines, setEngines] = useState([]);
   const [models, setModels] = useState([]);
@@ -20,6 +28,8 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
   const [quant, setQuant] = useState("Q4_K_M");
   const [sweepQuants, setSweepQuants] = useState([]);
   const [localModel, setLocalModel] = useState(null);
+  const [compression, setCompression] = useState("balanced");
+  const [customCtx, setCustomCtx] = useState(""); // override de contexto
 
   // Si llegamos con un GGUF local seleccionado, lo aplicamos
   useEffect(() => {
@@ -80,6 +90,14 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
     setResults([]);
     setProgress({});
     try {
+      const preset = COMPRESSION_PRESETS.find((p) => p.id === compression);
+      const engineOpts = {
+        kvCacheK: preset?.kvK || "q8_0",
+        kvCacheV: preset?.kvV || "q8_0",
+        nkvo: !!preset?.nkvo,
+        swaFull: !!preset?.swaFull,
+      };
+      if (customCtx) engineOpts.contextLen = Number(customCtx);
       const { run_id } = await api.startBenchmark({
         engine,
         model: localModel ? (localModel.architecture || "local") + "-local" : model,
@@ -89,7 +107,10 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
         keep_alive: keepAlive,
         api_key: apiKey || null,
         local_path: localModel ? localModel.path : null,
-        notes: localModel ? `local: ${localModel.filename}` : "",
+        engine_opts: engineOpts,
+        notes: localModel
+          ? `local: ${localModel.filename} · ${compression}`
+          : `compresión: ${compression}`,
       });
       setRunning(run_id);
       unsubRef.current = subscribeBenchmark(run_id, (evt) => {
@@ -308,6 +329,17 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
                 </Field>
               </>
             )}
+            {!engineIsApi && (
+              <CompressionField
+                value={compression}
+                onChange={setCompression}
+                running={!!running}
+                model={selectedModel}
+                localModel={localModel}
+                customCtx={customCtx}
+                onCustomCtx={setCustomCtx}
+              />
+            )}
             {engineIsApi && (
               <Field label="API key">
                 <Input
@@ -415,6 +447,77 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
         )}
       </div>
     </>
+  );
+}
+
+function CompressionField({ value, onChange, running, model, localModel, customCtx, onCustomCtx }) {
+  const preset = COMPRESSION_PRESETS.find((p) => p.id === value);
+  // Estimación de bytes/token de KV cache en función del modelo seleccionado
+  // Heurística: kv_per_token_MB(f16) ≈ 0.5 * (params/7)^0.7
+  const params = model?.params_b || localModel?.params_b || 0;
+  const kvF16Mb = params > 0 ? 0.5 * Math.pow(params / 7, 0.7) : 0;
+  const kvActualKb = kvF16Mb * (preset?.factor || 0.5) * 1024;
+  const ctx = Number(customCtx) || 4096;
+  const kvAtCtxMb = (kvActualKb * ctx) / 1024;
+
+  return (
+    <div className="space-y-2">
+      <Field
+        label="Compresión de KV-cache"
+        hint={preset?.desc}
+      >
+        <div className="grid grid-cols-5 gap-1 rounded-md border border-slate-700 bg-slate-900/40 p-1">
+          {COMPRESSION_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onChange(p.id)}
+              disabled={running}
+              title={`${p.label} — ${p.desc}`}
+              className={`rounded px-2 py-1.5 text-[11px] font-medium transition ${
+                value === p.id
+                  ? p.id === "quality"
+                    ? "bg-emerald-500 text-white"
+                    : p.id === "balanced"
+                    ? "bg-indigo-500 text-white"
+                    : p.id === "compressed"
+                    ? "bg-cyan-500 text-white"
+                    : p.id === "aggressive"
+                    ? "bg-amber-500 text-white"
+                    : "bg-rose-500 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field
+          label="Contexto (override)"
+          hint={`Auto: el optimizador calcula el máximo. Pon un número para forzar.`}
+        >
+          <Input
+            type="number"
+            placeholder="auto"
+            value={customCtx}
+            onChange={(e) => onCustomCtx(e.target.value)}
+            disabled={running}
+          />
+        </Field>
+        <div className="flex flex-col justify-end rounded-md border border-slate-800 bg-slate-900/40 p-2 text-xs">
+          <div className="text-slate-500">KV-cache en {ctx.toLocaleString()} tokens</div>
+          <div className="mt-0.5 font-mono text-sm text-slate-200">
+            ≈ {kvAtCtxMb < 1024 ? `${kvAtCtxMb.toFixed(0)} MB` : `${(kvAtCtxMb / 1024).toFixed(2)} GB`}
+          </div>
+          <div className="mt-0.5 text-[10px] text-slate-500">
+            K={preset?.kvK} · V={preset?.kvV}{preset?.nkvo ? " · en RAM" : ""}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

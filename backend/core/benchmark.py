@@ -104,6 +104,10 @@ def _extra_engine_args_static(opts: dict[str, Any]) -> list[str]:
         extra += ["--ubatch-size", str(int(opts["ubatchSize"]))]
     if "cacheReuse" in opts:
         extra += ["--cache-reuse", str(int(opts["cacheReuse"]))]
+    if opts.get("nkvo") is True:
+        extra += ["--no-kv-offload"]
+    if opts.get("swaFull") is True:
+        extra += ["--swa-full"]
     return extra
 
 
@@ -503,6 +507,10 @@ class BenchmarkRunner:
 
             n_threads = max(2, (psutil.cpu_count(logical=False) or 4))
             ngl = optimal.flags.get("ngl", 99) if optimal.feasible else 99
+            # Permitir overrides de KV K/V independientes desde engine_opts
+            req_opts = self.req.engine_opts or {}
+            kv_k = req_opts.get("kvCacheK") or req_opts.get("kvCache") or kv
+            kv_v = req_opts.get("kvCacheV") or req_opts.get("kvCache") or kv
             args = [
                 "--host", "0.0.0.0",
                 "--port", "8080",
@@ -510,7 +518,7 @@ class BenchmarkRunner:
                 "--alias", model.id,
                 "-c", str(ctx),
                 "-ngl", str(ngl),
-                "-ctk", kv, "-ctv", kv,
+                "-ctk", kv_k, "-ctv", kv_v,
                 "-t", str(n_threads),
                 "--batch-size", "2048",
                 "--ubatch-size", "512",

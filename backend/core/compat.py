@@ -46,15 +46,50 @@ QUANT_FACTOR: dict[str, float] = {
 
 
 KV_FACTOR: dict[str, float] = {
-    "f16": 1.0,
-    "F16": 1.0,
-    "auto": 1.0,
-    "q8_0": 0.5,
-    "Q8_0": 0.5,
-    "q4_0": 0.25,
-    "Q4_0": 0.25,
-    "fp8": 0.5,
-    "fp8_e5m2": 0.5,
+    # f16 baseline (2 bytes/valor)
+    "f16": 1.0, "F16": 1.0, "fp16": 1.0, "auto": 1.0,
+    "bf16": 1.0, "BF16": 1.0,
+    # 1 byte/valor → 50% del tamaño
+    "q8_0": 0.5, "Q8_0": 0.5,
+    "fp8": 0.5, "fp8_e5m2": 0.5, "fp8_e4m3": 0.5,
+    # 5 bits/valor (~62% en práctica con bloques)
+    "q5_0": 0.34, "Q5_0": 0.34, "q5_1": 0.36, "Q5_1": 0.36,
+    # 4 bits/valor (~25-28%)
+    "q4_0": 0.25, "Q4_0": 0.25, "q4_1": 0.28, "Q4_1": 0.28,
+    "iq4_nl": 0.27, "IQ4_NL": 0.27,
+    # f32 (control/baseline doble)
+    "f32": 2.0, "F32": 2.0,
+}
+
+
+# Niveles de compresión de KV-cache: K y V se cuantizan iguales por simplicidad
+COMPRESSION_PRESETS: dict[str, dict] = {
+    "quality": {
+        "label": "Calidad",
+        "kv_k": "f16", "kv_v": "f16",
+        "desc": "Sin compresión KV. Máxima precisión, mayor uso de VRAM en contextos largos.",
+    },
+    "balanced": {
+        "label": "Equilibrado",
+        "kv_k": "q8_0", "kv_v": "q8_0",
+        "desc": "KV q8_0: 50% menos memoria con pérdida de calidad mínima. Default recomendado.",
+    },
+    "compressed": {
+        "label": "Comprimido",
+        "kv_k": "q8_0", "kv_v": "iq4_nl",
+        "desc": "K en q8_0 + V en iq4_nl (i-quant moderna): ~60% menos. Buena calidad para contextos largos.",
+    },
+    "aggressive": {
+        "label": "Agresivo",
+        "kv_k": "q4_0", "kv_v": "q4_0",
+        "desc": "KV q4_0: 75% menos memoria. Permite contextos enormes pero penaliza calidad.",
+    },
+    "extreme": {
+        "label": "Extremo (KV en RAM)",
+        "kv_k": "q4_0", "kv_v": "q4_0",
+        "nkvo": True,
+        "desc": "q4_0 + KV completamente en RAM (--no-kv-offload). Libera VRAM al máximo, slow per-token.",
+    },
 }
 
 

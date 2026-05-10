@@ -12,7 +12,7 @@ const ALL_PROMPTS = [
 
 const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
 
-export default function BenchmarkView() {
+export default function BenchmarkView({ dockerDown, navPayload }) {
   const [engines, setEngines] = useState([]);
   const [models, setModels] = useState([]);
   const [engine, setEngine] = useState("llamacpp");

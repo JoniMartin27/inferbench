@@ -53,11 +53,22 @@ export default function BenchmarkView() {
   const selectedModel = models.find((m) => m.id === model);
   const modelHasGguf = !!selectedModel?.hf_gguf;
   const apiNeedsKey = engineIsApi && !apiKey;
-  // Para llamacpp en modo auto: o tenemos GGUF local, o el modelo del catálogo tiene hf_gguf
+  // Determinar si el motor está listo para arrancar
+  const engineNativeReady = selectedEngine?.runtimes?.some(
+    (r) => r.runtime === "native" && r.ready
+  );
+  const engineDockerReady = selectedEngine?.runtimes?.some(
+    (r) => r.runtime === "docker" && r.ready
+  );
+  const engineSomeReady = engineNativeReady || engineDockerReady;
   const canRun = engineIsApi
     ? !apiNeedsKey
     : engine === "llamacpp"
     ? !!localModel || modelHasGguf
+    : engine === "ollama"
+    ? engineNativeReady && !!selectedModel?.ollama_tag
+    : ["vllm", "sglang", "tgi"].includes(engine)
+    ? engineDockerReady && !!selectedModel?.hf_repo
     : selectedEngine?.status?.state === "running";
 
   const start = async () => {
@@ -354,11 +365,8 @@ export default function BenchmarkView() {
                 <span className="self-center text-xs text-slate-500">run {running}</span>
               )}
             </div>
-            {!engineIsApi && engine === "llamacpp" && !running && (
-              <p className="text-xs text-slate-500">
-                Si es la primera vez: ~100MB de binario + tamaño del GGUF. La app cachea ambos en{" "}
-                <code>%APPDATA%\InferBench\</code>.
-              </p>
+            {!engineIsApi && !running && (
+              <EngineHint engine={engine} selectedEngine={selectedEngine} selectedModel={selectedModel} />
             )}
           </div>
         </Card>
@@ -404,6 +412,68 @@ export default function BenchmarkView() {
       </div>
     </>
   );
+}
+
+function EngineHint({ engine, selectedEngine, selectedModel }) {
+  const nativeRt = selectedEngine?.runtimes?.find((r) => r.runtime === "native");
+  const dockerRt = selectedEngine?.runtimes?.find((r) => r.runtime === "docker");
+
+  if (engine === "llamacpp") {
+    return (
+      <p className="text-xs text-slate-500">
+        Si es la primera vez: descarga binario llama.cpp (~300MB + cudart si hay NVIDIA) + el GGUF
+        del modelo. Cacheado en <code>%APPDATA%\InferBench\</code>.
+      </p>
+    );
+  }
+  if (engine === "ollama") {
+    if (nativeRt && !nativeRt.ready) {
+      return (
+        <div className="rounded border border-amber-700/40 bg-amber-950/30 p-3 text-xs text-amber-100">
+          <p className="font-semibold">Ollama no instalado.</p>
+          <p className="mt-1 opacity-80">
+            Descárgalo (~700MB) e instálalo, después vuelve y la app detectará el binario:
+          </p>
+          {nativeRt.install_url && (
+            <a
+              href={nativeRt.install_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-block rounded border border-amber-600/60 px-2 py-0.5 hover:bg-amber-900/40"
+            >
+              Descargar Ollama →
+            </a>
+          )}
+        </div>
+      );
+    }
+    return (
+      <p className="text-xs text-slate-500">
+        Ollama listo. La app pulleará{" "}
+        <code className="text-slate-300">{selectedModel?.ollama_tag || "el modelo"}</code> desde el
+        registro de Ollama si no lo tienes ya.
+      </p>
+    );
+  }
+  if (["vllm", "sglang", "tgi"].includes(engine)) {
+    if (dockerRt && !dockerRt.ready) {
+      return (
+        <div className="rounded border border-amber-700/40 bg-amber-950/30 p-3 text-xs text-amber-100">
+          <p className="font-semibold">Docker requerido para {engine}.</p>
+          <p className="mt-1 opacity-80">
+            Arranca Docker Desktop. {engine} corre en GPU NVIDIA dentro del contenedor.
+          </p>
+        </div>
+      );
+    }
+    return (
+      <p className="text-xs text-slate-500">
+        Primera vez: pull de la imagen Docker (~6GB para vLLM/SGLang/TGI) + descarga del modelo HF
+        dentro del contenedor. Puede tardar varios minutos.
+      </p>
+    );
+  }
+  return null;
 }
 
 function RunningPanel({ events, progress, running }) {

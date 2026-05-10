@@ -11,7 +11,7 @@ from loguru import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from core import binary_manager, docker_mgr, native_runtime
+from core import binary_manager, docker_mgr, native_runtime, ollama_manager
 from engines import registry
 from engines.base import EngineMeta, StartRequest
 
@@ -22,6 +22,7 @@ class RuntimeAvailability(BaseModel):
     runtime: str
     ready: bool
     detail: str = ""
+    install_url: str | None = None
 
 
 class EngineSummary(BaseModel):
@@ -46,6 +47,24 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                 out.append(
                     RuntimeAvailability(runtime="native", ready=fully, detail=detail)
                 )
+            elif meta.id == "ollama":
+                if ollama_manager.is_installed():
+                    out.append(
+                        RuntimeAvailability(
+                            runtime="native",
+                            ready=True,
+                            detail=f"Instalado en {ollama_manager.find_ollama_exe()}",
+                        )
+                    )
+                else:
+                    out.append(
+                        RuntimeAvailability(
+                            runtime="native",
+                            ready=False,
+                            detail="No instalado",
+                            install_url=ollama_manager.installer_url() or "https://ollama.com/download",
+                        )
+                    )
             else:
                 out.append(RuntimeAvailability(runtime="native", ready=False, detail="No implementado"))
         elif rt == "docker":

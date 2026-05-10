@@ -13,7 +13,9 @@
     "hf_gguf": {
       "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",
       "file_template": "Llama-3.2-1B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "llama3.2:1b",
+    "hf_repo": "meta-llama/Llama-3.2-1B-Instruct"
   },
   {
     "id": "llama-3.2-3b",
@@ -29,7 +31,9 @@
     "hf_gguf": {
       "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
       "file_template": "Llama-3.2-3B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "llama3.2:3b",
+    "hf_repo": "meta-llama/Llama-3.2-3B-Instruct"
   },
   {
     "id": "llama-3.1-8b",
@@ -45,7 +49,9 @@
     "hf_gguf": {
       "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
       "file_template": "Meta-Llama-3.1-8B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "llama3.1:8b",
+    "hf_repo": "meta-llama/Meta-Llama-3.1-8B-Instruct"
   },
   {
     "id": "qwen2.5-7b",
@@ -61,7 +67,9 @@
     "hf_gguf": {
       "repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
       "file_template": "Qwen2.5-7B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "qwen2.5:7b",
+    "hf_repo": "Qwen/Qwen2.5-7B-Instruct"
   },
   {
     "id": "qwen2.5-14b",
@@ -77,7 +85,9 @@
     "hf_gguf": {
       "repo": "bartowski/Qwen2.5-14B-Instruct-GGUF",
       "file_template": "Qwen2.5-14B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "qwen2.5:14b",
+    "hf_repo": "Qwen/Qwen2.5-14B-Instruct"
   },
   {
     "id": "qwen2.5-32b",
@@ -93,7 +103,9 @@
     "hf_gguf": {
       "repo": "bartowski/Qwen2.5-32B-Instruct-GGUF",
       "file_template": "Qwen2.5-32B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "qwen2.5:32b",
+    "hf_repo": "Qwen/Qwen2.5-32B-Instruct"
   },
   {
     "id": "qwen2.5-coder-7b",
@@ -109,7 +121,9 @@
     "hf_gguf": {
       "repo": "bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
       "file_template": "Qwen2.5-Coder-7B-Instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "qwen2.5-coder:7b",
+    "hf_repo": "Qwen/Qwen2.5-Coder-7B-Instruct"
   },
   {
     "id": "qwen3-30b-a3b",
@@ -121,7 +135,9 @@
     "size_base_gb": 61.0,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["chat", "moe"]
+    "tags": ["chat", "moe"],
+    "ollama_tag": "qwen3:30b-a3b",
+    "hf_repo": "Qwen/Qwen3-30B-A3B"
   },
   {
     "id": "qwen3-235b-a22b",
@@ -133,7 +149,8 @@
     "size_base_gb": 470.0,
     "max_ctx": 131072,
     "license": "qwen",
-    "tags": ["moe", "huge"]
+    "tags": ["moe", "huge"],
+    "hf_repo": "Qwen/Qwen3-235B-A22B"
   },
   {
     "id": "mistral-7b-v0.3",
@@ -149,7 +166,9 @@
     "hf_gguf": {
       "repo": "bartowski/Mistral-7B-Instruct-v0.3-GGUF",
       "file_template": "Mistral-7B-Instruct-v0.3-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "mistral:7b-instruct-v0.3",
+    "hf_repo": "mistralai/Mistral-7B-Instruct-v0.3"
   },
   {
     "id": "mixtral-8x7b",
@@ -161,7 +180,9 @@
     "size_base_gb": 93.4,
     "max_ctx": 32768,
     "license": "apache-2.0",
-    "tags": ["chat", "moe"]
+    "tags": ["chat", "moe"],
+    "ollama_tag": "mixtral:8x7b",
+    "hf_repo": "mistralai/Mixtral-8x7B-Instruct-v0.1"
   },
   {
     "id": "gemma-2-9b",
@@ -177,7 +198,9 @@
     "hf_gguf": {
       "repo": "bartowski/gemma-2-9b-it-GGUF",
       "file_template": "gemma-2-9b-it-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "gemma2:9b",
+    "hf_repo": "google/gemma-2-9b-it"
   },
   {
     "id": "gemma-2-27b",
@@ -193,7 +216,9 @@
     "hf_gguf": {
       "repo": "bartowski/gemma-2-27b-it-GGUF",
       "file_template": "gemma-2-27b-it-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "gemma2:27b",
+    "hf_repo": "google/gemma-2-27b-it"
   },
   {
     "id": "phi-3.5-mini",
@@ -209,7 +234,9 @@
     "hf_gguf": {
       "repo": "bartowski/Phi-3.5-mini-instruct-GGUF",
       "file_template": "Phi-3.5-mini-instruct-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "phi3.5:3.8b",
+    "hf_repo": "microsoft/Phi-3.5-mini-instruct"
   },
   {
     "id": "deepseek-r1-distill-qwen-7b",
@@ -225,6 +252,8 @@
     "hf_gguf": {
       "repo": "bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF",
       "file_template": "DeepSeek-R1-Distill-Qwen-7B-{quant}.gguf"
-    }
+    },
+    "ollama_tag": "deepseek-r1:7b",
+    "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
   }
 ]

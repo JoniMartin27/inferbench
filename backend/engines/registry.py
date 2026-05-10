@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from .base import Engine, EngineMeta
 from .llamacpp import LlamaCppEngine
+from .ollama import OllamaEngine
+from .sglang import SglangEngine
+from .tgi import TgiEngine
+from .vllm import VllmEngine
 
 
 class _ApiOnlyEngine(Engine):
@@ -14,8 +18,13 @@ class _ApiOnlyEngine(Engine):
 
 def _api_meta(eid: str, name: str, desc: str) -> EngineMeta:
     return EngineMeta(
-        id=eid, name=name, type="api", optimizable=False, description=desc,
-        runtimes=[], default_runtime="docker",
+        id=eid,
+        name=name,
+        type="api",
+        optimizable=False,
+        description=desc,
+        runtimes=[],
+        default_runtime="docker",
     )
 
 
@@ -26,36 +35,13 @@ def _register(engine: Engine) -> None:
     _REGISTRY[engine.meta.id] = engine
 
 
-# Local (M2 implementa solo llamacpp; el resto se añadirán en sus propios hitos)
+# Motores locales
 _register(LlamaCppEngine())
+_register(OllamaEngine())
+_register(VllmEngine())
+_register(SglangEngine())
+_register(TgiEngine())
 
-# Stubs locales pendientes (visibles en la lista pero solo Docker)
-class _PendingLocal(Engine):
-    def build_command(self, req):  # type: ignore[override]
-        raise NotImplementedError(f"Motor {self.meta.id} aún no implementado")
-
-
-for stub_id, stub_name, stub_image, stub_port in [
-    ("ollama", "Ollama", "ollama/ollama:latest", 11434),
-    ("vllm", "vLLM", "vllm/vllm-openai:latest", 8000),
-    ("sglang", "SGLang", "lmsysorg/sglang:latest", 30000),
-    ("tgi", "HF TGI", "ghcr.io/huggingface/text-generation-inference:latest", 8088),
-]:
-    _register(
-        _PendingLocal(
-            EngineMeta(
-                id=stub_id,
-                name=stub_name,
-                type="local",
-                default_port=stub_port,
-                image=stub_image,
-                optimizable=True,
-                description="Pendiente de implementación. Requiere Docker.",
-                runtimes=["docker"],
-                default_runtime="docker",
-            )
-        )
-    )
 
 # APIs cloud
 for eid, name, desc in [

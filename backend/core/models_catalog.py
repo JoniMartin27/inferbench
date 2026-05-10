@@ -26,7 +26,9 @@ class Model(BaseModel):
     max_ctx: int
     license: str = ""
     tags: list[str] = []
-    hf_gguf: HfGguf | None = None  # fuente para auto-descarga
+    hf_gguf: HfGguf | None = None  # fuente para auto-descarga (llama.cpp)
+    ollama_tag: str | None = None  # tag en el registro de Ollama (ej. "llama3.2:1b")
+    hf_repo: str | None = None     # repo HF del modelo no-cuantizado (vLLM/SGLang/TGI)
 
 
 @lru_cache(maxsize=1)

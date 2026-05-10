@@ -26,7 +26,7 @@ import psutil
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from . import binary_manager, model_manager, native_runtime
+from . import binary_manager, docker_mgr, model_manager, native_runtime, ollama_manager
 from .hardware import detect_hardware
 from .models_catalog import Model, get_model
 from .optimizer import get_optimal_config
@@ -288,13 +288,124 @@ class BenchmarkRunner:
             await self.queue.put({"type": "_eof"})
 
     async def _bootstrap(self) -> None:
-        """Asegura: binario nativo + modelo GGUF + motor corriendo."""
-        if self.req.engine != "llamacpp":
+        """Asegura: binario/imagen + modelo + motor corriendo. Dispatcha por motor."""
+        if self.req.engine == "llamacpp":
+            await self._bootstrap_llamacpp()
+        elif self.req.engine == "ollama":
+            await self._bootstrap_ollama()
+        elif self.req.engine in ("vllm", "sglang", "tgi"):
+            await self._bootstrap_docker_engine()
+        else:
+            raise RuntimeError(f"Bootstrap no soportado para motor: {self.req.engine}")
+
+    async def _bootstrap_ollama(self) -> None:
+        """Asegura Ollama instalado, daemon corriendo, modelo descargado."""
+        if not ollama_manager.is_installed():
+            url = ollama_manager.installer_url() or "https://ollama.com/download"
             raise RuntimeError(
-                f"Auto-bootstrap solo soportado para llamacpp por ahora. "
-                f"Para {self.req.engine}, pasa base_url manual."
+                f"Ollama no instalado. Descárgalo desde {url} y vuelve a intentarlo."
             )
 
+        # Daemon
+        if not await ollama_manager.is_running():
+            await self.emit({"type": "log", "level": "info", "text": "Arrancando Ollama daemon…"})
+            await ollama_manager.ensure_running(timeout=30.0)
+            await self.emit({"type": "log", "level": "success", "text": "Ollama daemon corriendo"})
+        else:
+            await self.emit({"type": "log", "level": "info", "text": "Reusando Ollama ya corriendo"})
+
+        # Modelo
+        model = get_model(self.req.model)
+        tag = (model and model.ollama_tag) or self.req.model
+        if not tag or ":" not in tag and not (model and model.ollama_tag):
+            raise RuntimeError(
+                f"No hay tag Ollama para {self.req.model}. Usa un tag tipo 'llama3.2:1b'."
+            )
+
+        if not await ollama_manager.has_model(tag):
+            await self.emit({"type": "log", "level": "info", "text": f"Descargando modelo Ollama: {tag}"})
+
+            async def progress(evt):
+                await self.emit({"type": "model.download", **evt})
+
+            await ollama_manager.pull_model(tag, progress=progress)
+            await self.emit({"type": "log", "level": "success", "text": f"Modelo listo: {tag}"})
+        else:
+            await self.emit({"type": "log", "level": "info", "text": f"Modelo ya descargado: {tag}"})
+
+        # Reescribir el campo model con el tag para que /v1/chat/completions lo acepte
+        self.req.model = tag
+        self.base_url = ollama_manager.OLLAMA_BASE_URL
+        await self.emit({"type": "engine.ready", "base_url": self.base_url})
+
+    async def _bootstrap_docker_engine(self) -> None:
+        """Arranca vLLM/SGLang/TGI vía Docker, con HF model id."""
+        from engines import registry
+
+        engine = registry.get_engine(self.req.engine)
+        port = self.meta_port = engine.meta.default_port
+
+        d = docker_mgr.availability()
+        if not d.get("available"):
+            raise RuntimeError(
+                f"Docker no disponible: {d.get('reason', '')}. "
+                f"Necesario para {self.req.engine}. Arranca Docker Desktop."
+            )
+
+        model = get_model(self.req.model)
+        hf_id = (model and model.hf_repo) or self.req.model
+        if not hf_id:
+            raise RuntimeError(f"No hay HF repo para {self.req.model}")
+
+        # Si ya está corriendo el contenedor con el mismo modelo, reusa
+        loaded = native_runtime.get_loaded(self.req.engine)
+        st = engine.status()
+        if st and st.state == "running" and loaded and loaded.get("model") == hf_id:
+            await self.emit({
+                "type": "log",
+                "level": "info",
+                "text": f"Reusando {self.req.engine} con {hf_id}",
+            })
+        else:
+            if st and st.state == "running":
+                await self.emit({"type": "log", "level": "info", "text": "Reiniciando contenedor…"})
+                engine.stop()
+
+            from engines.base import StartRequest as EngineStartRequest
+
+            ereq = EngineStartRequest(
+                runtime="docker",
+                gpu=True,
+                engine_opts={
+                    "hf_model_id": hf_id,
+                    "contextLen": self.req.engine_opts.get("contextLen") or 4096,
+                    "quant": self.req.quant if self.req.quant.lower() != "q4_k_m" else None,
+                    **self.req.engine_opts,
+                },
+            )
+            await self.emit({
+                "type": "log",
+                "level": "info",
+                "text": f"Arrancando contenedor {engine.meta.image} con modelo {hf_id}…",
+            })
+            await self.emit({"type": "engine.start", "binary": engine.meta.image, "args": engine.build_command(ereq)})
+            await engine.start(ereq)
+            native_runtime.set_loaded(
+                self.req.engine,
+                {"model": hf_id, "quant": self.req.quant},
+            )
+            self._owns_engine = True
+
+        self.base_url = f"http://localhost:{port}"
+        # Para vLLM y similares, el field "model" en el request DEBE ser el hf_id
+        self.req.model = hf_id
+
+        await self.emit({"type": "log", "level": "info", "text": "Esperando motor listo (puede tardar varios minutos en primer arranque)…"})
+        await _wait_engine_ready(self.base_url, timeout=600.0)
+        await self.emit({"type": "engine.ready", "base_url": self.base_url})
+
+    async def _bootstrap_llamacpp(self) -> None:
+        """Asegura: binario nativo + modelo GGUF + motor corriendo."""
         model = get_model(self.req.model)
         if model is None:
             raise RuntimeError(f"Modelo desconocido: {self.req.model}")

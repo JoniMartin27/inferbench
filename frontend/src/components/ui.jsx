@@ -211,13 +211,26 @@ export function compatTone(status) {
 export function compatLabel(status) {
   return (
     {
-      ok: "GPU",
+      ok: "100% GPU",
       moe: "MoE offload",
-      partial: "GPU+RAM",
+      partial: "GPU + CPU",
       cpu: "Solo CPU",
       fail: "No cabe",
       api: "API",
     }[status] || status
+  );
+}
+
+export function compatDescription(status) {
+  return (
+    {
+      ok: "Modelo entero en VRAM. Velocidad máxima.",
+      moe: "Capas expert en CPU, gating+atención en GPU. Tps decente porque solo activos pocos params/token.",
+      partial: "Algunas capas en GPU, resto en CPU. Funciona pero lento (1-10 tok/s típico).",
+      cpu: "Todo en CPU. Muy lento, solo si no hay GPU.",
+      fail: "No cabe ni con la cuantización más agresiva.",
+      api: "Cloud — depende del proveedor.",
+    }[status] || ""
   );
 }
 

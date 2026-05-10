@@ -32,7 +32,7 @@ export default function ModelsView({ onNavigate }) {
   const [searchDirs, setSearchDirs] = useState({ known: [], extra: [] });
   const [showDirs, setShowDirs] = useState(false);
   const [extraInput, setExtraInput] = useState("");
-  const [onlyCompatible, setOnlyCompatible] = useState(true);
+  const [filterMode, setFilterMode] = useState("compat"); // all | compat | full_gpu
   const [familyFilter, setFamilyFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -305,8 +305,8 @@ export default function ModelsView({ onNavigate }) {
         <CatalogTable
           rows={rows}
           loading={loading}
-          onlyCompatible={onlyCompatible}
-          setOnlyCompatible={setOnlyCompatible}
+          filterMode={filterMode}
+          setFilterMode={setFilterMode}
           familyFilter={familyFilter}
           setFamilyFilter={setFamilyFilter}
           searchQuery={searchQuery}
@@ -381,13 +381,14 @@ export default function ModelsView({ onNavigate }) {
   );
 }
 
-function CatalogTable({ rows, loading, onlyCompatible, setOnlyCompatible, familyFilter, setFamilyFilter, searchQuery, setSearchQuery, optimize, optimizing }) {
+function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, setFamilyFilter, searchQuery, setSearchQuery, optimize, optimizing }) {
   const STATUS_RANK = { ok: 0, moe: 1, partial: 2, cpu: 3, fail: 4, api: 5 };
   const families = Array.from(new Set(rows.map((r) => r.model.family))).sort();
 
   const filtered = rows
     .filter((r) => {
-      if (onlyCompatible && ["fail"].includes(r.status)) return false;
+      if (filterMode === "full_gpu" && r.status !== "ok") return false;
+      if (filterMode === "compat" && r.status === "fail") return false;
       if (familyFilter !== "all" && r.model.family !== familyFilter) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -427,15 +428,26 @@ function CatalogTable({ rows, loading, onlyCompatible, setOnlyCompatible, family
       }
     >
       <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-slate-800 pb-3">
-        <label className="flex items-center gap-2 text-xs text-slate-300">
-          <input
-            type="checkbox"
-            checked={onlyCompatible}
-            onChange={(e) => setOnlyCompatible(e.target.checked)}
-            className="accent-indigo-500"
-          />
-          <Filter size={12} /> Solo modelos que puedo correr
-        </label>
+        <div className="flex items-center gap-1 rounded border border-slate-700 bg-slate-900/40 p-0.5 text-xs">
+          {[
+            { id: "full_gpu", label: "🟢 100% GPU", title: "Solo modelos que corren enteros en VRAM (máxima velocidad)" },
+            { id: "compat", label: "Compatibles", title: "Excluye 'No cabe'. Incluye GPU+CPU y MoE offload" },
+            { id: "all", label: "Todos", title: "Sin filtro" },
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setFilterMode(m.id)}
+              title={m.title}
+              className={`rounded px-2 py-1 transition ${
+                filterMode === m.id
+                  ? "bg-indigo-500 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         <select
           value={familyFilter}
           onChange={(e) => setFamilyFilter(e.target.value)}

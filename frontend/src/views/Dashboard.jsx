@@ -28,7 +28,7 @@ export default function Dashboard({ onNavigate }) {
   const [hw, setHw] = useState(null);
   const [engines, setEngines] = useState([]);
   const [history, setHistory] = useState([]);
-  const [recommended, setRecommended] = useState([]);
+  const [recommended, setRecommended] = useState({ fullGpu: [], moe: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,16 +44,13 @@ export default function Dashboard({ onNavigate }) {
         setHw(h);
         setEngines(e);
         setHistory(hist);
-        // Top 5 recomendados: status ok/moe, ordenados por params (mejor empezar grandes que sí caben)
-        const RANK = { ok: 0, moe: 1, partial: 2, cpu: 3, fail: 4 };
-        const top = compat
-          .filter((c) => c.status === "ok" || c.status === "moe")
-          .sort((a, b) => {
-            if (RANK[a.status] !== RANK[b.status]) return RANK[a.status] - RANK[b.status];
-            return b.model.params_b - a.model.params_b; // más grande primero (más interesante)
-          })
+        // Top recomendados — separar full-GPU vs MoE-offload
+        const fullGpu = compat
+          .filter((c) => c.status === "ok")
+          .sort((a, b) => b.model.params_b - a.model.params_b)
           .slice(0, 5);
-        setRecommended(top);
+        const moe = compat.filter((c) => c.status === "moe").slice(0, 3);
+        setRecommended({ fullGpu, moe });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -135,57 +132,46 @@ export default function Dashboard({ onNavigate }) {
           </Card>
         </div>
 
-        {/* Recomendados */}
-        <Card variant="accent" title="Recomendados para tu hardware" icon={Sparkles}>
+        {/* Full-GPU */}
+        <Card variant="success" title="100% GPU — máxima velocidad" icon={Zap}>
+          <p className="mb-3 text-xs text-slate-400">
+            Estos modelos caben enteros en tu VRAM. Velocidad máxima (50-200+ tok/s típico).
+          </p>
           {loading && (
             <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
+              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           )}
-          {!loading && recommended.length === 0 && (
+          {!loading && recommended.fullGpu.length === 0 && (
             <Empty
               icon={Zap}
-              title="Sin recomendaciones todavía"
-              body="Cuando detectemos tu hardware mostraremos los mejores modelos que puedes correr."
+              title="Tu GPU es muy pequeña para los modelos del catálogo"
+              body="Considera modelos más cuantizados o usa MoE offload."
             />
           )}
-          {!loading && recommended.length > 0 && (
+          {!loading && recommended.fullGpu.length > 0 && (
             <div className="grid gap-2 lg:grid-cols-2">
-              {recommended.map(({ model, status, model_size_gb, max_context }) => (
-                <button
-                  key={model.id}
-                  onClick={() => onNavigate?.("benchmark", { model: model.id })}
-                  className="group flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-left transition hover:border-indigo-500/60 hover:bg-slate-900/70"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-300">
-                    {compatIcon(status)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 truncate font-medium">
-                      <span className="truncate">{model.name}</span>
-                      {model.tags?.includes("popular") && (
-                        <Sparkles size={11} className="shrink-0 text-amber-300" />
-                      )}
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <Badge tone={compatTone(status)}>{compatLabel(status)}</Badge>
-                      <Badge tone="slate">{model.params_b}B</Badge>
-                      <Badge tone="slate">{model_size_gb} GB</Badge>
-                      {model.is_moe && <Badge tone="purple">MoE</Badge>}
-                      <span className="text-slate-500">ctx {max_context.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <ArrowRight
-                    size={14}
-                    className="shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-indigo-300"
-                  />
-                </button>
+              {recommended.fullGpu.map((row) => (
+                <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="emerald" />
               ))}
             </div>
           )}
         </Card>
+
+        {/* MoE offload */}
+        {recommended.moe.length > 0 && (
+          <Card variant="accent" title="MoE offload — modelos enormes con --n-cpu-moe" icon={Sparkles}>
+            <p className="mb-3 text-xs text-slate-400">
+              Modelos MoE de hasta 30B+ params totales que caben en tu VRAM gracias a mover las capas
+              expert a CPU. Velocidad razonable porque pocos params se activan por token.
+            </p>
+            <div className="grid gap-2 lg:grid-cols-2">
+              {recommended.moe.map((row) => (
+                <ModelRecRow key={row.model.id} row={row} onNavigate={onNavigate} accent="purple" />
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Hardware detail */}
@@ -317,6 +303,38 @@ function Row({ k, v }) {
       <dt className="text-slate-500">{k}</dt>
       <dd className="truncate text-slate-200">{v ?? "—"}</dd>
     </>
+  );
+}
+
+function ModelRecRow({ row, onNavigate, accent }) {
+  const { model, status, model_size_gb, max_context } = row;
+  const accents = {
+    emerald: "from-emerald-500/20 to-cyan-500/20 text-emerald-300",
+    purple: "from-purple-500/20 to-indigo-500/20 text-purple-300",
+  };
+  return (
+    <button
+      onClick={() => onNavigate?.("benchmark", { model: model.id })}
+      className="group flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-left transition hover:border-indigo-500/60 hover:bg-slate-900/70"
+    >
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${accents[accent]}`}>
+        {compatIcon(status)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 truncate font-medium">
+          <span className="truncate">{model.name}</span>
+          {model.tags?.includes("popular") && <Sparkles size={11} className="shrink-0 text-amber-300" />}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <Badge tone={compatTone(status)}>{compatLabel(status)}</Badge>
+          <Badge tone="slate">{model.params_b}B</Badge>
+          <Badge tone="slate">{model_size_gb} GB</Badge>
+          {model.is_moe && <Badge tone="purple">MoE</Badge>}
+          <span className="text-slate-500">ctx {max_context.toLocaleString()}</span>
+        </div>
+      </div>
+      <ArrowRight size={14} className="shrink-0 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-indigo-300" />
+    </button>
   );
 }
 

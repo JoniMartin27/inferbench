@@ -29,6 +29,7 @@ class Model(BaseModel):
     hf_gguf: HfGguf | None = None  # fuente para auto-descarga (llama.cpp)
     ollama_tag: str | None = None  # tag en el registro de Ollama (ej. "llama3.2:1b")
     hf_repo: str | None = None     # repo HF del modelo no-cuantizado (vLLM/SGLang/TGI)
+    n_layer: int | None = None     # número de capas (para calcular ngl partial)
 
 
 @lru_cache(maxsize=1)

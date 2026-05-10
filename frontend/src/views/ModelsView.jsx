@@ -82,8 +82,11 @@ export default function ModelsView({ onNavigate }) {
     setOptimizing(modelId);
     setOptimal(null);
     try {
-      const cfg = await api.optimize(engine, modelId);
-      setOptimal({ modelId, config: cfg });
+      const res = await api.optimize(engine, modelId);
+      // Backend nuevo devuelve {config, techniques}; viejo devolvía OptimalConfig directo
+      const cfg = res.config || res;
+      const techniques = res.techniques || [];
+      setOptimal({ modelId, config: cfg, techniques });
     } finally {
       setOptimizing(null);
     }
@@ -295,7 +298,7 @@ export default function ModelsView({ onNavigate }) {
               </button>
             }
           >
-            <OptimalDetail cfg={optimal.config} />
+            <OptimalDetail cfg={optimal.config} techniques={optimal.techniques} />
           </Card>
         )}
 
@@ -559,11 +562,11 @@ function shortenPath(p) {
   return ".../" + parts.slice(-2).join("/");
 }
 
-function OptimalDetail({ cfg }) {
+function OptimalDetail({ cfg, techniques = [] }) {
   if (!cfg.feasible) {
     return (
       <div>
-        <Badge tone="rose">No viable</Badge>
+        <Badge tone="rose">No viable en este hardware</Badge>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-400">
           {cfg.rationale.map((r, i) => (
             <li key={i}>{r}</li>
@@ -573,38 +576,60 @@ function OptimalDetail({ cfg }) {
     );
   }
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <Kv k="Status" v={<Badge tone={compatTone(cfg.status)}>{compatLabel(cfg.status)}</Badge>} />
-        <Kv k="Cuantización" v={cfg.quant || "—"} />
-        <Kv k="KV cache" v={cfg.kv_cache || "—"} />
-        <Kv k="Contexto" v={cfg.context_len?.toLocaleString() || "—"} />
-        {cfg.moe_offload != null && <Kv k="MoE offload" v={`--n-cpu-moe ${cfg.moe_offload}`} />}
-        <Kv k="Total estimado" v={`${cfg.estimated_total_gb} GB`} />
-        <Kv
-          k="Flags"
-          v={
-            <div className="flex flex-wrap gap-1">
-              {Object.entries(cfg.flags || {}).map(([k, v]) =>
-                v === false ? null : (
-                  <Badge key={k} tone="indigo">
-                    {k}
-                    {typeof v !== "boolean" ? `=${v}` : ""}
-                  </Badge>
-                )
-              )}
-            </div>
-          }
-        />
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <Kv k="Status" v={<Badge tone={compatTone(cfg.status)}>{compatLabel(cfg.status)}</Badge>} />
+          <Kv k="Cuantización" v={cfg.quant || "—"} />
+          <Kv k="KV cache" v={cfg.kv_cache || "—"} />
+          <Kv k="Contexto" v={cfg.context_len?.toLocaleString() || "—"} />
+          {cfg.moe_offload != null && <Kv k="MoE offload" v={`--n-cpu-moe ${cfg.moe_offload}`} />}
+          {cfg.flags?.ngl != null && cfg.flags.ngl !== 999 && (
+            <Kv k="GPU layers" v={`-ngl ${cfg.flags.ngl} (parcial)`} />
+          )}
+          <Kv k="Total estimado" v={`${cfg.estimated_total_gb} GB`} />
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wider text-slate-500">Flags activadas</div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {Object.entries(cfg.flags || {})
+              .filter(([k, v]) => v !== false && v != null && k !== "ngl_mode")
+              .map(([k, v]) => (
+                <Badge key={k} tone="indigo">
+                  {k}
+                  {typeof v !== "boolean" ? `=${v}` : ""}
+                </Badge>
+              ))}
+          </div>
+        </div>
       </div>
-      <div>
-        <div className="text-xs uppercase tracking-wider text-slate-500">Razonamiento</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
+
+      {techniques.length > 0 && (
+        <div className="rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+            Técnicas de optimización aplicadas ({techniques.length})
+          </div>
+          <ul className="space-y-1.5 text-sm text-slate-200">
+            {techniques.map((t, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <details className="rounded border border-slate-800 p-3 text-sm">
+        <summary className="cursor-pointer text-xs uppercase tracking-wider text-slate-500">
+          Razonamiento del optimizador
+        </summary>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-400">
           {cfg.rationale.map((r, i) => (
             <li key={i}>{r}</li>
           ))}
         </ul>
-      </div>
+      </details>
     </div>
   );
 }

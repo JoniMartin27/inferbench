@@ -105,6 +105,16 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     + max_ctx * compat.get_kv_per_token_gb(model, kv)
                     + 0.6
                 )
+                # Calcular ngl óptimo para llama.cpp
+                flags = _default_flags(engine_id, model, status)
+                if engine_id in ("llamacpp",):
+                    ngl, mode = compute_optimal_ngl(
+                        model, snap, quant, kv, max_ctx,
+                        moe_offload=moe_candidate if status == "moe" else None,
+                    )
+                    flags["ngl"] = ngl
+                    flags["ngl_mode"] = mode
+
                 cfg = OptimalConfig(
                     engine=engine_id,
                     model_id=model_id,
@@ -114,7 +124,7 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     kv_cache=kv,
                     context_len=max_ctx,
                     moe_offload=moe_candidate if status == "moe" else None,
-                    flags=_default_flags(engine_id, model, status),
+                    flags=flags,
                     rationale=rationale + [
                         f"Elegida cuantización {quant} con KV {kv}: status={status}",
                         f"Contexto máximo automático: {max_ctx} tokens",
@@ -165,8 +175,9 @@ def _default_flags(engine_id: str, model: Model, status: str) -> dict[str, Any]:
     if engine_id == "llamacpp":
         return {
             "flashAttn": True,
-            "mlock": status == "ok",  # mlock solo si todo cabe en VRAM
+            "mlock": status == "ok",
             "noMmap": status == "ok",
+            "cacheReuse": 256,
         }
     if engine_id == "ollama":
         return {"flashAttn": True}
@@ -177,3 +188,92 @@ def _default_flags(engine_id: str, model: Model, status: str) -> dict[str, Any]:
     if engine_id == "tgi":
         return {}
     return {}
+
+
+def compute_optimal_ngl(
+    model: Model,
+    hw: compat.HardwareSnapshot,
+    quant: str,
+    kv_cache: str,
+    context_len: int,
+    moe_offload: int | None = None,
+) -> tuple[int, str]:
+    """Calcula cuántas capas (de las n_layer del modelo) ofrecer a GPU.
+
+    Devuelve (ngl, mode) donde mode ∈ {"all", "partial", "moe"}.
+    Para "all": modelo completo en VRAM → ngl=999.
+    Para "partial": modelo no cabe; calculamos cuántas capas caben.
+    Para "moe": el offload por --n-cpu-moe ya manejará reparto, ngl=999.
+    """
+    n_layer = model.n_layer or 32  # fallback razonable
+    model_size = compat.get_model_size_gb(model, quant)
+    kv_overhead = context_len * compat.get_kv_per_token_gb(model, kv_cache)
+    overhead = 0.6  # context, scratch, etc.
+
+    # MoE con --n-cpu-moe: la GPU lleva gating + atención (poca cosa), el offload manejará el resto
+    if model.is_moe and moe_offload and moe_offload > 0:
+        return 999, "moe"
+
+    # ¿Cabe entero?
+    total = model_size + kv_overhead + overhead
+    if total <= hw.vram_gb:
+        return 999, "all"
+
+    # Partial: cuántas capas caben en VRAM disponible (tras KV + overhead)
+    # KV cache se reparte por capas igual que los pesos → ambos escalan con ngl
+    # Aproximación: avail_for_layers = vram - overhead, size_per_layer_with_kv = (model_size + kv_overhead) / n_layer
+    avail = hw.vram_gb - overhead - 0.3  # 0.3 GB para CUDA context, kernels
+    if avail <= 0.5:
+        return 0, "partial"  # nada cabe en GPU
+    size_per_layer = (model_size + kv_overhead) / n_layer
+    if size_per_layer <= 0:
+        return 999, "all"
+    ngl = int(avail / size_per_layer)
+    ngl = max(0, min(ngl, n_layer - 1))  # nunca todas (eso sería "all")
+    return ngl, "partial"
+
+
+def benefits_summary(cfg: "OptimalConfig", model: Model, hw: compat.HardwareSnapshot) -> list[str]:
+    """Lista de las técnicas de optimización aplicadas con su beneficio cuantificado."""
+    out: list[str] = []
+    base_fp16 = model.size_base_gb
+    if cfg.quant:
+        size_q = compat.get_model_size_gb(model, cfg.quant)
+        saved = base_fp16 - size_q
+        pct = saved / base_fp16 * 100 if base_fp16 else 0
+        out.append(
+            f"Cuantización {cfg.quant}: modelo de {base_fp16:.1f}GB → {size_q:.1f}GB "
+            f"({pct:.0f}% menos)"
+        )
+    if cfg.kv_cache and cfg.kv_cache != "f16":
+        kv_factor = {"q8_0": 0.5, "q4_0": 0.25, "fp8": 0.5, "fp8_e5m2": 0.5}.get(cfg.kv_cache, 1.0)
+        out.append(
+            f"KV-cache {cfg.kv_cache}: {(1 - kv_factor) * 100:.0f}% menos memoria de contexto"
+        )
+    if cfg.moe_offload:
+        n_layer = model.n_layer or 32
+        out.append(
+            f"MoE offload --n-cpu-moe={cfg.moe_offload}: {cfg.moe_offload}/{n_layer} capas expert "
+            f"a CPU. Solo el gating + atención usan GPU. Permite correr {model.params_b}B totales "
+            f"con menos VRAM (técnica del video Codacus)"
+        )
+    if cfg.flags.get("flashAttn"):
+        out.append("Flash Attention (-fa on): atención con kernels fusionados, ~30% menos memoria")
+    ngl = cfg.flags.get("ngl")
+    if ngl is not None and ngl != 999:
+        n_layer = model.n_layer or 32
+        out.append(
+            f"Layer offload parcial (-ngl {ngl}): {ngl}/{n_layer} capas en GPU, "
+            f"resto en CPU. Tps bajos pero hace posible correr el modelo"
+        )
+    if cfg.flags.get("mlock"):
+        out.append("--mlock: evita que el SO mueva el modelo a swap")
+    if cfg.flags.get("noMmap"):
+        out.append("--no-mmap: carga directa a memoria, evita doble copia mapeada")
+    if cfg.flags.get("cacheReuse"):
+        out.append(f"--cache-reuse {cfg.flags['cacheReuse']}: reusa KV de prompts similares")
+    if cfg.flags.get("prefixCaching"):
+        out.append("Prefix caching: vLLM reusa el prompt entre requests")
+    if cfg.flags.get("chunkedPrefill"):
+        out.append(f"Chunked prefill ({cfg.flags['chunkedPrefill']}): SGLang procesa el prompt en chunks")
+    return out

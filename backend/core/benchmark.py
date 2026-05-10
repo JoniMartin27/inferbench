@@ -502,13 +502,14 @@ class BenchmarkRunner:
             moe = optimal.moe_offload
 
             n_threads = max(2, (psutil.cpu_count(logical=False) or 4))
+            ngl = optimal.flags.get("ngl", 99) if optimal.feasible else 99
             args = [
                 "--host", "0.0.0.0",
                 "--port", "8080",
                 "-m", str(gguf_path),
                 "--alias", model.id,
                 "-c", str(ctx),
-                "-ngl", "99",
+                "-ngl", str(ngl),
                 "-ctk", kv, "-ctv", kv,
                 "-t", str(n_threads),
                 "--batch-size", "2048",
@@ -516,14 +517,14 @@ class BenchmarkRunner:
             ]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
-            # En llama.cpp moderno -fa requiere valor (on|off|auto)
             if optimal.flags.get("flashAttn"):
                 args += ["-fa", "on"]
             if optimal.flags.get("mlock"):
                 args += ["--mlock"]
             if optimal.flags.get("noMmap"):
                 args += ["--no-mmap"]
-            # Permitir override desde el request
+            if optimal.flags.get("cacheReuse"):
+                args += ["--cache-reuse", str(int(optimal.flags["cacheReuse"]))]
             if self.req.engine_opts:
                 args += self._extra_engine_args(self.req.engine_opts)
 

@@ -21,12 +21,16 @@ export default function BenchmarkView() {
   const [sweepQuants, setSweepQuants] = useState([]);
   const [localModel, setLocalModel] = useState(null);
 
-  // Si llegamos desde ModelsView con un GGUF local seleccionado, lo aplicamos
+  // Si llegamos con un GGUF local seleccionado, lo aplicamos
   useEffect(() => {
     if (navPayload?.localModel) {
       const m = navPayload.localModel;
       setLocalModel(m);
       if (m.quant) setQuant(m.quant);
+      setEngine("llamacpp");
+    } else if (navPayload?.model) {
+      setLocalModel(null);
+      setModel(navPayload.model);
       setEngine("llamacpp");
     }
   }, [navPayload]);

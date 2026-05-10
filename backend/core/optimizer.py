@@ -18,7 +18,11 @@ from .models_catalog import Model, get_model
 
 # Cuantizaciones por motor (de mayor a menor calidad)
 ENGINE_QUANTS: dict[str, list[str]] = {
-    "llamacpp": ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"],
+    "llamacpp": [
+        "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
+        "Q3_K_M", "IQ3_M", "Q2_K", "IQ2_M", "IQ2_XS", "IQ2_XXS",
+        "IQ1_M", "IQ1_S",
+    ],
     "ollama": ["q8_0", "q6_K", "q5_K_M", "q4_K_M", "q3_K_M", "q2_K"],
     "vllm": ["fp8", "awq", "gptq", "bitsandbytes"],
     "sglang": ["fp8", "awq", "gptq"],
@@ -96,7 +100,7 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                 quant=quant, kv_cache=kv, context_len=MIN_CONTEXT, moe_offload=moe_candidate
             )
             status = compat.check_compat(model, snap, opts, engine_id=engine_id, is_api=False)
-            if status in {"ok", "moe", "partial"}:
+            if status in {"ok", "moe", "partial", "cpu", "disk"}:
                 max_ctx = compat.compute_max_context(
                     model, snap, opts, engine_id=engine_id, is_api=False
                 )
@@ -115,6 +119,8 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     flags["ngl"] = ngl
                     flags["ngl_mode"] = mode
 
+                # MoE offload aplica también en "disk" (huge MoE paginan desde disco)
+                moe_used = moe_candidate if status in {"moe", "disk"} and model.is_moe else None
                 cfg = OptimalConfig(
                     engine=engine_id,
                     model_id=model_id,
@@ -123,17 +129,24 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     quant=quant,
                     kv_cache=kv,
                     context_len=max_ctx,
-                    moe_offload=moe_candidate if status == "moe" else None,
+                    moe_offload=moe_used,
                     flags=flags,
                     rationale=rationale + [
                         f"Elegida cuantización {quant} con KV {kv}: status={status}",
                         f"Contexto máximo automático: {max_ctx} tokens",
-                        f"Memoria estimada total: {round(total, 2)} GB",
+                        f"Memoria estimada total: {round(total, 2)} GB"
+                        + (
+                            f" (de los cuales ~{round(total - snap.vram_gb - snap.ram_gb, 1)}GB "
+                            f"se paginarán desde disco)"
+                            if status == "disk" and total > snap.vram_gb + snap.ram_gb
+                            else ""
+                        ),
                     ],
                     estimated_total_gb=round(total, 2),
                 )
-                # Preferimos status='ok' o 'moe' sobre 'partial'
-                if status in {"ok", "moe"} or best is None:
+                # Preferimos status='ok' o 'moe' sobre 'partial' sobre 'cpu' sobre 'disk'
+                STATUS_RANK = {"ok": 0, "moe": 1, "partial": 2, "cpu": 3, "disk": 4}
+                if best is None or STATUS_RANK.get(status, 9) < STATUS_RANK.get(best.status, 9):
                     best = cfg
                 if status in {"ok", "moe"}:
                     return best
@@ -156,19 +169,20 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
 def _estimate_moe_offload(model: Model, hw: compat.HardwareSnapshot) -> int | None:
     """Estima un valor sensato de --n-cpu-moe.
 
-    Heurística: para que la parte densa quepa en VRAM, descargamos N capas MoE a CPU.
-    Asumimos 32 capas medias y proporcional al ratio params/active.
+    Heurística: descargamos a CPU las suficientes capas MoE para que las partes
+    "shared" + KV quepan en VRAM. Usa model.n_layer real cuando está disponible.
     """
     if hw.vram_gb <= 0 or model.params_b <= 0:
         return None
-    # Fracción a descargar = 1 - (vram disponible / tamaño modelo Q4)
+    n_layers = model.n_layer or 32
     base_size = compat.get_model_size_gb(model, "Q4_K_M")
     if base_size <= hw.vram_gb:
         return None
+    # Cuántas capas MoE deben ir a CPU para que el resto quepa
     excess_ratio = max(0.0, (base_size - hw.vram_gb * 0.85) / base_size)
-    n_layers = 32  # aproximación; modelos reales 24-80
     n_offload = int(excess_ratio * n_layers)
-    return max(1, min(n_layers - 1, n_offload))
+    # Al menos 1, máximo n_layer (todos los expertos a CPU)
+    return max(1, min(n_layers, n_offload))
 
 
 def _default_flags(engine_id: str, model: Model, status: str) -> dict[str, Any]:

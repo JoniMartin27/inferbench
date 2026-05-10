@@ -16,32 +16,41 @@ from pydantic import BaseModel
 
 from .models_catalog import Model
 
-CompatStatus = Literal["api", "ok", "moe", "partial", "cpu", "fail"]
+CompatStatus = Literal["api", "ok", "moe", "partial", "cpu", "disk", "fail"]
 
 
 # Factor relativo a FP16 (size base). Q4_K_M tomado como referencia 0.55.
+# Bits/param aproximados → factor = bits/16 (relativo a FP16=16 bits)
 QUANT_FACTOR: dict[str, float] = {
-    "F16": 2.0,
-    "fp16": 2.0,
-    "Q8_0": 1.0,
-    "q8_0": 1.0,
-    "Q6_K": 0.81,
-    "q6_K": 0.81,
-    "Q5_K_M": 0.67,
-    "q5_K_M": 0.67,
-    "Q4_K_M": 0.55,
-    "q4_K_M": 0.55,
-    "Q3_K_M": 0.42,
-    "q3_K_M": 0.42,
-    "Q2_K": 0.32,
-    "q2_K": 0.32,
+    "F16": 2.0, "fp16": 2.0, "BF16": 2.0,
+    "Q8_0": 1.0, "q8_0": 1.0,                         # 8.0 bits
+    "Q6_K": 0.81, "q6_K": 0.81,                        # 6.5
+    "Q5_K_M": 0.67, "q5_K_M": 0.67,                    # 5.4
+    "Q5_K_S": 0.65, "q5_K_S": 0.65,
+    "Q4_K_M": 0.55, "q4_K_M": 0.55,                    # 4.4
+    "Q4_K_S": 0.53, "q4_K_S": 0.53,
+    "IQ4_XS": 0.50, "iq4_xs": 0.50,                    # 4.0
+    "IQ4_NL": 0.52, "iq4_nl": 0.52,
+    "Q3_K_L": 0.46, "q3_K_L": 0.46,
+    "Q3_K_M": 0.42, "q3_K_M": 0.42,                    # 3.4
+    "Q3_K_S": 0.40, "q3_K_S": 0.40,
+    "IQ3_M": 0.40, "iq3_m": 0.40,                      # 3.2
+    "IQ3_S": 0.38, "iq3_s": 0.38,
+    "IQ3_XXS": 0.35, "iq3_xxs": 0.35,                  # 2.8
+    "Q2_K": 0.32, "q2_K": 0.32,                        # 2.6
+    "IQ2_M": 0.30, "iq2_m": 0.30,                      # 2.4
+    "IQ2_S": 0.28, "iq2_s": 0.28,
+    "IQ2_XS": 0.26, "iq2_xs": 0.26,                    # 2.1
+    "IQ2_XXS": 0.24, "iq2_xxs": 0.24,                  # 1.9
+    "IQ1_M": 0.22, "iq1_m": 0.22,                      # 1.75
+    "IQ1_S": 0.19, "iq1_s": 0.19,                      # 1.5 — extremo
     # vLLM/SGLang/TGI estilos
-    "awq": 0.55,      # ~Q4 efectivo
+    "awq": 0.55,
     "gptq": 0.55,
     "fp8": 1.0,
     "bitsandbytes": 0.55,
     "eetq": 0.55,
-    "none": 2.0,      # FP16
+    "none": 2.0,
 }
 
 
@@ -96,6 +105,13 @@ COMPRESSION_PRESETS: dict[str, dict] = {
 # Cuantizaciones de mayor a menor calidad (orden estándar)
 QUANT_QUALITY_ORDER = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"]
 
+# Lista extendida incluyendo i-quants extremos para modelos enormes (>=70B)
+QUANT_EXTREME_ORDER = [
+    "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
+    "Q3_K_M", "IQ3_M", "Q2_K", "IQ2_M", "IQ2_XS", "IQ2_XXS",
+    "IQ1_M", "IQ1_S",
+]
+
 
 class HardwareSnapshot(BaseModel):
     """Subconjunto de HardwareInfo necesario para los cálculos."""
@@ -144,18 +160,24 @@ def check_compat(
     model_size = get_model_size_gb(model, opts.quant)
     kv_per_tok = get_kv_per_token_gb(model, opts.kv_cache)
     kv_overhead = opts.context_len * kv_per_tok
-    total = model_size + kv_overhead + 0.6  # overhead fijo
+    total = model_size + kv_overhead + 0.6
 
-    # Caso especial MoE con --n-cpu-moe (solo llama.cpp)
+    # Caso especial MoE con --n-cpu-moe
     if (
         model.is_moe
         and opts.moe_offload
         and engine_id == "llamacpp"
         and hw.vram_gb > 0
     ):
-        shared_active = (model.active_b / model.params_b) * model_size + 1.2
-        if shared_active <= hw.vram_gb and total <= hw.vram_gb + hw.ram_gb * 0.8:
-            return "moe"
+        # Para MoE, lo que sí debe caber en VRAM es la "shared+gating" + atención + KV.
+        # Estimación: ratio_active * model_size para shared parte + KV
+        shared = (model.active_b / model.params_b) * model_size * 0.4 + 1.2
+        # 0.4 porque dentro de active_b ~40% son params shared, resto experts activos
+        if shared + kv_overhead <= hw.vram_gb:
+            if total <= hw.vram_gb + hw.ram_gb * 0.8:
+                return "moe"
+            # Fits in VRAM (working set) pero modelo necesita disco
+            return "disk"
 
     if total <= hw.vram_gb:
         return "ok"
@@ -163,6 +185,16 @@ def check_compat(
         return "partial"
     if total <= hw.ram_gb * 0.8:
         return "cpu"
+    # Disco fallback: si la "working set" cabe (tipo MoE shared+kv) o el modelo
+    # < 4× capacidad combinada, mmap puede pagear desde disco con tps muy bajo.
+    combined = hw.vram_gb + hw.ram_gb
+    if model.is_moe and engine_id == "llamacpp":
+        # Para MoE incluso sin moe_offload explícito, mmap permite usar disco
+        shared = (model.active_b / model.params_b) * model_size * 0.4 + 1.2
+        if shared + kv_overhead <= hw.vram_gb and model_size < combined * 3:
+            return "disk"
+    if model_size < combined * 1.5 and total < combined * 2:
+        return "disk"
     return "fail"
 
 

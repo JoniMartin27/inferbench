@@ -202,6 +202,7 @@ export function compatTone(status) {
       moe: "purple",
       partial: "amber",
       cpu: "amber",
+      disk: "rose",
       fail: "rose",
       api: "indigo",
     }[status] || "slate"
@@ -215,6 +216,7 @@ export function compatLabel(status) {
       moe: "MoE offload",
       partial: "GPU + CPU",
       cpu: "Solo CPU",
+      disk: "mmap disco",
       fail: "No cabe",
       api: "API",
     }[status] || status
@@ -228,7 +230,8 @@ export function compatDescription(status) {
       moe: "Capas expert en CPU, gating+atención en GPU. Tps decente porque solo activos pocos params/token.",
       partial: "Algunas capas en GPU, resto en CPU. Funciona pero lento (1-10 tok/s típico).",
       cpu: "Todo en CPU. Muy lento, solo si no hay GPU.",
-      fail: "No cabe ni con la cuantización más agresiva.",
+      disk: "Modelo paged desde disco vía mmap. Funciona pero MUY lento (0.1-2 tok/s con NVMe).",
+      fail: "No cabe ni con la cuantización más agresiva, ni con paginación de disco.",
       api: "Cloud — depende del proveedor.",
     }[status] || ""
   );

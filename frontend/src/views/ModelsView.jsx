@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Zap } from "lucide-react";
+import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud } from "lucide-react";
 import { api } from "../api";
 import {
   PageHeader,
@@ -26,9 +26,34 @@ export default function ModelsView() {
   const [moeOffload, setMoeOffload] = useState("");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("catalog"); // catalog | local
+  const [localModels, setLocalModels] = useState([]);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [searchDirs, setSearchDirs] = useState({ known: [], extra: [] });
+  const [showDirs, setShowDirs] = useState(false);
+  const [extraInput, setExtraInput] = useState("");
+
+  const refreshLocal = async () => {
+    setLocalLoading(true);
+    try {
+      const [m, d] = await Promise.all([api.listLocalModels(), api.listSearchDirs()]);
+      setLocalModels(m);
+      setSearchDirs(d);
+      setExtraInput((d.extra || []).join("\n"));
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const saveDirs = async () => {
+    const dirs = extraInput.split("\n").map((s) => s.trim()).filter(Boolean);
+    await api.saveSearchDirs(dirs);
+    await refreshLocal();
+  };
 
   useEffect(() => {
     api.listEngines().then(setEngines).catch(() => {});
+    refreshLocal();
   }, []);
 
   useEffect(() => {
@@ -65,9 +90,132 @@ export default function ModelsView() {
     <>
       <PageHeader
         title="Modelos"
-        subtitle="Compatibilidad calculada con tu hardware y opciones del motor"
+        subtitle="Catálogo descargable + escaneo de GGUFs locales en tu disco"
+        actions={
+          <Button variant="ghost" onClick={refreshLocal}>
+            <RefreshCw size={14} /> Re-escanear
+          </Button>
+        }
       />
 
+      <div className="flex gap-2 px-8 pt-4">
+        <TabButton active={tab === "catalog"} onClick={() => setTab("catalog")} icon={Cloud}>
+          Catálogo ({rows.length})
+        </TabButton>
+        <TabButton active={tab === "local"} onClick={() => setTab("local")} icon={HardDrive}>
+          Locales ({localModels.length})
+        </TabButton>
+      </div>
+
+      {tab === "local" && (
+        <div className="space-y-6 p-8">
+          <Card
+            title={`Modelos GGUF detectados en disco (${localModels.length})`}
+            actions={
+              <button
+                onClick={() => setShowDirs((s) => !s)}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200"
+              >
+                <FolderOpen size={12} /> Carpetas escaneadas
+              </button>
+            }
+          >
+            {showDirs && (
+              <div className="mb-4 space-y-3 border-b border-slate-800 pb-4">
+                <div>
+                  <div className="mb-1 text-xs uppercase text-slate-500">Carpetas conocidas</div>
+                  <ul className="space-y-0.5 font-mono text-xs text-slate-400">
+                    {searchDirs.known.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="mb-1 text-xs uppercase text-slate-500">Carpetas extra (una por línea)</div>
+                  <textarea
+                    rows={4}
+                    value={extraInput}
+                    onChange={(e) => setExtraInput(e.target.value)}
+                    placeholder="C:/MisModelos&#10;D:/llm-cache"
+                    className="w-full rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2 font-mono text-xs text-slate-200 outline-none focus:border-indigo-400"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button onClick={saveDirs}>Guardar</Button>
+                    <span className="self-center text-xs text-slate-500">
+                      Se guarda en {searchDirs.extra_dirs_file}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {localLoading && <p className="text-sm text-slate-500">Escaneando…</p>}
+            {!localLoading && localModels.length === 0 && (
+              <p className="text-sm text-slate-500">
+                No se encontraron GGUFs en las carpetas conocidas. Añade carpetas extra arriba si tienes modelos en otra ubicación.
+              </p>
+            )}
+            {localModels.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
+                    <tr className="border-b border-slate-800">
+                      <th className="py-2 pr-3">Nombre</th>
+                      <th className="py-2 pr-3">Arch</th>
+                      <th className="py-2 pr-3">Quant</th>
+                      <th className="py-2 pr-3">Params</th>
+                      <th className="py-2 pr-3">Tamaño</th>
+                      <th className="py-2 pr-3">Capas</th>
+                      <th className="py-2 pr-3">Ctx</th>
+                      <th className="py-2 pr-3">Origen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localModels.map((m) => (
+                      <tr key={m.path} className="border-b border-slate-900 hover:bg-slate-900/40">
+                        <td className="py-2 pr-3">
+                          <div className="font-medium">{m.name || m.filename.replace(".gguf", "")}</div>
+                          <div className="truncate text-xs text-slate-500" title={m.path}>
+                            {m.path}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3">
+                          {m.architecture ? <Badge tone="indigo">{m.architecture}</Badge> : "—"}
+                          {m.is_moe && (
+                            <Badge tone="purple" className="ml-1">
+                              MoE
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {m.quant ? <Badge>{m.quant}</Badge> : <span className="text-slate-500">?</span>}
+                        </td>
+                        <td className="py-2 pr-3 tabular-nums text-slate-300">
+                          {m.params_b ? `${m.params_b}B` : "—"}
+                        </td>
+                        <td className="py-2 pr-3 tabular-nums text-slate-300">{m.size_gb} GB</td>
+                        <td className="py-2 pr-3 tabular-nums text-slate-300">{m.n_layer || "—"}</td>
+                        <td className="py-2 pr-3 tabular-nums text-slate-300">
+                          {m.context_length ? m.context_length.toLocaleString() : "—"}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span
+                            className="text-xs text-slate-500"
+                            title={m.dir}
+                          >
+                            {shortenPath(m.dir)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {tab === "catalog" && (
       <div className="space-y-6 p-8">
         <Card title="Configuración">
           <div className="grid gap-4 md:grid-cols-5">
@@ -198,8 +346,32 @@ export default function ModelsView() {
           </div>
         </Card>
       </div>
+      )}
     </>
   );
+}
+
+function TabButton({ active, onClick, icon: Icon, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition ${
+        active
+          ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
+          : "border-slate-700 text-slate-400 hover:border-slate-600"
+      }`}
+    >
+      <Icon size={14} />
+      {children}
+    </button>
+  );
+}
+
+function shortenPath(p) {
+  if (!p) return "";
+  const parts = p.split(/[\\/]+/);
+  if (parts.length <= 3) return p;
+  return ".../" + parts.slice(-2).join("/");
 }
 
 function OptimalDetail({ cfg }) {

@@ -32,6 +32,10 @@ export const api = {
 
   // Models
   listModels: () => request("/api/models"),
+  listLocalModels: () => request("/api/models/local"),
+  listSearchDirs: () => request("/api/models/local/dirs"),
+  saveSearchDirs: (dirs) =>
+    request("/api/models/local/dirs", { method: "POST", body: JSON.stringify({ dirs }) }),
   modelCompat: ({ engine, quant = "Q4_K_M", kvCache = "f16", contextLen = 4096, moeOffload }) => {
     const params = new URLSearchParams({ engine, quant, kv_cache: kvCache, context_len: contextLen });
     if (moeOffload != null) params.set("moe_offload", moeOffload);

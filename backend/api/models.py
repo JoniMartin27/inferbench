@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core import compat
+from core import compat, local_models
 from core.hardware import detect_hardware
 from core.models_catalog import Model, get_model, load_models
 from engines import registry
@@ -24,6 +24,31 @@ class CompatRow(BaseModel):
 @router.get("", response_model=list[Model])
 async def list_models() -> list[Model]:
     return load_models()
+
+
+@router.get("/local", response_model=list[local_models.LocalModel])
+async def list_local_models(refresh: bool = False) -> list[local_models.LocalModel]:
+    """Escanea carpetas conocidas + extras y devuelve todos los GGUFs locales."""
+    return local_models.discover(read_metadata=True)
+
+
+@router.get("/local/dirs")
+async def list_search_dirs() -> dict:
+    return {
+        "known": [str(d) for d in local_models.KNOWN_DIRS],
+        "extra": [str(d) for d in local_models.get_extra_dirs()],
+        "extra_dirs_file": str(local_models.get_extra_dirs_file()),
+    }
+
+
+class ExtraDirs(BaseModel):
+    dirs: list[str]
+
+
+@router.post("/local/dirs")
+async def update_search_dirs(body: ExtraDirs) -> dict:
+    saved = local_models.set_extra_dirs(body.dirs)
+    return {"saved": [str(d) for d in saved]}
 
 
 @router.get("/{model_id}", response_model=Model)

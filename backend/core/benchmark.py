@@ -1,5 +1,11 @@
 """Ejecución automática de benchmarks: bootstrap (binario+modelo+motor) → benchmark → teardown.
 
+El modelo se obtiene de:
+- `local_path` del request si está presente (GGUF local descubierto)
+- caché local (si ya se descargó antes)
+- HuggingFace (si el modelo del catálogo tiene `hf_gguf`)
+
+
 Eventos SSE emitidos:
   start, log, phase
   engine.install (con pct), model.download (con pct), engine.start, engine.ready
@@ -75,8 +81,9 @@ class BenchmarkRequest(BaseModel):
     base_url: str | None = None    # override manual (si auto=false)
     api_key: str | None = None
     sampling: dict[str, Any] = Field(default_factory=lambda: {"temperature": 0.7, "top_p": 0.95})
-    engine_opts: dict[str, Any] = Field(default_factory=dict)  # override flags optimizer
+    engine_opts: dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
+    local_path: str | None = None  # ruta directa a un GGUF local (salta descarga HF)
 
 
 def _extra_engine_args_static(opts: dict[str, Any]) -> list[str]:
@@ -303,10 +310,20 @@ class BenchmarkRunner:
             await self.emit({"type": "log", "level": "success", "text": "Binario listo"})
         binary = binary_manager.llamacpp_binary_path()
 
-        # 2. Modelo GGUF
+        # 2. Modelo GGUF — opción A: ruta local explícita
+        if self.req.local_path:
+            local = Path(self.req.local_path)
+            if not local.exists():
+                raise RuntimeError(f"Ruta local no existe: {local}")
+            gguf_path = local
+            await self.emit({"type": "log", "level": "success", "text": f"Modelo local: {local.name}"})
+            # Saltamos directamente al paso 3
+            await self._start_engine_with_path(model, gguf_path, binary)
+            return
+        # Opción B: descarga desde HF
         if not model.hf_gguf:
             raise RuntimeError(
-                f"El modelo {model.id} no tiene fuente HF GGUF. Selecciona otro o pasa base_url manual."
+                f"El modelo {model.id} no tiene fuente HF GGUF. Selecciona otro o pasa local_path/base_url."
             )
         if not model_manager.gguf_installed(model, self.req.quant):
             size_hint_gb = model.size_base_gb * 0.55 / 2.0  # estimación Q4_K_M
@@ -336,6 +353,10 @@ class BenchmarkRunner:
         gguf_path = model_manager.gguf_path(model, self.req.quant)
         await self.emit({"type": "log", "level": "success", "text": f"Modelo: {gguf_path.name}"})
 
+        await self._start_engine_with_path(model, gguf_path, binary)
+
+    async def _start_engine_with_path(self, model, gguf_path, binary):
+        """Arranca llama-server con el GGUF dado (ruta local) si no está ya corriendo."""
         # 3. Motor: reusar si está corriendo CON el mismo modelo+quant; si no, reiniciar
         st = native_runtime.status("llamacpp")
         loaded = native_runtime.get_loaded("llamacpp")

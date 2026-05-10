@@ -6,8 +6,10 @@ import {
   PlayCircle,
   History as HistoryIcon,
   Settings,
+  Compass,
 } from "lucide-react";
 import { api } from "./api";
+import GuideView from "./views/GuideView.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import EnginesView from "./views/EnginesView.jsx";
 import ModelsView from "./views/ModelsView.jsx";
@@ -16,6 +18,7 @@ import HistoryView from "./views/HistoryView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 
 const NAV = [
+  { id: "guide", label: "Guía", icon: Compass, View: GuideView },
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, View: Dashboard },
   { id: "engines", label: "Motores", icon: Cpu, View: EnginesView },
   { id: "models", label: "Modelos", icon: Boxes, View: ModelsView },
@@ -25,8 +28,15 @@ const NAV = [
 ];
 
 export default function App() {
-  const [active, setActive] = useState("dashboard");
+  // El usuario nuevo arranca en la Guía. Si ya ha visitado la app, retoma donde lo dejó.
+  const [active, setActive] = useState(() => {
+    return localStorage.getItem("inferbench:lastView") || "guide";
+  });
   const [health, setHealth] = useState({ status: "checking" });
+
+  useEffect(() => {
+    localStorage.setItem("inferbench:lastView", active);
+  }, [active]);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +121,7 @@ export default function App() {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-        <Current dockerDown={dockerDown} />
+        <Current dockerDown={dockerDown} onNavigate={setActive} />
       </main>
       </div>
     </div>

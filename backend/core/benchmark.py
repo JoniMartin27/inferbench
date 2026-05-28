@@ -251,7 +251,10 @@ class BenchmarkRunner:
                 try:
                     await self._bootstrap()
                 except asyncio.CancelledError:
-                    raise
+                    await self.emit({"type": "log", "level": "warn",
+                                     "text": "Descarga/instalación cancelada por el usuario"})
+                    await self.emit({"type": "done", "run_id": self.run_id, "cancelled": True})
+                    return
                 except Exception as e:
                     logger.exception("bootstrap failed")
                     await self.emit({"type": "log", "level": "error", "text": f"Bootstrap: {e}"})
@@ -332,7 +335,7 @@ class BenchmarkRunner:
             async def progress(evt):
                 await self.emit({"type": "model.download", **evt})
 
-            await ollama_manager.pull_model(tag, progress=progress)
+            await ollama_manager.pull_model(tag, progress=progress, cancel_event=self.cancelled)
             await self.emit({"type": "log", "level": "success", "text": f"Modelo listo: {tag}"})
         else:
             await self.emit({"type": "log", "level": "info", "text": f"Modelo ya descargado: {tag}"})
@@ -421,7 +424,7 @@ class BenchmarkRunner:
 
         if not binary_manager.llamacpp_fully_installed():
             await self.emit({"type": "log", "level": "info", "text": "Preparando llama.cpp…"})
-            await binary_manager.install_llamacpp(progress=bin_progress)
+            await binary_manager.install_llamacpp(progress=bin_progress, cancel_event=self.cancelled)
             await self.emit({"type": "log", "level": "success", "text": "Binario listo"})
         binary = binary_manager.llamacpp_binary_path()
 
@@ -452,7 +455,8 @@ class BenchmarkRunner:
                 await self.emit({"type": "model.download", **evt})
 
             try:
-                await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress)
+                await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress,
+                                                cancel_event=self.cancelled)
             except RuntimeError as e:
                 # Probable: cuantización inexistente. Reintentar con Q4_K_M.
                 if self.req.quant != "Q4_K_M":
@@ -462,7 +466,8 @@ class BenchmarkRunner:
                         "text": f"{e} — fallback a Q4_K_M",
                     })
                     self.req.quant = "Q4_K_M"
-                    await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress)
+                    await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress,
+                                                    cancel_event=self.cancelled)
                 else:
                     raise
         gguf_path = model_manager.gguf_path(model, self.req.quant)

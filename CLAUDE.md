@@ -1,120 +1,106 @@
 # Instrucciones para Claude Code en este proyecto
 
-## Lectura obligatoria al iniciar
-1. Lee `PROJECT_BRIEF.md` completo.
-2. Lee este archivo.
-3. No empieces a escribir código hasta haber confirmado el plan de hitos con el usuario.
+## Antes de tocar nada
+- Lee `PROJECT_BRIEF.md` para la visión, fórmulas de compatibilidad y schemas de optimización por motor.
+- `README.md` tiene el inventario actual: motores soportados, endpoints, layout de cachés y estado real de cada feature.
+- Los hitos M1–M9 están todos implementados (ver tabla en README). Esto es mantenimiento y extensión, no greenfield.
 
-## Filosofía de trabajo
+## Lo que NO debes hacer (load-bearing)
 
-**Construye en hitos pequeños, verificables, ejecutables.** Cada hito debe terminar con algo que el usuario pueda probar (un endpoint, una pantalla, un comando).
+### Schemas de optimización son por motor, no uniformes
+Cada motor tiene su propio set de flags. `llama.cpp` usa `-ctk`, `-ctv`, `--n-cpu-moe`, `-fa`, `--n-gpu-layers`. vLLM usa otros. APIs cloud (OpenAI, Anthropic, OpenRouter, NVIDIA) sólo admiten parámetros de sampling — no optimización local. Está en `PROJECT_BRIEF.md`, sección "Schema de optimizaciones POR MOTOR". No intentes unificar.
 
-**No asumas: pregunta o busca en `PROJECT_BRIEF.md`.** Si una decisión no está documentada, pregunta antes de inventar.
+### No simules motores
+El prototipo del artefacto inicial usaba datos fake. **El proyecto local NO debe simular**: si un motor no está disponible o falla, devuelve error claro al frontend. No inventes TTFT, tok/s, ni VRAM. Único mock aceptable: tests unitarios.
 
-**Schemas por motor:** las optimizaciones NO son uniformes. llama.cpp tiene flags distintas a vLLM. APIs cloud no admiten optimización local. Esto está en `PROJECT_BRIEF.md`, sección "Schema de optimizaciones POR MOTOR".
+### No bloquees el event loop
+FastAPI es async. Las descargas (binarios GitHub, GGUF de HF), spawn de subprocesos y operaciones Docker se hacen sin bloquear — patrón ya establecido en `core/binary_manager.py`, `core/model_manager.py`, `core/native_runtime.py`. Replica ese patrón.
 
-## Hitos sugeridos (en este orden)
+### Secretos
+API keys de cloud (OpenAI/Anthropic/etc.) van por `keyring` (ya es dependencia). No las metas a SQLite ni a archivos de config en plano.
 
-### M1 — Backend: detección de hardware
-- `backend/core/hardware.py` con función `detect_hardware()` → CPU, RAM, GPU(s) NVIDIA/AMD/Apple/CPU-only
-- `backend/api/hardware.py` con `GET /api/hardware`
-- Test manual: `curl localhost:7777/api/hardware` devuelve JSON correcto
+## Convenciones
 
-### M2 — Backend: gestión de motores Docker
-- `backend/core/docker_mgr.py` con métodos `start`, `stop`, `status`, `logs`
-- `backend/engines/base.py` clase abstracta `Engine`
-- `backend/engines/llamacpp.py` como primera implementación concreta
-- `backend/api/engines.py` endpoints
-- Test: arrancar/detener llama.cpp via API
+### Python (`backend/`)
+- Python 3.11+, `uv` para venv y deps (no pip/poetry directos).
+- `ruff` + `black`, línea 100 (configurado en `pyproject.toml`).
+- Type hints en funciones públicas. Pydantic models para entradas/salidas de la API (no dicts sueltos).
+- `loguru` para logging, nunca `print()`.
+- Pytest + pytest-asyncio instalados; aún no hay suite escrita. Cuando añadas tests, prioriza `core/compat.py` y `core/optimizer.py` (figuran en pendientes del README).
 
-### M3 — Backend: catálogo de modelos y compatibilidad
-- `backend/data/models.json` con catálogo inicial (10-15 modelos)
-- `backend/core/compat.py` con `check_compat()` y `compute_max_context()`
-- `backend/api/models.py` endpoints
-- Test: `GET /api/models/compat?engine=llamacpp` devuelve compatibilidad realista
+### Frontend (`frontend/`)
+- JSX, no TypeScript (decisión deliberada del MVP — no migres sin hablarlo).
+- Componentes funcionales con hooks, Tailwind para estilos (no CSS modules).
+- Cliente HTTP centralizado en `src/api.js`, incluye helper de suscripción SSE — úsalo, no hagas `fetch` directo desde vistas.
+- No hay ESLint/Prettier configurados en este momento; mantente consistente con el estilo existente.
 
-### M4 — Backend: benchmark con SSE
-- `backend/core/benchmark.py` ejecución real (vía API HTTP de cada motor)
-- `backend/api/benchmark.py` con stream SSE
-- `backend/db.py` SQLite + persistencia de runs
-- `backend/api/history.py`
-- Test: `POST /api/benchmark/run` y consumir el stream
+## Arquitectura (resumen)
 
-### M5 — Frontend: Electron + Vite + React scaffold
-- Crear estructura `frontend/`
-- Configurar Vite + Tailwind + Electron
-- Cliente API en `frontend/src/api.js`
-- Test: app abre ventana en blanco con conexión al backend
-
-### M6 — Frontend: portar prototipo
-- Copiar componentes del prototipo (Dashboard, Engines, Models, Benchmark, Running, History, Settings)
-- Adaptar para que tiren de `api.js` en lugar de datos hardcoded
-- Test: navegar por las pantallas con datos reales del backend
-
-### M7 — Integración benchmark live
-- Conectar `RunningPanel` al SSE del backend
-- Test: lanzar benchmark, ver progreso real
-
-### M8 — Optimizador automático
-- `backend/core/optimizer.py` con `get_optimal_config()`
-- `POST /api/optimize`
-- Botón "Optimizar para mi hardware" funcional
-
-### M9 — Empaquetado
-- electron-builder configurado para Windows / macOS / Linux
-- Backend Python empaquetado con PyInstaller o como sidecar
-- Documentación de instalación
-
-## Convenciones de código
-
-### Python
-- Python 3.11+
-- `ruff` para lint, `black` para formato (línea 100)
-- Type hints obligatorios
-- Pydantic models para todas las entradas/salidas de la API
-- Logging con `loguru`
-- No `print()` en producción
-
-### JavaScript / React
-- Sin TypeScript en MVP (acelera iteración). Migrable luego.
-- Componentes funcionales con hooks
-- Tailwind para estilos, NO CSS modules
-- ESLint + Prettier
-- Cliente HTTP: `fetch` nativo o `ky` (no axios)
-
-### Git
-- Commits pequeños, mensaje en presente: "add hardware detection"
-- Una rama por hito: `feat/m1-hardware`, `feat/m2-engines`, etc.
-- PR no necesarios en este flujo (trabajo individual)
-
-## Cosas que NO debes hacer
-
-- ❌ No reinventes el schema de optimizaciones por motor — está en `PROJECT_BRIEF.md`
-- ❌ No guardes API keys en plano — usa `keyring`
-- ❌ No bloquees el event loop con llamadas síncronas pesadas — usa `async`
-- ❌ No agrupes varios hitos en un commit gigante
-- ❌ No instales librerías "por si acaso" — solo lo que necesite el hito actual
-- ❌ No uses TypeScript todavía (decidido para acelerar MVP)
-- ❌ No añadas tests E2E hasta el M9 — sí tests unitarios donde tenga sentido
-
-## Comandos útiles del proyecto
-
-```bash
-# Backend (desde /backend)
-uv venv && source .venv/bin/activate
-uv pip install -e .
-uvicorn main:app --reload --port 7777
-
-# Frontend (desde /frontend)
-npm install
-npm run dev          # Vite dev server
-npm run electron:dev # Electron + Vite
-
-# Build
-npm run build
-npm run electron:build
+```
+Electron (React + Vite + Tailwind)
+  └─ HTTP REST + SSE ─→ FastAPI :7777
+                          ├─ core/hardware.py        detección CPU/RAM/GPU
+                          ├─ core/binary_manager.py  descarga releases GitHub
+                          ├─ core/model_manager.py   descarga GGUF de HF
+                          ├─ core/native_runtime.py  subprocess wrapper
+                          ├─ core/docker_mgr.py      Docker SDK wrapper
+                          ├─ core/compat.py          ¿cabe X en mi hardware?
+                          ├─ core/optimizer.py       config óptima por hw+modelo+motor
+                          ├─ core/benchmark.py       runner + SSE events
+                          └─ engines/                Engine ABC + impls (llamacpp ✅, resto stub)
+                              │
+                              └─→ llama-server (nativo) o contenedor Docker
+                                     │
+                                     └─→ GGUF cache en %APPDATA%\InferBench\models\
 ```
 
-## Política sobre simulaciones / mocks
+El flujo estrella es **auto-bootstrap**: 1 click en la UI dispara descarga de binario + descarga de GGUF + arranque del motor + benchmark + persistencia. Cada paso emite eventos SSE; el frontend los pinta en `RunningPanel`.
 
-El prototipo en el artefacto usa datos simulados. **El proyecto local NO debe simular**: si un motor no está disponible, devuelve error claro al frontend; no inventes números. Único mock aceptable: tests unitarios.
+### Cachés (no se redescargan; respeta sus rutas)
+- Binarios: `%APPDATA%\InferBench\binaries\<engine>\`
+- Modelos GGUF: `%APPDATA%\InferBench\models\<repo>\<file>.gguf`
+- SQLite: `backend/data/inferbench.sqlite`
+- Logs de motores nativos: `%APPDATA%\InferBench\logs\<engine>.log`
+
+## Comandos
+
+### Backend (desde `backend/`, PowerShell en Windows)
+```powershell
+uv venv --python 3.11
+.venv\Scripts\activate
+uv pip install -e ".[dev]"
+uvicorn main:app --reload --port 7777
+```
+
+Lint / formato / tests (cuando existan):
+```powershell
+ruff check .
+ruff format .            # o: black .
+pytest                   # suite completa
+pytest path\to\test_file.py::test_name   # un test concreto
+```
+
+### Frontend (desde `frontend/`)
+```powershell
+npm install
+npm run electron:dev     # Vite + Electron en paralelo (recomendado)
+npm run dev              # sólo Vite en :5173 (debug del navegador)
+```
+
+### Todo junto (desde la raíz)
+```powershell
+npm run dev              # backend + frontend con concurrently
+```
+
+### Empaquetado
+```powershell
+scripts\build-sidecar.ps1     # PyInstaller del backend → frontend/electron/sidecar/
+cd frontend && npm run electron:build
+```
+Salida en `frontend/release/`.
+
+## Endpoints clave
+Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/install`, `/api/benchmark/{run_id}/stream`. El runner devuelve `run_id` síncronamente; el stream va aparte.
+
+## Pendientes documentados
+La sección "Pendientes / siguientes pasos" del README es la fuente — incluye adapters reales para `ollama`/`vllm`/`sglang`/`tgi`, KV-cache exacta desde metadata GGUF, quality scoring con LLM-judge, tests en `compat.py` y `optimizer.py`, y soporte MoE para auto-descarga.

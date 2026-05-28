@@ -3,7 +3,7 @@
 Implementa las fórmulas del PROJECT_BRIEF:
 - size_GB(model, quant) = base * QUANT_FACTOR[quant] / 0.55
 - kv_per_token_MB(model, kv) = 0.5 * (params/7)^0.7 * KV_FACTOR[kv]
-- check_compat() devuelve "api" | "ok" | "moe" | "partial" | "cpu" | "fail"
+- check_compat() devuelve "api" | "ok" | "moe" | "partial" | "cpu" | "disk" | "fail" | "nofile"
 - compute_max_context() devuelve int (tokens)
 
 Aproximación: en futuro leer n_layer/n_kv_heads/head_dim del config real.
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from .models_catalog import Model
 
-CompatStatus = Literal["api", "ok", "moe", "partial", "cpu", "disk", "fail"]
+CompatStatus = Literal["api", "ok", "moe", "partial", "cpu", "disk", "fail", "nofile"]
 
 
 # Factor relativo a FP16 (size base). Q4_K_M tomado como referencia 0.55.

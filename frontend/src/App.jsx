@@ -10,6 +10,7 @@ import {
   Activity,
 } from "lucide-react";
 import { api } from "./api";
+import { useBenchmarkRun } from "./useBenchmarkRun";
 import GuideView from "./views/GuideView.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import EnginesView from "./views/EnginesView.jsx";
@@ -50,6 +51,8 @@ export default function App() {
   const [navPayload, setNavPayload] = useState(null);
   const [health, setHealth] = useState({ status: "checking" });
   const [counts, setCounts] = useState({ history: 0, models: 0, engines: 0 });
+  // Estado del benchmark a nivel App: sobrevive al cambio de pestaña
+  const benchmark = useBenchmarkRun();
 
   useEffect(() => {
     localStorage.setItem("inferbench:lastView", active);
@@ -142,6 +145,7 @@ export default function App() {
                 </div>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = active === id;
+                  const isRunning = id === "benchmark" && !!benchmark.running;
                   const badge =
                     id === "history" && counts.history > 0
                       ? counts.history
@@ -163,6 +167,12 @@ export default function App() {
                       )}
                       <Icon size={15} className={isActive ? "text-indigo-300" : ""} />
                       <span className="flex-1 text-left">{label}</span>
+                      {isRunning && (
+                        <span
+                          className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow shadow-emerald-500/50"
+                          title="Benchmark en curso"
+                        />
+                      )}
                       {badge != null && (
                         <span
                           className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
@@ -190,7 +200,12 @@ export default function App() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-          <Current dockerDown={dockerDown} onNavigate={navigate} navPayload={navPayload} />
+          <Current
+            dockerDown={dockerDown}
+            onNavigate={navigate}
+            navPayload={navPayload}
+            benchmark={benchmark}
+          />
         </main>
       </div>
     </div>

@@ -46,6 +46,10 @@ export const api = {
   optimize: (engine, modelId) =>
     request("/api/optimize", { method: "POST", body: JSON.stringify({ engine, model_id: modelId }) }),
   getRecommendations: (top = 15) => request(`/api/optimize/recommendations?top=${top}`),
+  getQuants: (engine, modelId, kvCache = "f16", contextLen = 4096) =>
+    request(`/api/optimize/quants?engine=${engine}&model_id=${encodeURIComponent(modelId)}&kv_cache=${kvCache}&context_len=${contextLen}`),
+  getModelEngines: (modelId) =>
+    request(`/api/optimize/model-engines?model_id=${encodeURIComponent(modelId)}`),
 
   // Benchmark + history
   startBenchmark: (body) =>

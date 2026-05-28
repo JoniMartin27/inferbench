@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Square } from "lucide-react";
-import { api, subscribeBenchmark } from "../api";
+import { api } from "../api";
 import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../components/ui.jsx";
 
 const ALL_PROMPTS = [
@@ -18,6 +18,11 @@ const QUANTS = [
 // Mapea kv_cache del optimizador → preset de compresión del frontend
 const KV_TO_COMPRESSION = { f16: "quality", q8_0: "balanced", q5_0: "compressed", q4_0: "aggressive" };
 
+// Etiquetas legibles para el status de compatibilidad de cada cuantización
+const STATUS_LABEL = { ok: "ok", moe: "MoE", partial: "~RAM", cpu: "solo CPU", disk: "no cabe", fail: "error", nofile: "sin archivo" };
+const statusLabel = (s) => STATUS_LABEL[s] || s;
+const isQuantDisabled = (s) => s === "disk" || s === "fail" || s === "nofile";
+
 const COMPRESSION_PRESETS = [
   { id: "quality",    label: "Calidad",     kvK: "f16",  kvV: "f16",    nkvo: false, swaFull: false, factor: 1.0,  desc: "Sin compresión KV — máxima precisión." },
   { id: "balanced",   label: "Equilibrado", kvK: "q8_0", kvV: "q8_0",   nkvo: false, swaFull: false, factor: 0.5,  desc: "KV q8_0 — 50% menos memoria, calidad casi idéntica." },
@@ -26,7 +31,7 @@ const COMPRESSION_PRESETS = [
   { id: "extreme",    label: "Extremo",     kvK: "q4_0", kvV: "q4_0",   nkvo: true,  swaFull: false, factor: 0.25, desc: "q4_0 + KV en RAM (no-kv-offload). Libera VRAM al máximo." },
 ];
 
-export default function BenchmarkView({ dockerDown, navPayload }) {
+export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const [engines, setEngines] = useState([]);
   const [models, setModels] = useState([]);
   const [engine, setEngine] = useState("llamacpp");
@@ -35,7 +40,15 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
   const [sweepQuants, setSweepQuants] = useState([]);
   const [localModel, setLocalModel] = useState(null);
   const [compression, setCompression] = useState("balanced");
+  const [feasibleQuants, setFeasibleQuants] = useState({}); // { Q4_K_M: 'ok', IQ1_S: 'disk', ... }
+  const [loadingQuants, setLoadingQuants] = useState(false);
+  const [engineRecs, setEngineRecs] = useState([]); // lista de EngineRec para el modelo actual
+  const [loadingRecs, setLoadingRecs] = useState(false);
   const [customCtx, setCustomCtx] = useState(""); // override de contexto
+
+  // Estado del benchmark vive en App (vía useBenchmarkRun) para sobrevivir
+  // al desmontaje de esta vista al cambiar de pestaña.
+  const { running, events, results, progress, start: startBench, stop: stopBench, subscribe, log: bLog, clear: bClear } = benchmark;
 
   // Aplicar config de navegación (desde Dashboard u otras vistas)
   useEffect(() => {
@@ -52,7 +65,7 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
           ? "extreme"
           : KV_TO_COMPRESSION[cfg.kv_cache] || "balanced";
       setCompression(compression);
-      if (cfg.context_len > 0) setCustomCtx(String(cfg.context_len));
+      // No tocamos customCtx — debe seguir como override manual del usuario ("auto" por defecto)
     } else if (navPayload?.localModel) {
       const m = navPayload.localModel;
       setLocalModel(m);
@@ -64,23 +77,93 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
       setEngine("llamacpp");
     }
   }, [navPayload]);
+
+  // Re-optimizar automáticamente cuando cambia modelo o motor: evita combinaciones
+  // imposibles (ej. TinyLlama 1.1B con quant IQ1_M heredado de un modelo grande, que
+  // bartowski no publica en HF y produce 401). Sólo actualiza quant y compresión —
+  // el contexto (customCtx) sigue siendo override manual del usuario.
+  useEffect(() => {
+    if (!model || localModel) return;
+    let cancelled = false;
+    api
+      .optimize(engine, model)
+      .then((res) => {
+        if (cancelled || !res?.config?.feasible) return;
+        const cfg = res.config;
+        if (cfg.quant) setQuant(cfg.quant);
+        const comp =
+          cfg.kv_cache === "q4_0" && cfg.flags?.nkvo
+            ? "extreme"
+            : KV_TO_COMPRESSION[cfg.kv_cache] || "balanced";
+        setCompression(comp);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [model, engine, localModel]);
   const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [running, setRunning] = useState(null);
-  const [events, setEvents] = useState([]);
-  const [results, setResults] = useState([]);
-  const [progress, setProgress] = useState({});
-  const unsubRef = useRef(null);
 
   useEffect(() => {
     api.listEngines().then(setEngines).catch(() => {});
     api.listModels().then((m) => {
       setModels(m);
-      if (!model && m[0]) setModel(m[0].id);
+      // Funcional para leer el valor actual de model, no el del closure (que es "" al
+      // montar). Sin esto, si navPayload ya seteó el modelo, lo pisamos con m[0].
+      if (m[0]) setModel((prev) => prev || m[0].id);
     });
-    return () => unsubRef.current?.();
   }, []);
+
+  // Cargar status real de cada cuantización cuando cambia modelo o motor
+  useEffect(() => {
+    const selEng = engines.find((e) => e.meta.id === engine);
+    const isApi = selEng?.meta.type === "api";
+    if (!model || localModel || isApi || !engines.length) {
+      setFeasibleQuants({});
+      return;
+    }
+    let cancelled = false;
+    setLoadingQuants(true);
+    api
+      .getQuants(engine, model)
+      .then((rows) => {
+        if (cancelled) return;
+        const map = {};
+        for (const row of rows) map[row.quant] = row.status;
+        setFeasibleQuants(map);
+        // Si la quant actual es inviable, auto-cambiar a la mejor disponible
+        setQuant((prev) => {
+          if (isQuantDisabled(map[prev])) {
+            const best = rows.find((r) => !isQuantDisabled(r.status));
+            return best ? best.quant : prev;
+          }
+          return prev;
+        });
+        // Sacar del sweep las quants inviables
+        setSweepQuants((prev) => prev.filter((q) => !isQuantDisabled(map[q])));
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingQuants(false); });
+    return () => { cancelled = true; };
+  }, [model, engine, localModel, engines]);
+
+  // Cargar recomendaciones de motor para el modelo seleccionado
+  useEffect(() => {
+    if (!model || localModel) {
+      setEngineRecs([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingRecs(true);
+    api
+      .getModelEngines(model)
+      .then((recs) => { if (!cancelled) setEngineRecs(recs); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingRecs(false); });
+    return () => { cancelled = true; };
+  }, [model, localModel]);
 
   const selectedEngine = engines.find((e) => e.meta.id === engine);
   const engineIsApi = selectedEngine?.meta.type === "api";
@@ -106,9 +189,6 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
     : selectedEngine?.status?.state === "running";
 
   const start = async () => {
-    setEvents([]);
-    setResults([]);
-    setProgress({});
     try {
       const preset = COMPRESSION_PRESETS.find((p) => p.id === compression);
       const engineOpts = {
@@ -118,7 +198,7 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
         swaFull: !!preset?.swaFull,
       };
       if (customCtx) engineOpts.contextLen = Number(customCtx);
-      const { run_id } = await api.startBenchmark({
+      await startBench({
         engine,
         model: localModel ? (localModel.architecture || "local") + "-local" : model,
         quant,
@@ -132,59 +212,24 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
           ? `local: ${localModel.filename} · ${compression}`
           : `compresión: ${compression}`,
       });
-      setRunning(run_id);
-      unsubRef.current = subscribeBenchmark(run_id, (evt) => {
-        setEvents((arr) => [...arr.slice(-300), evt]);
-
-        // Progreso del bootstrap
-        if (evt.type === "engine.install") {
-          setProgress({ kind: "engine.install", ...evt });
-        }
-        if (evt.type === "model.download") {
-          setProgress({ kind: "model.download", ...evt });
-        }
-        if (evt.type === "engine.ready") {
-          setProgress({ kind: "engine.ready" });
-        }
-
-        // Progreso por prompt
-        if (evt.type === "tokens") {
-          setProgress({
-            kind: "tokens",
-            current: evt.current,
-            target: evt.target,
-            tps: evt.tps_current,
-          });
-        }
-        if (evt.phase === "ttft") {
-          setProgress((p) => ({ ...p, kind: "tokens", ttft: evt.ttft_ms }));
-        }
-        if (evt.type === "result") setResults((r) => [...r, evt.result]);
-        if (evt.type === "done") {
-          setRunning(null);
-          unsubRef.current?.();
-          unsubRef.current = null;
-        }
-      });
     } catch (e) {
-      setEvents((arr) => [...arr, { type: "log", level: "error", text: e.message }]);
+      // El hook ya logueó el evento, sólo dejamos un fallback por si la API falla antes
+      console.error("startBench failed:", e);
     }
   };
 
   const stop = async () => {
-    if (!running) return;
     try {
-      await api.stopBenchmark(running);
+      await stopBench();
     } catch (e) {
-      setEvents((arr) => [...arr, { type: "log", level: "warn", text: `Stop: ${e.message}` }]);
+      console.warn("stopBench:", e);
     }
   };
 
   const startSweep = async () => {
     if (!sweepQuants.length) return;
-    setEvents([{ type: "log", level: "info", text: `Sweep: ${sweepQuants.join(", ")}` }]);
-    setResults([]);
-    setProgress({});
+    bClear();
+    bLog("info", `Sweep: ${sweepQuants.join(", ")}`);
     try {
       const base = {
         engine,
@@ -196,10 +241,10 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
         notes: `sweep ${sweepQuants.join("+")}`,
       };
       const { sweep_id } = await api.startSweep(base, sweepQuants);
-      setEvents((arr) => [...arr, { type: "log", level: "info", text: `Sweep arrancado: ${sweep_id}` }]);
+      bLog("info", `Sweep arrancado: ${sweep_id}`);
       pollSweep(sweep_id);
     } catch (e) {
-      setEvents((arr) => [...arr, { type: "log", level: "error", text: e.message }]);
+      bLog("error", e.message);
     }
   };
 
@@ -210,31 +255,15 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
         const status = await api.sweepStatus(sweepId);
         if (status.current && status.current !== lastRunId) {
           lastRunId = status.current;
-          setEvents((arr) => [
-            ...arr,
-            { type: "log", level: "info", text: `→ run ${lastRunId}` },
-          ]);
-          setRunning(lastRunId);
-          unsubRef.current?.();
-          unsubRef.current = subscribeBenchmark(lastRunId, (evt) => {
-            setEvents((arr) => [...arr.slice(-400), evt]);
-            if (evt.type === "result") setResults((r) => [...r, evt.result]);
-            if (evt.type === "tokens")
-              setProgress({ kind: "tokens", current: evt.current, target: evt.target, tps: evt.tps_current });
-          });
+          bLog("info", `→ run ${lastRunId}`);
+          subscribe(lastRunId); // re-suscribe a la nueva sub-corrida; setea running
         }
         if (status.completed || status.cancelled) {
-          setRunning(null);
-          unsubRef.current?.();
-          unsubRef.current = null;
-          setEvents((arr) => [
-            ...arr,
-            { type: "log", level: "success", text: `Sweep terminado (${status.runs.length} runs)` },
-          ]);
+          bLog("success", `Sweep terminado (${status.runs.length} runs)`);
           return;
         }
       } catch (e) {
-        setEvents((arr) => [...arr, { type: "log", level: "warn", text: `poll: ${e.message}` }]);
+        bLog("warn", `poll: ${e.message}`);
         return;
       }
       await new Promise((r) => setTimeout(r, 1500));
@@ -262,13 +291,25 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
                 onChange={(e) => setEngine(e.target.value)}
                 disabled={!!running}
               >
-                {engines.map((e) => (
-                  <option key={e.meta.id} value={e.meta.id}>
-                    {e.meta.name} ({e.meta.type})
-                  </option>
-                ))}
+                {engines.map((e) => {
+                  const isApi = e.meta.type === "api";
+                  const runtimeReady = isApi || e.runtimes?.some((r) => r.ready);
+                  return (
+                    <option key={e.meta.id} value={e.meta.id} disabled={!runtimeReady}>
+                      {e.meta.name} ({e.meta.type}){!runtimeReady ? " · no instalado" : ""}
+                    </option>
+                  );
+                })}
               </Select>
             </Field>
+            {engineRecs.length > 0 && !localModel && (
+              <EngineMatrix
+                recs={engineRecs}
+                loading={loadingRecs}
+                selectedEngine={engine}
+                onSelect={(id) => !running && setEngine(id)}
+              />
+            )}
             {localModel ? (
               <Field label="GGUF local seleccionado">
                 <div className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3">
@@ -305,46 +346,77 @@ export default function BenchmarkView({ dockerDown, navPayload }) {
                   onChange={(e) => setModel(e.target.value)}
                   disabled={!!running}
                 >
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                      {!m.hf_gguf ? " · sin auto-descarga" : ""}
-                    </option>
-                  ))}
+                  {models.map((m) => {
+                    const compatible = engineIsApi
+                      ? true
+                      : engine === "llamacpp"
+                      ? !!m.hf_gguf
+                      : engine === "ollama"
+                      ? !!m.ollama_tag
+                      : ["vllm", "sglang", "tgi"].includes(engine)
+                      ? !!m.hf_repo
+                      : true;
+                    return (
+                      <option key={m.id} value={m.id} disabled={!compatible}>
+                        {m.name}{!compatible ? " · incompatible" : ""}
+                      </option>
+                    );
+                  })}
                 </Select>
-                {!engineIsApi && !modelHasGguf && (
+                {!engineIsApi && !modelHasGguf && engine === "llamacpp" && (
                   <p className="mt-1 text-xs text-amber-300">
-                    Este modelo no tiene fuente GGUF auto-descargable. Elige otro o usa Modelos → Locales.
+                    Este modelo no tiene fuente GGUF. Elige otro o usa Modelos → Locales.
                   </p>
                 )}
               </Field>
             )}
             {!engineIsApi && !localModel && (
               <>
-                <Field label="Cuantización" hint="Para una sola corrida">
+                <Field
+                  label="Cuantización"
+                  hint={loadingQuants ? "Comprobando compatibilidad…" : "Para una sola corrida"}
+                >
                   <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
-                    {QUANTS.map((q) => (
-                      <option key={q}>{q}</option>
-                    ))}
+                    {QUANTS.map((q) => {
+                      const st = feasibleQuants[q];
+                      const disabled = isQuantDisabled(st);
+                      return (
+                        <option key={q} value={q} disabled={disabled}>
+                          {q}{st ? ` · ${statusLabel(st)}` : ""}
+                        </option>
+                      );
+                    })}
                   </Select>
                 </Field>
                 <Field label="Sweep" hint="Marca varias para comparar (corre secuencial)">
                   <div className="flex flex-wrap gap-2">
-                    {QUANTS.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => toggleSweepQuant(q)}
-                        disabled={!!running}
-                        className={`rounded-md border px-2 py-1 text-xs ${
-                          sweepQuants.includes(q)
-                            ? "border-purple-500 bg-purple-500/10 text-purple-200"
-                            : "border-slate-700 text-slate-400"
-                        }`}
-                      >
-                        {q}
-                      </button>
-                    ))}
+                    {QUANTS.map((q) => {
+                      const st = feasibleQuants[q];
+                      const infeasible = isQuantDisabled(st);
+                      const selected = sweepQuants.includes(q);
+                      return (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => !infeasible && toggleSweepQuant(q)}
+                          disabled={!!running || infeasible}
+                          title={st ? statusLabel(st) : undefined}
+                          className={`rounded-md border px-2 py-1 text-xs transition-opacity ${
+                            infeasible
+                              ? "cursor-not-allowed border-slate-800 text-slate-600 opacity-40"
+                              : selected
+                              ? "border-purple-500 bg-purple-500/10 text-purple-200"
+                              : st === "cpu"
+                              ? "border-amber-800/60 text-amber-600 hover:text-amber-400"
+                              : st === "partial"
+                              ? "border-yellow-700/60 text-yellow-600 hover:text-yellow-400"
+                              : "border-slate-700 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {q}
+                        </button>
+                      );
+                    })}
                   </div>
                 </Field>
               </>
@@ -601,6 +673,121 @@ function EngineHint({ engine, selectedEngine, selectedModel }) {
     );
   }
   return null;
+}
+
+const ENGINE_SOURCE_LABEL = { gguf: "GGUF", ollama: "Ollama", hf_repo: "HF repo", api: "API", none: "—" };
+const ENGINE_STATUS_COLOR = {
+  ok: "text-emerald-400",
+  moe: "text-yellow-400",
+  partial: "text-amber-400",
+  cpu: "text-slate-400",
+  disk: "text-rose-400",
+  fail: "text-rose-400",
+  api: "text-indigo-400",
+  nofile: "text-rose-400",
+};
+const SCORE_BAR_COLOR = (score) =>
+  score >= 0.8 ? "bg-emerald-500" : score >= 0.5 ? "bg-amber-500" : score > 0 ? "bg-slate-500" : "bg-rose-900";
+
+function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
+  if (loading && recs.length === 0) {
+    return (
+      <div className="rounded border border-slate-800 bg-slate-900/30 p-2 text-center text-xs text-slate-500">
+        Comprobando motores…
+      </div>
+    );
+  }
+  // Mostrar solo motores locales + mejor API si hay alguna; no mostrar los cloud todos
+  const local = recs.filter((r) => r.type !== "api");
+  const bestApi = recs.filter((r) => r.type === "api" && r.score > 0)[0];
+  const visible = bestApi ? [...local, bestApi] : local;
+
+  return (
+    <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/30">
+      <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+          Motores para este modelo
+        </span>
+        {loading && <span className="text-[10px] text-slate-600">actualizando…</span>}
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-slate-800/60 text-left text-[10px] uppercase tracking-wider text-slate-600">
+            <th className="px-3 py-1.5">Motor</th>
+            <th className="px-2 py-1.5">Mejor quant</th>
+            <th className="px-2 py-1.5">Fuente</th>
+            <th className="px-2 py-1.5">Runtime</th>
+            <th className="px-3 py-1.5">Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((r) => {
+            const isSelected = r.engine_id === selectedEngine;
+            const clickable = r.feasible && r.runtime_ready;
+            return (
+              <tr
+                key={r.engine_id}
+                onClick={() => clickable && onSelect(r.engine_id)}
+                title={
+                  !r.model_available
+                    ? "Modelo no disponible en este origen"
+                    : !r.runtime_ready
+                    ? "Runtime no instalado"
+                    : !r.feasible
+                    ? "No cabe en el hardware"
+                    : "Click para seleccionar este motor"
+                }
+                className={`border-b border-slate-800/40 transition-colors last:border-0 ${
+                  isSelected
+                    ? "bg-indigo-900/20"
+                    : clickable
+                    ? "cursor-pointer hover:bg-slate-800/40"
+                    : "cursor-default opacity-50"
+                }`}
+              >
+                <td className="px-3 py-1.5 font-medium">
+                  {isSelected && <span className="mr-1 text-indigo-400">▶</span>}
+                  {r.engine_name}
+                </td>
+                <td className={`px-2 py-1.5 font-mono ${ENGINE_STATUS_COLOR[r.status] || "text-slate-400"}`}>
+                  {r.best_quant || "—"}
+                  {r.status !== "ok" && r.status !== "api" && (
+                    <span className="ml-1 text-[10px] opacity-70">({r.status})</span>
+                  )}
+                </td>
+                <td className="px-2 py-1.5 text-slate-400">
+                  {ENGINE_SOURCE_LABEL[r.model_source] || r.model_source}
+                  {!r.model_available && <span className="ml-1 text-rose-400">✗</span>}
+                </td>
+                <td className="px-2 py-1.5">
+                  {r.type === "api" ? (
+                    <span className="text-indigo-400">cloud</span>
+                  ) : r.runtime_ready ? (
+                    <span className="text-emerald-400">listo</span>
+                  ) : (
+                    <span className="text-amber-500">no instalado</span>
+                  )}
+                </td>
+                <td className="px-3 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-16 overflow-hidden rounded bg-slate-800">
+                      <div
+                        className={`h-full transition-all ${SCORE_BAR_COLOR(r.score)}`}
+                        style={{ width: `${r.score * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] tabular-nums text-slate-500">
+                      {Math.round(r.score * 100)}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function RunningPanel({ events, progress, running }) {

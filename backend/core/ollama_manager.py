@@ -84,8 +84,14 @@ async def list_local_models() -> list[dict]:
         return []
 
 
-async def pull_model(tag: str, progress: ProgressCb = None) -> None:
-    """Pull con stream de progreso."""
+async def pull_model(tag: str, progress: ProgressCb = None,
+                     cancel_event: asyncio.Event | None = None) -> None:
+    """Pull con stream de progreso. Si `cancel_event` se setea, aborta con CancelledError.
+
+    Nota: Ollama sigue descargando en su daemon en background; abortar aquí solo cierra
+    el stream HTTP de progreso. Para cancelación real del pull se necesitaría llamar
+    al endpoint /api/delete después.
+    """
     async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as client:
         async with client.stream(
             "POST",
@@ -94,6 +100,8 @@ async def pull_model(tag: str, progress: ProgressCb = None) -> None:
         ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
+                if cancel_event is not None and cancel_event.is_set():
+                    raise asyncio.CancelledError(f"Pull de {tag} cancelado")
                 if not line:
                     continue
                 try:

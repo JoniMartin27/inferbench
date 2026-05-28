@@ -6,6 +6,7 @@ y devuelve la ruta a `llama-server[.exe]`.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import re
@@ -120,8 +121,13 @@ def _has_cudart_dlls(directory: Path) -> bool:
 
 
 async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
-                        progress: ProgressCb, label: str) -> None:
-    """Descarga un asset zip y lo extrae en `dest_dir`. Borra el zip al terminar."""
+                        progress: ProgressCb, label: str,
+                        cancel_event: asyncio.Event | None = None) -> None:
+    """Descarga un asset zip y lo extrae en `dest_dir`. Borra el zip al terminar.
+
+    Si `cancel_event` se setea durante la descarga, aborta con CancelledError y
+    elimina el zip parcial para no dejar basura.
+    """
     url = asset["browser_download_url"]
     size = asset.get("size", 0)
     name = asset["name"]
@@ -133,20 +139,32 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     zip_path = dest_dir / name
     downloaded = 0
     last_pct = -1
-    with open(zip_path, "wb") as f:
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            async for chunk in resp.aiter_bytes(chunk_size=131072):
-                f.write(chunk)
-                downloaded += len(chunk)
-                if progress and size:
-                    pct = round(downloaded / size * 100, 1)
-                    if pct - last_pct >= 0.5:
-                        await progress({
-                            "phase": "download", "label": label, "name": name,
-                            "downloaded": downloaded, "size": size, "pct": pct,
-                        })
-                        last_pct = pct
+    try:
+        with open(zip_path, "wb") as f:
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                async for chunk in resp.aiter_bytes(chunk_size=131072):
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise asyncio.CancelledError(
+                            f"Descarga de {name} cancelada por el usuario"
+                        )
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress and size:
+                        pct = round(downloaded / size * 100, 1)
+                        if pct - last_pct >= 0.5:
+                            await progress({
+                                "phase": "download", "label": label, "name": name,
+                                "downloaded": downloaded, "size": size, "pct": pct,
+                            })
+                            last_pct = pct
+    except asyncio.CancelledError:
+        # Limpiar zip parcial para no dejar basura ni interferir con un retry
+        try:
+            zip_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
 
     if progress:
         await progress({"phase": "extract", "label": label, "name": name})
@@ -155,7 +173,8 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     zip_path.unlink()
 
 
-async def install_llamacpp(progress: ProgressCb = None) -> Path:
+async def install_llamacpp(progress: ProgressCb = None,
+                           cancel_event: asyncio.Event | None = None) -> Path:
     """Descarga y extrae llama.cpp si no existe. Devuelve ruta al binario.
 
     Para builds CUDA, descarga ADEMÁS el zip cudart con las DLLs del runtime CUDA.
@@ -204,9 +223,11 @@ async def install_llamacpp(progress: ProgressCb = None) -> Path:
                 logger.warning("No se encontró asset cudart; CUDA podría no inicializarse")
 
         if main_asset:
-            await _download_zip(client, main_asset, target, progress, "main")
+            await _download_zip(client, main_asset, target, progress, "main",
+                                cancel_event=cancel_event)
         if cudart_asset:
-            await _download_zip(client, cudart_asset, target, progress, "cudart")
+            await _download_zip(client, cudart_asset, target, progress, "cudart",
+                                cancel_event=cancel_event)
 
     # Localizar el binario (algunos releases lo nombran "server.exe")
     candidates = [_exe_name(), "server.exe" if os.name == "nt" else "server"]

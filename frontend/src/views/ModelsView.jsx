@@ -78,15 +78,20 @@ export default function ModelsView({ onNavigate }) {
   const [optimal, setOptimal] = useState(null); // { modelId, config } | null
   const [optimizing, setOptimizing] = useState(null);
 
+  const [optimizeError, setOptimizeError] = useState(null);
+
   const optimize = async (modelId) => {
     setOptimizing(modelId);
     setOptimal(null);
+    setOptimizeError(null);
     try {
       const res = await api.optimize(engine, modelId);
       // Backend nuevo devuelve {config, techniques}; viejo devolvía OptimalConfig directo
       const cfg = res.config || res;
       const techniques = res.techniques || [];
       setOptimal({ modelId, config: cfg, techniques });
+    } catch (e) {
+      setOptimizeError(`No se pudo optimizar ${modelId}: ${e.message}`);
     } finally {
       setOptimizing(null);
     }
@@ -286,16 +291,33 @@ export default function ModelsView({ onNavigate }) {
           </div>
         </Card>
 
+        {optimizeError && (
+          <div className="mb-4 rounded-lg border border-red-700/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+            {optimizeError}
+          </div>
+        )}
+
         {optimal && (
           <Card
             title={`Configuración óptima · ${optimal.modelId}`}
             actions={
-              <button
-                onClick={() => setOptimal(null)}
-                className="text-xs text-slate-500 hover:text-slate-300"
-              >
-                cerrar
-              </button>
+              <div className="flex items-center gap-3">
+                {optimal.config.feasible && (
+                  <button
+                    onClick={() => onNavigate?.("benchmark", { config: optimal.config })}
+                    className="inline-flex items-center gap-1 rounded border border-indigo-500/60 px-2 py-1 text-xs font-medium text-indigo-200 hover:border-indigo-400 hover:bg-indigo-500/10"
+                    title="Cargar este modelo y config en el benchmark"
+                  >
+                    <Zap size={12} /> Hacer benchmark
+                  </button>
+                )}
+                <button
+                  onClick={() => setOptimal(null)}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
+                  cerrar
+                </button>
+              </div>
             }
           >
             <OptimalDetail cfg={optimal.config} techniques={optimal.techniques} />

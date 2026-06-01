@@ -137,13 +137,10 @@ def _enrich_with_metadata(m: LocalModel) -> LocalModel:
         m.context_length = s.get("context_length")
         # MoE detection: keys con "expert"
         m.is_moe = any("expert" in k.lower() for k in meta.keys())
-        # Si la metadata tiene parameter_count, usar eso
-        pc = meta.get("general.parameter_count") or meta.get("general.parameters")
+        # Cuenta de parámetros real desde la metadata (independiente del quant)
+        pc = gguf_reader.estimate_param_count(meta)
         if pc:
-            try:
-                m.params_b = round(float(pc) / 1e9, 2)
-            except (TypeError, ValueError):
-                pass
+            m.params_b = round(pc / 1e9, 2)
     except Exception as e:
         m.error = f"GGUF metadata: {e}"
     return m

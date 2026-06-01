@@ -6,6 +6,7 @@ arquitectura, nombre, n_layer, n_kv_heads, head_dim, contexto, etc.
 """
 from __future__ import annotations
 
+import re
 import struct
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,81 @@ def read_gguf_metadata(path: Path, max_header_bytes: int = 16 * 1024 * 1024) -> 
             break  # header truncado o tipo desconocido — devolver lo que ya tenemos
         kv[key] = value
     return kv
+
+
+# Arquitecturas que comparten (tie) el embedding de entrada con la capa de salida.
+# En ellas el lm_head no añade params; en el resto se cuenta aparte.
+_TIE_ARCHS = {"gemma", "gemma2", "gemma3"}
+
+
+def _array_len(v: Any) -> int | None:
+    """El lector guarda los arrays como '<array[N]>'; extrae N (p.ej. tamaño de vocab)."""
+    if isinstance(v, str):
+        m = re.match(r"<array\[(\d+)\]>", v)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _parse_size_label(sl: Any) -> float | None:
+    """'1B'→1e9, '1.5B'→1.5e9, '360M'→360e6. Devuelve None para formatos MoE ('8x7B')."""
+    if not isinstance(sl, str):
+        return None
+    m = re.match(r"^\s*([\d.]+)\s*([BM])\s*$", sl, re.IGNORECASE)
+    if not m:
+        return None
+    return float(m.group(1)) * (1e9 if m.group(2).upper() == "B" else 1e6)
+
+
+def estimate_param_count(meta: dict[str, Any]) -> int | None:
+    """Cuenta de parámetros REAL (independiente del quant) a partir de la metadata.
+
+    Prioridad: general.parameter_count → cálculo desde dimensiones de arquitectura
+    (con desambiguación tied/untied vía size_label) → general.size_label.
+    Mucho más fiable que estimar desde el tamaño de archivo, que varía con el quant.
+    """
+    arch = meta.get("general.architecture", "")
+    pc = meta.get("general.parameter_count")
+    if pc:
+        try:
+            return int(pc)
+        except (TypeError, ValueError):
+            pass
+
+    size_label_pc = _parse_size_label(meta.get("general.size_label"))
+
+    n_layer = meta.get(f"{arch}.block_count")
+    n_embd = meta.get(f"{arch}.embedding_length")
+    n_ff = meta.get(f"{arch}.feed_forward_length")
+    n_head = meta.get(f"{arch}.attention.head_count")
+    n_head_kv = meta.get(f"{arch}.attention.head_count_kv") or n_head
+    head_dim = meta.get(f"{arch}.attention.key_length") or (
+        (n_embd // n_head) if (n_embd and n_head) else None
+    )
+    vocab = meta.get(f"{arch}.vocab_size") or _array_len(meta.get("tokenizer.ggml.tokens"))
+    n_expert = meta.get(f"{arch}.expert_count") or 0
+    n_ff_exp = meta.get(f"{arch}.expert_feed_forward_length") or n_ff
+
+    if not (n_layer and n_embd and n_ff and n_head and head_dim):
+        return int(size_label_pc) if size_label_pc else None
+
+    q_dim = n_head * head_dim
+    kv_dim = n_head_kv * head_dim
+    attn = n_embd * q_dim + 2 * n_embd * kv_dim + q_dim * n_embd  # q, k, v, o
+    if n_expert and n_expert > 1:
+        ffn = n_expert * (3 * n_embd * n_ff_exp) + n_embd * n_expert  # expertos + router
+    else:
+        ffn = 3 * n_embd * n_ff  # SwiGLU: gate + up + down
+    body = n_layer * (attn + ffn + 2 * n_embd)  # +norms (despreciable)
+    emb = (vocab or 0) * n_embd
+    tied = body + emb
+    untied = body + 2 * emb
+
+    if size_label_pc:
+        return int(tied if abs(tied - size_label_pc) <= abs(untied - size_label_pc) else untied)
+    if arch in _TIE_ARCHS:
+        return int(tied)
+    return int(untied)
 
 
 def summarize(meta: dict[str, Any]) -> dict[str, Any]:

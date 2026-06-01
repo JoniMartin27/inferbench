@@ -29,9 +29,20 @@ packages = ["api", "core", "engines"]
 include-package-data = false
 py-modules = ["main"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Los scripts de mantenimiento del catálogo priorizan legibilidad sobre lint estricto
+extend-exclude = ["scripts"]
+
+[tool.ruff.lint]
+# E702: estilo compacto deliberado en gguf_reader (struct unpack + return en una línea)
+ignore = ["E702"]
 
 [tool.black]
 line-length = 100

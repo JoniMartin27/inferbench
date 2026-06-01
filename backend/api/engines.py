@@ -6,7 +6,6 @@ import json
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -185,7 +184,7 @@ async def install_engine(engine_id: str) -> EventSourceResponse:
 @router.get("/{engine_id}/logs")
 async def engine_logs(engine_id: str, tail: int = 200) -> dict:
     try:
-        engine = registry.get_engine(engine_id)
+        registry.get_engine(engine_id)  # valida que el motor existe
     except KeyError:
         raise HTTPException(404, f"Motor desconocido: {engine_id}")
     # Probar logs nativos primero, luego Docker

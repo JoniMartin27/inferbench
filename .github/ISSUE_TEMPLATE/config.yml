@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Reportar una vulnerabilidad
+    url: https://github.com/JoniMartin27/inferbench/security/advisories/new
+    about: No abras un issue público. Usa los Security Advisories (ver SECURITY.md).
+  - name: 💬 Preguntas y discusión
+    url: https://github.com/JoniMartin27/inferbench/discussions
+    about: Para dudas de uso, ideas o pedir modelos/motores.

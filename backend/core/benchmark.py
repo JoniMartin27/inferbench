@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import time
 import uuid
@@ -29,7 +28,7 @@ from pydantic import BaseModel, Field
 
 from . import binary_manager, docker_mgr, model_manager, native_runtime, ollama_manager
 from .hardware import detect_hardware
-from .models_catalog import Model, get_model
+from .models_catalog import get_model
 from .optimizer import get_optimal_config
 
 PROMPTS_FILE = Path(__file__).resolve().parent.parent / "data" / "prompts.json"

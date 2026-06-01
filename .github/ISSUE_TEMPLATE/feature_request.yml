@@ -1,0 +1,20 @@
+name: "✨ Feature request"
+description: Propón una idea o mejora (incluye nuevos motores o modelos)
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema o necesidad
+      description: ¿Qué te gustaría poder hacer y qué te lo impide hoy?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta
+      description: Cómo lo resolverías. Si es un motor o modelo nuevo, enlaza su repo/release.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas

@@ -1,0 +1,44 @@
+name: "🐛 Bug report"
+description: Reporta un fallo para ayudarnos a arreglarlo
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué ha pasado
+      description: Descripción clara del fallo y qué esperabas que ocurriera.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. Ir a '…'
+        2. Pulsar '…'
+        3. Ver el error
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Sistema operativo y versión
+      placeholder: "Windows 11 / macOS 14 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU / hardware
+      placeholder: "RTX 3070 8GB / Apple M2 / CPU-only"
+  - type: input
+    id: version
+    attributes:
+      label: Versión de InferBench
+      placeholder: "v0.1.0 o commit"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs relevantes
+      description: Salida del panel de ejecución o de `%APPDATA%\InferBench\logs\`.
+      render: shell

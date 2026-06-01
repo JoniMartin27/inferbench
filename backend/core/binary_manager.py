@@ -13,9 +13,20 @@ import re
 import zipfile
 from pathlib import Path
 from typing import Awaitable, Callable
+from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
+
+# Hosts de los que aceptamos descargar binarios ejecutables. Defensa de cadena de
+# suministro: si un redirect (follow_redirects=True) apuntara fuera de GitHub, se aborta.
+_TRUSTED_DL_HOSTS = ("github.com", "githubusercontent.com")
+
+
+def _is_trusted_dl_host(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in _TRUSTED_DL_HOSTS)
+
 
 EXCLUDE_TERMS_NEED = ["vulkan", "hip", "sycl", "kompute"]  # NUNCA queremos estos
 
@@ -129,6 +140,8 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     elimina el zip parcial para no dejar basura.
     """
     url = asset["browser_download_url"]
+    if not _is_trusted_dl_host(url):
+        raise RuntimeError(f"URL de descarga no confiable (host fuera de GitHub): {url}")
     size = asset.get("size", 0)
     name = asset["name"]
     logger.info(f"Descargando {label}: {name} ({size / 1e6:.1f} MB)")
@@ -143,6 +156,11 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
         with open(zip_path, "wb") as f:
             async with client.stream("GET", url) as resp:
                 resp.raise_for_status()
+                # Tras seguir redirects, el host final también debe ser de GitHub.
+                if not _is_trusted_dl_host(str(resp.url)):
+                    raise RuntimeError(
+                        f"Redirect de descarga a host no confiable: {resp.url}"
+                    )
                 async for chunk in resp.aiter_bytes(chunk_size=131072):
                     if cancel_event is not None and cancel_event.is_set():
                         raise asyncio.CancelledError(

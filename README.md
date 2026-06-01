@@ -8,6 +8,7 @@
 <p align="center">
   <img alt="Plataformas" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2b2b2b">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+  <a href="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white">
   <a href="https://github.com/JoniMartin27/inferbench/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/JoniMartin27/inferbench?label=descargar"></a>
@@ -392,7 +393,13 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 ## Contribuir
 
-Las PRs son bienvenidas. Los siguientes pasos con mayor impacto están en [Pendientes / siguientes pasos](#pendientes--siguientes-pasos) — los adaptadores reales para `ollama`/`vllm`/`sglang`/`tgi` y los tests de `compat.py`/`optimizer.py` son buenos primeros aportes. Abre un issue antes de un cambio grande para acordar el enfoque.
+Las PRs son bienvenidas — lee [**CONTRIBUTING.md**](CONTRIBUTING.md) para el setup, cómo correr lint/tests y las convenciones. Buenos primeros aportes: los adaptadores reales para `ollama`/`vllm`/`sglang`/`tgi` y más tests de `compat.py`/`optimizer.py`. Abre un issue antes de un cambio grande para acordar el enfoque.
+
+El proyecto sigue un [Código de conducta](CODE_OF_CONDUCT.md).
+
+## Seguridad
+
+¿Encontraste una vulnerabilidad? **No abras un issue público** — sigue [SECURITY.md](SECURITY.md). El proyecto ha pasado una [auditoría de seguridad](SECURITY-AUDIT.md) (postura buena; los hallazgos están remediados).
 
 ## Licencia
 

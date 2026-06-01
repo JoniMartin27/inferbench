@@ -102,5 +102,11 @@ Salida en `frontend/release/`.
 ## Endpoints clave
 Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/install`, `/api/benchmark/{run_id}/stream`. El runner devuelve `run_id` síncronamente; el stream va aparte.
 
+## Ya implementado (no son pendientes)
+- **Catálogo de 124+ modelos** verificados contra HF. Para ampliarlo usa `backend/scripts/verify_models.py` + `merge_models.py` (verifican repo GGUF, derivan `file_template` real y validan contra el schema). NO añadas modelos a mano sin verificar.
+- **Cuenta de parámetros** de GGUFs locales se lee de la metadata (`core/gguf_reader.py::estimate_param_count`), no del tamaño de archivo.
+- **`detect_hardware()` cacheado** (`lru_cache`) — no lo "des-cachees"; el listado de compat depende de que sea instantáneo.
+- **Evaluación de calidad** en 3 modos (`core/benchmark.py`): scorer offline basado en referencia (default, sin GPU/API), LLM-judge `self` y `api`. El default DEBE seguir funcionando en cualquier ordenador.
+
 ## Pendientes documentados
-La sección "Pendientes / siguientes pasos" del README es la fuente — incluye adapters reales para `ollama`/`vllm`/`sglang`/`tgi`, KV-cache exacta desde metadata GGUF, quality scoring con LLM-judge, tests en `compat.py` y `optimizer.py`, y soporte MoE para auto-descarga.
+La sección "Pendientes / siguientes pasos" del README es la fuente — incluye adapters reales para `ollama`/`vllm`/`sglang`/`tgi`, KV-cache exacta desde metadata para el cálculo de compat, tests en `compat.py` y `optimizer.py`, soporte MoE multi-parte para auto-descarga, y soporte multimodal real (mmproj).

@@ -284,7 +284,7 @@ Métricas medidas por run:
 - **tok/s**: tokens generados por segundo
 - **VRAM peak**: pico de uso (medido con `pynvml.nvmlDeviceGetMemoryInfo` en NVIDIA)
 - **RAM peak**: pico de RAM (medido con `psutil.virtual_memory`)
-- **Calidad**: score 0-100 contra respuesta de referencia (juez LLM o BLEU/ROUGE)
+- **Calidad**: score 0-100. Implementado en 3 modos (`core/benchmark.py`): scorer offline basado en la respuesta de referencia (F1 de tokens recall-weighted + recall de números + stemming, sin GPU/API → corre en cualquier PC) por defecto, y LLM-judge opcional (motor local `self` o API externa OpenAI-compatible)
 - **Coste**: solo APIs (calculado de tokens × precio publicado)
 
 ## Modelo de datos (SQLite)

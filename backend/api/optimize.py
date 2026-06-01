@@ -21,6 +21,7 @@ from core.optimizer import (
     OptimizeRequest,
     benefits_summary,
     get_optimal_config,
+    most_powerful_per_compression,
 )
 from engines import registry
 
@@ -146,6 +147,17 @@ async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[Recommenda
     # Ordenar: status (ok > moe > partial > cpu > disk), luego params_b desc
     rows.sort(key=lambda r: (_STATUS_RANK.get(r.config.status, 9), -r.model.params_b))
     return rows[:top]
+
+
+@router.get("/optimize/by-compression")
+async def by_compression(
+    engine: str = Query("llamacpp"),
+    context_len: int = Query(8192, ge=512, le=1_048_576),
+) -> list[dict]:
+    """Para cada preset de compresión KV, el modelo descargable más potente que cabe a
+    `context_len`. Muestra cómo comprimir la KV-cache libera VRAM para modelos mayores.
+    """
+    return most_powerful_per_compression(engine_id=engine, context_len=context_len)
 
 
 @router.get("/optimize/quants", response_model=list[QuantOption])

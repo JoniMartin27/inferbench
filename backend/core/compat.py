@@ -102,6 +102,16 @@ COMPRESSION_PRESETS: dict[str, dict] = {
 }
 
 
+def preset_kv_factor(preset_id: str) -> float:
+    """Factor KV efectivo de un preset de compresión (promedio de K y V vs f16)."""
+    p = COMPRESSION_PRESETS.get(preset_id)
+    if not p:
+        return 1.0
+    k = KV_FACTOR.get(p["kv_k"], 1.0)
+    v = KV_FACTOR.get(p["kv_v"], 1.0)
+    return (k + v) / 2.0
+
+
 # Cuantizaciones de mayor a menor calidad (orden estándar)
 QUANT_QUALITY_ORDER = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"]
 

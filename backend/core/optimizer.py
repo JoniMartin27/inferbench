@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import compat
 from .hardware import HardwareInfo, detect_hardware
-from .models_catalog import Model, get_model
+from .models_catalog import Model, get_model, load_models
 
 # Cuantizaciones por motor (de mayor a menor calidad)
 ENGINE_QUANTS: dict[str, list[str]] = {
@@ -164,6 +164,114 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
             "Ninguna combinación cabe en este hardware. Considera un modelo más pequeño."
         ],
     )
+
+
+def _fit_status_kv(
+    model: Model,
+    hw: compat.HardwareSnapshot,
+    quant: str,
+    context_len: int,
+    kv_factor: float,
+    kv_in_ram: bool,
+    engine_id: str,
+) -> compat.CompatStatus:
+    """Como compat.check_compat pero con un factor KV explícito (presets de compresión)
+    y la opción kv_in_ram (--no-kv-offload): la KV va a RAM, no a VRAM.
+    """
+    model_size = compat.get_model_size_gb(model, quant)
+    kv_per_tok_gb = (0.5 * ((model.params_b / 7.0) ** 0.7) * kv_factor) / 1024.0
+    kv_overhead = context_len * kv_per_tok_gb
+
+    if kv_in_ram:
+        vram_need = model_size + 0.6
+        ram_extra = kv_overhead
+    else:
+        vram_need = model_size + kv_overhead + 0.6
+        ram_extra = 0.0
+
+    # MoE con offload: solo shared+gating+atención+KV deben caber en VRAM
+    if model.is_moe and engine_id == "llamacpp" and hw.vram_gb > 0:
+        shared = (model.active_b / model.params_b) * model_size * 0.4 + 1.2
+        if shared + (0.0 if kv_in_ram else kv_overhead) <= hw.vram_gb:
+            return "moe"
+
+    if vram_need <= hw.vram_gb and ram_extra <= hw.ram_gb * 0.8:
+        return "ok"
+    if hw.vram_gb > 0 and vram_need <= hw.vram_gb + hw.ram_gb * 0.8 and ram_extra <= hw.ram_gb * 0.8:
+        return "partial"
+    if vram_need + ram_extra <= hw.ram_gb * 0.8:
+        return "cpu"
+    return "fail"
+
+
+def most_powerful_per_compression(
+    hw: HardwareInfo | None = None,
+    engine_id: str = "llamacpp",
+    context_len: int = 8192,
+) -> list[dict[str, Any]]:
+    """Para cada preset de compresión KV, el modelo descargable más potente (más params)
+    que corre 100% en GPU a `context_len`, con la mejor cuantización posible.
+
+    Muestra el beneficio real de comprimir: liberar VRAM permite cargar modelos más grandes.
+    """
+    hw = hw or detect_hardware()
+    snap = compat.HardwareSnapshot(vram_gb=hw.primary_vram_gb, ram_gb=hw.ram_gb)
+    # Piso de calidad: comparamos "el más grande que cabe a calidad usable" (≥Q4_K_M).
+    # Sin piso, el más potente sería siempre un modelo enorme a IQ1_S (1.5-bit, inservible).
+    quants = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M"]
+    # Solo modelos con fuente GGUF descargable (lo que llama.cpp arranca de un click)
+    models = sorted(
+        (m for m in load_models() if m.hf_gguf),
+        key=lambda m: m.params_b,
+        reverse=True,
+    )
+
+    out: list[dict[str, Any]] = []
+    for pid, preset in compat.COMPRESSION_PRESETS.items():
+        kv_f = compat.preset_kv_factor(pid)
+        in_ram = bool(preset.get("nkvo"))
+        top_ok = None       # más potente 100% en VRAM (rápido)
+        top_runnable = None  # más potente ejecutable (incluye MoE offload / GPU+CPU)
+        for m in models:  # de más a menos potente
+            for q in quants:  # de mayor a menor calidad
+                st = _fit_status_kv(m, snap, q, context_len, kv_f, in_ram, engine_id)
+                if st in ("ok", "moe", "partial"):
+                    if top_runnable is None:
+                        top_runnable = _rec_entry(m, q, st, kv_f, context_len, snap, in_ram)
+                    if st == "ok" and top_ok is None:
+                        top_ok = _rec_entry(m, q, "ok", kv_f, context_len, snap, in_ram)
+                    break
+            if top_ok and top_runnable:
+                break
+        out.append({
+            "preset": pid,
+            "label": preset["label"],
+            "kv_k": preset["kv_k"],
+            "kv_v": preset["kv_v"],
+            "kv_in_ram": in_ram,
+            "kv_factor": round(kv_f, 3),
+            "desc": preset["desc"],
+            "top_full_gpu": top_ok,
+            "top_runnable": top_runnable,
+        })
+    return out
+
+
+def _rec_entry(model, quant, status, kv_f, context_len, snap, in_ram) -> dict[str, Any]:
+    size = compat.get_model_size_gb(model, quant)
+    kv_per_tok_gb = (0.5 * ((model.params_b / 7.0) ** 0.7) * kv_f) / 1024.0
+    kv_gb = context_len * kv_per_tok_gb
+    return {
+        "id": model.id,
+        "name": model.name,
+        "params_b": model.params_b,
+        "is_moe": model.is_moe,
+        "quant": quant,
+        "status": status,
+        "model_size_gb": round(size, 2),
+        "kv_gb": round(kv_gb, 2),
+        "context_len": context_len,
+    }
 
 
 def _estimate_moe_offload(model: Model, hw: compat.HardwareSnapshot) -> int | None:

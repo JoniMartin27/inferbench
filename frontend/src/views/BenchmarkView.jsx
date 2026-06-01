@@ -24,11 +24,41 @@ const statusLabel = (s) => STATUS_LABEL[s] || s;
 const isQuantDisabled = (s) => s === "disk" || s === "fail" || s === "nofile";
 
 const COMPRESSION_PRESETS = [
-  { id: "quality",    label: "Calidad",     kvK: "f16",  kvV: "f16",    nkvo: false, swaFull: false, factor: 1.0,  desc: "Sin compresión KV — máxima precisión." },
-  { id: "balanced",   label: "Equilibrado", kvK: "q8_0", kvV: "q8_0",   nkvo: false, swaFull: false, factor: 0.5,  desc: "KV q8_0 — 50% menos memoria, calidad casi idéntica." },
-  { id: "compressed", label: "Comprimido",  kvK: "q8_0", kvV: "iq4_nl", nkvo: false, swaFull: false, factor: 0.38, desc: "K=q8_0 + V=iq4_nl — ~60% menos. Buena para contextos largos." },
-  { id: "aggressive", label: "Agresivo",    kvK: "q4_0", kvV: "q4_0",   nkvo: false, swaFull: false, factor: 0.25, desc: "KV q4_0 — 75% menos memoria. Algo de calidad sacrificada." },
-  { id: "extreme",    label: "Extremo",     kvK: "q4_0", kvV: "q4_0",   nkvo: true,  swaFull: false, factor: 0.25, desc: "q4_0 + KV en RAM (no-kv-offload). Libera VRAM al máximo." },
+  {
+    id: "quality", label: "Calidad", kvK: "f16", kvV: "f16", nkvo: false, swaFull: false, factor: 1.0,
+    desc: "Sin compresión KV — máxima precisión.",
+    what: "La KV-cache se guarda en 16 bits (f16), sin comprimir.",
+    affects: "Ocupa el doble de VRAM que q8_0; en contextos largos llena la VRAM rápido.",
+    allows: "La mejor calidad posible. Ideal para modelos pequeños/medianos donde la VRAM sobra.",
+  },
+  {
+    id: "balanced", label: "Equilibrado", kvK: "q8_0", kvV: "q8_0", nkvo: false, swaFull: false, factor: 0.5,
+    desc: "KV q8_0 — 50% menos memoria, calidad casi idéntica.",
+    what: "K y V cuantizados a 8 bits (q8_0).",
+    affects: "Mitad de memoria de KV-cache con pérdida de calidad imperceptible.",
+    allows: "El punto dulce por defecto: más contexto o un modelo algo mayor sin notar degradación.",
+  },
+  {
+    id: "compressed", label: "Comprimido", kvK: "q8_0", kvV: "iq4_nl", nkvo: false, swaFull: false, factor: 0.38,
+    desc: "K=q8_0 + V=iq4_nl — ~60% menos. Buena para contextos largos.",
+    what: "K en 8 bits (preciso) y V en 4 bits i-quant (iq4_nl, moderno).",
+    affects: "~60% menos KV; la clave (K) sigue precisa, solo el valor (V) se comprime más.",
+    allows: "Contextos largos (16k–32k+) manteniendo buena calidad de respuesta.",
+  },
+  {
+    id: "aggressive", label: "Agresivo", kvK: "q4_0", kvV: "q4_0", nkvo: false, swaFull: false, factor: 0.25,
+    desc: "KV q4_0 — 75% menos memoria. Algo de calidad sacrificada.",
+    what: "K y V cuantizados a 4 bits (q4_0).",
+    affects: "75% menos memoria de KV; se nota algo de pérdida de precisión en contextos muy largos.",
+    allows: "Contextos enormes o cargar un modelo bastante más grande en la misma GPU.",
+  },
+  {
+    id: "extreme", label: "Extremo", kvK: "q4_0", kvV: "q4_0", nkvo: true, swaFull: false, factor: 0.25,
+    desc: "q4_0 + KV en RAM (no-kv-offload). Libera VRAM al máximo.",
+    what: "KV en 4 bits Y movida a RAM del sistema (--no-kv-offload); la VRAM solo guarda los pesos.",
+    affects: "Libera toda la VRAM que usaría la KV, pero baja los tok/s (la KV viaja por PCIe).",
+    allows: "El modelo más grande posible con los pesos 100% en GPU, delegando la KV a la RAM.",
+  },
 ];
 
 export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
@@ -537,8 +567,111 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
             </div>
           </Card>
         )}
+
+        {!engineIsApi && (
+          <PowerByCompression
+            engine={engine}
+            contextLen={Number(customCtx) || 8192}
+            selected={compression}
+          />
+        )}
       </div>
     </>
+  );
+}
+
+function PowerByCompression({ engine, contextLen, selected }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(() => {
+      api
+        .getByCompression(engine, contextLen)
+        .then((r) => !cancelled && setRows(r))
+        .catch(() => !cancelled && setRows([]))
+        .finally(() => !cancelled && setLoading(false));
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [engine, contextLen]);
+
+  return (
+    <Card title="Modelos más potentes por compresión" className="lg:col-span-2">
+      <p className="mb-3 text-xs text-slate-400">
+        Para tu hardware y un contexto de{" "}
+        <span className="font-mono text-slate-300">{contextLen.toLocaleString()}</span> tokens:
+        comprimir la KV-cache libera VRAM y te deja cargar modelos más grandes 100% en la GPU.
+      </p>
+      {loading && rows.length === 0 ? (
+        <p className="text-sm text-slate-500">Calculando…</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-slate-800">
+                <th className="py-2 pr-3">Compresión</th>
+                <th className="py-2 pr-3">KV</th>
+                <th className="py-2 pr-3">Más potente · 100% GPU</th>
+                <th className="py-2 pr-3">KV-cache</th>
+                <th className="py-2 pr-3">Más grande ejecutable</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => {
+                const ok = p.top_full_gpu;
+                const run = p.top_runnable;
+                return (
+                  <tr
+                    key={p.preset}
+                    className={`border-b border-slate-900 ${
+                      selected === p.preset ? "bg-indigo-950/20" : ""
+                    }`}
+                  >
+                    <td className="py-2 pr-3 font-medium text-slate-200">{p.label}</td>
+                    <td className="py-2 pr-3">
+                      <Badge tone="slate">
+                        {p.kv_k}/{p.kv_v}
+                        {p.kv_in_ram ? "·RAM" : ""}
+                      </Badge>
+                    </td>
+                    <td className="py-2 pr-3">
+                      {ok ? (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium text-emerald-200">{ok.name}</span>
+                          <Badge tone="indigo">{ok.quant}</Badge>
+                          <span className="text-xs text-slate-500">{ok.params_b}B</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 tabular-nums text-slate-400">
+                      {ok ? `${ok.kv_gb} GB` : "—"}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {run ? (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-slate-300">{run.name}</span>
+                          <span className="text-xs text-slate-500">{run.params_b}B</span>
+                          {run.status !== "ok" && <Badge tone="amber">{run.status}</Badge>}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -585,6 +718,32 @@ function CompressionField({ value, onChange, running, model, localModel, customC
           ))}
         </div>
       </Field>
+
+      <details className="rounded-md border border-slate-800 bg-slate-900/30 px-3 py-2">
+        <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-wider text-slate-400 hover:text-slate-200">
+          ¿Qué hace cada compresión?
+        </summary>
+        <div className="mt-3 space-y-2.5">
+          {COMPRESSION_PRESETS.map((p) => (
+            <div
+              key={p.id}
+              className={`rounded border p-2.5 text-xs ${
+                value === p.id ? "border-indigo-600/50 bg-indigo-950/20" : "border-slate-800 bg-slate-900/20"
+              }`}
+            >
+              <div className="mb-1 flex items-center gap-2">
+                <span className="font-semibold text-slate-200">{p.label}</span>
+                <Badge tone="slate">K={p.kvK} · V={p.kvV}{p.nkvo ? " · RAM" : ""}</Badge>
+              </div>
+              <dl className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-0.5 text-slate-400">
+                <dt className="text-slate-500">Qué hace</dt><dd className="text-slate-300">{p.what}</dd>
+                <dt className="text-slate-500">En qué afecta</dt><dd>{p.affects}</dd>
+                <dt className="text-slate-500">Qué permite</dt><dd className="text-emerald-300/90">{p.allows}</dd>
+              </dl>
+            </div>
+          ))}
+        </div>
+      </details>
 
       <div className="grid grid-cols-2 gap-3">
         <Field

@@ -50,6 +50,8 @@ export const api = {
     request(`/api/optimize/quants?engine=${engine}&model_id=${encodeURIComponent(modelId)}&kv_cache=${kvCache}&context_len=${contextLen}`),
   getModelEngines: (modelId) =>
     request(`/api/optimize/model-engines?model_id=${encodeURIComponent(modelId)}`),
+  getByCompression: (engine = "llamacpp", contextLen = 8192) =>
+    request(`/api/optimize/by-compression?engine=${engine}&context_len=${contextLen}`),
 
   // Benchmark + history
   startBenchmark: (body) =>

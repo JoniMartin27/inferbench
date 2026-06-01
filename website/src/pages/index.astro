@@ -1,0 +1,512 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const GITHUB = "https://github.com/JoniMartin27/inferbench";
+const RELEASES = `${GITHUB}/releases`;
+
+const features = [
+  {
+    icon: "bolt",
+    color: "indigo",
+    title: "Auto-bootstrap de un click",
+    desc: "1 click descarga el binario del motor, baja los GGUF que falten de Hugging Face, arranca con la config óptima y lanza el benchmark. End-to-end.",
+  },
+  {
+    icon: "chip",
+    color: "emerald",
+    title: "Detección de hardware",
+    desc: "CPU, RAM y GPU (NVIDIA vía NVML, AMD vía rocm-smi, Apple Silicon). Cacheada: el listado de compatibilidad de 124 modelos sale en ~4 ms.",
+  },
+  {
+    icon: "cube",
+    color: "purple",
+    title: "Modo nativo, sin Docker",
+    desc: "Para llama.cpp descarga la release oficial de GitHub, auto-detecta CUDA y baja también las DLLs del runtime. Docker queda opcional.",
+  },
+  {
+    icon: "stack",
+    color: "indigo",
+    title: "Catálogo de 124+ modelos",
+    desc: "Llama, Qwen, Gemma, Mistral, Phi, DeepSeek… todos verificados contra Hugging Face antes de entrar. Sin datos inventados.",
+  },
+  {
+    icon: "wand",
+    color: "amber",
+    title: "Optimizador automático",
+    desc: "Dado tu hardware + modelo + motor calcula la mejor cuantización, KV-cache, contexto máximo, MoE offload y flags. Todo sobrescribible.",
+  },
+  {
+    icon: "compress",
+    color: "emerald",
+    title: "Compresión KV explicada",
+    desc: "5 presets de Calidad a Extremo, con qué hace cada uno y una tabla de los modelos más potentes que caben con cada nivel en TU GPU.",
+  },
+  {
+    icon: "gauge",
+    color: "rose",
+    title: "Métricas reales en vivo",
+    desc: "TTFT, tok/s, pico de VRAM y RAM medidos de verdad vía SSE. Nada simulado: si un motor falla, te lo dice.",
+  },
+  {
+    icon: "scale",
+    color: "purple",
+    title: "Sweep y comparación",
+    desc: "Lanza el mismo modelo con N cuantizaciones en cola y compara varias runs del historial lado a lado, con gráficos.",
+  },
+  {
+    icon: "shield",
+    color: "indigo",
+    title: "100% local y privado",
+    desc: "Tus prompts y tus modelos nunca salen de tu máquina. Sin telemetría, sin cuenta, sin servidor. Open-source bajo licencia MIT.",
+  },
+];
+
+const steps = [
+  { n: "01", t: "Eliges modelo", d: "Del catálogo o tus GGUF locales (LM Studio, Ollama, caché HF)." },
+  { n: "02", t: "Descarga el motor", d: "Binario oficial de GitHub + GGUF que falten de Hugging Face." },
+  { n: "03", t: "Arranca optimizado", d: "Config óptima auto-calculada para tu GPU: quant, KV-cache, contexto, flags." },
+  { n: "04", t: "Benchmark en vivo", d: "Suite de prompts midiendo TTFT, tok/s, VRAM y calidad en tiempo real." },
+  { n: "05", t: "Compara y decide", d: "Resultados guardados en SQLite, comparables lado a lado con gráficos." },
+];
+
+const stats = [
+  { v: "124+", l: "modelos verificados" },
+  { v: "3", l: "sistemas: Win · macOS · Linux" },
+  { v: "~4 ms", l: "listado de compatibilidad" },
+  { v: "0", l: "datos enviados a la nube" },
+];
+
+const downloads = [
+  { os: "Windows", file: "InferBench Setup .exe", note: "Instalador NSIS", icon: "windows" },
+  { os: "macOS", file: "InferBench .dmg", note: "Apple Silicon · Intel", icon: "apple" },
+  { os: "Linux", file: "InferBench .AppImage", note: "Portable, sin instalar", icon: "linux" },
+];
+
+const colorMap = {
+  indigo: "text-indigo-bright",
+  emerald: "text-emerald",
+  purple: "text-purple",
+  amber: "text-amber",
+  rose: "text-rose",
+};
+
+// SVG paths (inner markup) — inyectados con set:html
+const icons = {
+  bolt: '<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>',
+  cube: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+  stack: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>',
+  wand: '<path d="M15 4V2M15 10V8M9 4 8 3M9 4l1-1M6 9H4M6 9l-1 1M14.5 6.5 4 17l3 3 10.5-10.5a2.12 2.12 0 0 0-3-3Z"/>',
+  compress: '<path d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2M9 12h6"/>',
+  gauge: '<path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="m13.4 10.6 3.6-3.6"/><path d="M3.3 16A9 9 0 1 1 20.7 16"/>',
+  scale: '<path d="M12 3v18M6 8h12M8 8l-3 7a3 3 0 0 0 6 0l-3-7Zm8 0-3 7a3 3 0 0 0 6 0l-3-7Z"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+  windows: '<path d="M3 5.5 10.5 4.4v7.1H3V5.5ZM3 12.5h7.5v7.1L3 18.5v-6ZM11.5 4.2 21 3v8.5h-9.5V4.2ZM11.5 12.5H21V21l-9.5-1.3v-7.2Z"/>',
+  apple: '<path d="M16.4 12.8c0-2.2 1.8-3.3 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.6.8-3.3.8-.7 0-1.7-.8-2.8-.8-1.4 0-2.8.8-3.5 2.1-1.5 2.6-.4 6.5 1.1 8.6.7 1 1.5 2.2 2.6 2.1 1-.04 1.4-.7 2.7-.7s1.6.7 2.7.6c1.1-.02 1.8-1 2.5-2 .8-1.2 1.1-2.3 1.1-2.3-.02-.01-2.1-.8-2.1-3.2ZM14.3 6.2c.6-.7 1-1.7.9-2.7-.9.04-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6 1 .1 1.9-.5 2.5-1.2Z"/>',
+  linux: '<path d="M12 2c-2 0-3 1.8-3 4 0 1.3.2 2 .2 3 0 1-1.2 2-2.2 3.8C5.8 14.8 5 16.5 5 18c0 1.5 1 2 1 2s.3 1 1.5 1 1.8-.8 1.8-.8 1.2.6 2.7.6 2.7-.6 2.7-.6.6.8 1.8.8S18 20 18 20s1-.5 1-2c0-1.5-.8-3.2-2-5.2-1-1.8-2.2-2.8-2.2-3.8 0-1 .2-1.7.2-3 0-2.2-1-4-3-4Zm-1.3 5.2c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9Zm2.6 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9Z"/>',
+};
+---
+
+<Layout>
+  <!-- ===== NAV ===== -->
+  <header class="fixed top-0 inset-x-0 z-50">
+    <nav class="glass mx-auto mt-3 flex max-w-6xl items-center justify-between rounded-2xl px-4 py-2.5 sm:px-6">
+      <a href="#top" class="flex items-center gap-2.5 font-bold tracking-tight">
+        <span class="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo to-purple shadow-lg shadow-indigo/30">
+          <svg viewBox="0 0 24 24" class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>
+        </span>
+        <span class="text-lg">Infer<span class="text-indigo-bright">Bench</span></span>
+      </a>
+      <div class="hidden items-center gap-7 text-sm text-slate-300 md:flex">
+        <a href="#features" class="transition hover:text-white">Características</a>
+        <a href="#how" class="transition hover:text-white">Cómo funciona</a>
+        <a href="#models" class="transition hover:text-white">Modelos</a>
+        <a href="#download" class="transition hover:text-white">Descargar</a>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href={GITHUB} target="_blank" rel="noopener" class="hidden rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white sm:inline-flex">GitHub</a>
+        <a href="#download" class="rounded-lg bg-indigo px-3.5 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-bright">Descargar</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- ===== HERO ===== -->
+    <section class="relative pt-32 pb-20 sm:pt-40 sm:pb-28">
+      <div class="bg-grid absolute inset-0 -z-10"></div>
+      <div class="mx-auto max-w-6xl px-5">
+        <div class="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr]">
+          <!-- Copy -->
+          <div>
+            <a href={GITHUB} target="_blank" rel="noopener" class="reveal inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs text-slate-300">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald live-dot"></span>
+              Open-source · MIT · Sin coste
+            </a>
+            <h1 class="reveal mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+              Sabe qué LLM corre<br class="hidden sm:block" />
+              en tu GPU <span class="text-gradient">y a cuántos tok/s</span>.
+            </h1>
+            <p class="reveal mt-6 max-w-xl text-lg leading-relaxed text-slate-400">
+              InferBench descarga, arranca y <b class="text-slate-200">benchmarkea motores de inferencia LLM locales con un solo click</b>. Sin Docker obligatorio, sin tocar la terminal. Midiendo de verdad — nunca números inventados.
+            </p>
+            <div class="reveal mt-8 flex flex-wrap items-center gap-3">
+              <a href="#download" class="glow inline-flex items-center gap-2 rounded-xl bg-indigo px-5 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:bg-indigo-bright">
+                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+                Descargar gratis
+              </a>
+              <a href={GITHUB} target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-3 font-semibold text-slate-200 transition hover:-translate-y-0.5 hover:border-slate-500">
+                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.75.4-1.27.73-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.3-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.24 2.75.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.7 5.4-5.28 5.69.42.36.79 1.07.79 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg>
+                Ver en GitHub
+              </a>
+            </div>
+            <div class="reveal mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
+              <span>✓ Windows · macOS · Linux</span>
+              <span>✓ Sin Python ni Node</span>
+              <span>✓ 100% local y privado</span>
+            </div>
+          </div>
+
+          <!-- Demo animada: terminal de benchmark -->
+          <div class="reveal float">
+            <div class="glass overflow-hidden rounded-2xl shadow-2xl shadow-indigo/10">
+              <div class="flex items-center gap-2 border-b border-slate-800 bg-slate-900/70 px-4 py-3">
+                <span class="h-3 w-3 rounded-full bg-rose/80"></span>
+                <span class="h-3 w-3 rounded-full bg-amber/80"></span>
+                <span class="h-3 w-3 rounded-full bg-emerald/80"></span>
+                <span class="ml-2 text-xs text-slate-500">InferBench · Benchmark en vivo</span>
+                <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-emerald">
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald live-dot"></span> LIVE
+                </span>
+              </div>
+              <div class="p-5">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="font-semibold text-slate-200">Qwen3 30B-A3B · <span class="text-purple">MoE</span></div>
+                  <div class="rounded-md bg-slate-800 px-2 py-0.5 text-xs text-slate-400" id="quant-badge">Q4_K_M</div>
+                </div>
+                <div class="mt-1 text-xs text-slate-500">llama.cpp · nativo · ctx 8192 · -fa · -ctk q8_0</div>
+
+                <!-- métricas -->
+                <div class="mt-5 grid grid-cols-3 gap-3">
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                    <div class="text-[11px] uppercase tracking-wide text-slate-500">tok/s</div>
+                    <div class="mt-1 font-mono text-2xl font-bold text-emerald" id="m-tps">0.0</div>
+                  </div>
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                    <div class="text-[11px] uppercase tracking-wide text-slate-500">TTFT</div>
+                    <div class="mt-1 font-mono text-2xl font-bold text-indigo-bright" id="m-ttft">— <span class="text-sm">ms</span></div>
+                  </div>
+                  <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                    <div class="text-[11px] uppercase tracking-wide text-slate-500">VRAM</div>
+                    <div class="mt-1 font-mono text-2xl font-bold text-purple" id="m-vram">0.0 <span class="text-sm">GB</span></div>
+                  </div>
+                </div>
+
+                <!-- progreso -->
+                <div class="mt-4">
+                  <div class="flex justify-between text-xs text-slate-500">
+                    <span id="phase-label">Descargando GGUF…</span>
+                    <span id="phase-pct">0%</span>
+                  </div>
+                  <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div id="bar" class="h-full w-0 rounded-full bg-gradient-to-r from-indigo to-purple transition-[width] duration-200"></div>
+                  </div>
+                </div>
+
+                <!-- log estilo terminal -->
+                <div class="mt-4 h-28 overflow-hidden rounded-xl border border-slate-800 bg-[#05080f] p-3 font-mono text-[12px] leading-relaxed" id="log">
+                  <div class="text-slate-600">$ inferbench run --auto</div>
+                </div>
+              </div>
+            </div>
+            <p class="mt-2 text-center text-[11px] text-slate-600">Demo ilustrativa de la vista de benchmark.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== STATS BAND ===== -->
+    <section class="border-y border-slate-800/60 bg-slate-900/30">
+      <div class="mx-auto grid max-w-6xl grid-cols-2 gap-px px-5 py-10 sm:grid-cols-4">
+        {stats.map((s) => (
+          <div class="reveal text-center">
+            <div class="text-3xl font-extrabold text-gradient sm:text-4xl">{s.v}</div>
+            <div class="mt-1 text-sm text-slate-500">{s.l}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ===== HOW IT WORKS ===== -->
+    <section id="how" class="mx-auto max-w-6xl px-5 py-24">
+      <div class="reveal mx-auto max-w-2xl text-center">
+        <p class="text-sm font-semibold uppercase tracking-widest text-indigo-bright">El flujo</p>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">De "no tengo ni idea" a resultados reales en 5 pasos</h2>
+        <p class="mt-4 text-slate-400">Eliges modelo y cuantizaciones; InferBench se encarga del resto y mide de verdad.</p>
+      </div>
+      <div class="mt-14 grid gap-4 md:grid-cols-5">
+        {steps.map((s, i) => (
+          <div class="reveal glass relative rounded-2xl p-5" style={`transition-delay:${i * 80}ms`}>
+            <div class="font-mono text-sm text-indigo-bright">{s.n}</div>
+            <div class="mt-2 font-semibold text-white">{s.t}</div>
+            <div class="mt-1.5 text-sm text-slate-400">{s.d}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ===== FEATURES ===== -->
+    <section id="features" class="mx-auto max-w-6xl px-5 py-12">
+      <div class="reveal mx-auto max-w-2xl text-center">
+        <p class="text-sm font-semibold uppercase tracking-widest text-indigo-bright">Características</p>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Todo lo que necesitas para tunear inferencia local</h2>
+      </div>
+      <div class="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {features.map((f, i) => (
+          <div class="reveal glass group rounded-2xl p-6 transition-transform hover:-translate-y-1" style={`transition-delay:${(i % 3) * 70}ms`}>
+            <div class={`grid h-11 w-11 place-items-center rounded-xl bg-slate-800/70 ${colorMap[f.color]}`}>
+              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" set:html={icons[f.icon]} />
+            </div>
+            <h3 class="mt-4 font-semibold text-white">{f.title}</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">{f.desc}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- ===== MODELS / ENGINES ===== -->
+    <section id="models" class="mx-auto max-w-6xl px-5 py-24">
+      <div class="grid items-center gap-12 lg:grid-cols-2">
+        <div class="reveal">
+          <p class="text-sm font-semibold uppercase tracking-widest text-indigo-bright">Catálogo</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">124+ modelos verificados, cero inventados</h2>
+          <p class="mt-4 text-slate-400">
+            Cada entrada se comprueba contra Hugging Face antes de añadirse: el repo GGUF existe, la plantilla de archivo se deriva de los archivos reales publicados y se valida que el <code class="rounded bg-slate-800 px-1 text-emerald">Q4_K_M</code> resuelve.
+          </p>
+          <div class="mt-6 flex flex-wrap gap-2">
+            {["Llama 3.x","Qwen 2.5 / 3","Gemma 2 / 3","Mistral · Mixtral","Phi 2-4","DeepSeek R1","QwQ 32B","Visión (VL)","Código","MoE 30B-A3B","Granite","Command-R"].map((m) => (
+              <span class="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs text-slate-300">{m}</span>
+            ))}
+          </div>
+          <p class="mt-5 text-sm text-slate-500">Además escanea tus GGUF locales (LM Studio, Ollama, caché HF) y lee el recuento real de parámetros de la metadata, independiente del quant.</p>
+        </div>
+
+        <!-- Tabla de motores -->
+        <div class="reveal glass overflow-hidden rounded-2xl">
+          <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-300">Motores soportados</div>
+          <table class="w-full text-sm">
+            <thead class="text-xs text-slate-500">
+              <tr class="border-b border-slate-800/60">
+                <th class="px-5 py-2 text-left font-medium">Motor</th>
+                <th class="py-2 text-center font-medium">Tipo</th>
+                <th class="py-2 text-center font-medium">Nativo</th>
+                <th class="px-5 py-2 text-center font-medium">Auto-descarga</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-300">
+              {[
+                ["llama.cpp","local","✅","✅ HF GGUF"],
+                ["ollama","local","—","—"],
+                ["vLLM","local","—","—"],
+                ["SGLang","local","—","—"],
+                ["TGI","local","—","—"],
+                ["OpenAI / Anthropic","API","n/a","n/a"],
+                ["OpenRouter / NVIDIA","API","n/a","n/a"],
+              ].map((r, i) => (
+                <tr class={i % 2 ? "bg-slate-900/30" : ""}>
+                  <td class="px-5 py-2.5 font-medium">{r[0]}</td>
+                  <td class="py-2.5 text-center text-slate-400">{r[1]}</td>
+                  <td class="py-2.5 text-center">{r[2]}</td>
+                  <td class="px-5 py-2.5 text-center text-slate-400">{r[3]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div class="border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-500">llama.cpp es el motor de referencia (nativo completo). El resto está como stub o vía API con tu key.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== QUALITY ===== -->
+    <section class="border-y border-slate-800/60 bg-slate-900/30">
+      <div class="mx-auto max-w-6xl px-5 py-24">
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <p class="text-sm font-semibold uppercase tracking-widest text-indigo-bright">Calidad</p>
+          <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">No solo velocidad: también calidad, en 3 modos</h2>
+          <p class="mt-4 text-slate-400">TTFT y tok/s siempre son medidas reales. La nota de calidad (0-100) la eliges tú según tu equipo.</p>
+        </div>
+        <div class="mt-14 grid gap-4 md:grid-cols-3">
+          {[
+            { t: "Referencia (offline)", tag: "Por defecto", d: "Compara contra la respuesta de referencia: F1 de tokens recall-weighted, recall de números, stemming. Python puro, sin GPU/modelo/red.", c: "emerald" },
+            { t: "LLM-judge local", tag: "Opcional", d: "El propio motor puntúa sus respuestas con rúbrica 0-100. Fiable con modelos capaces (≥7-8B).", c: "indigo" },
+            { t: "LLM-judge por API", tag: "Más fiable", d: "Un modelo cloud OpenAI-compatible juzga de forma imparcial. Requiere API key (guardada en el almacén del SO).", c: "purple" },
+          ].map((q) => (
+            <div class="reveal glass rounded-2xl p-6">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-white">{q.t}</h3>
+                <span class={`rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] ${colorMap[q.c]}`}>{q.tag}</span>
+              </div>
+              <p class="mt-3 text-sm leading-relaxed text-slate-400">{q.d}</p>
+            </div>
+          ))}
+        </div>
+        <p class="reveal mx-auto mt-6 max-w-2xl text-center text-sm text-slate-500">El default es offline a propósito: funciona en cualquier ordenador, sin GPU ni API.</p>
+      </div>
+    </section>
+
+    <!-- ===== DOWNLOAD ===== -->
+    <section id="download" class="mx-auto max-w-6xl px-5 py-24">
+      <div class="reveal mx-auto max-w-2xl text-center">
+        <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Descárgalo gratis</h2>
+        <p class="mt-4 text-slate-400">Sin Python ni Node instalados: el backend va embebido como sidecar. Coge el instalador para tu sistema.</p>
+      </div>
+      <div class="mt-12 grid gap-4 sm:grid-cols-3">
+        {downloads.map((d) => (
+          <a href={RELEASES} target="_blank" rel="noopener" class="reveal glass group flex flex-col items-center rounded-2xl p-7 text-center transition-transform hover:-translate-y-1.5">
+            <span class="grid h-14 w-14 place-items-center rounded-2xl bg-slate-800/70 text-slate-200 transition group-hover:text-white">
+              <svg viewBox="0 0 24 24" class="h-7 w-7" fill="currentColor" set:html={icons[d.icon]} />
+            </span>
+            <div class="mt-4 text-lg font-semibold text-white">{d.os}</div>
+            <div class="mt-1 font-mono text-xs text-slate-500">{d.file}</div>
+            <div class="mt-3 text-sm text-slate-400">{d.note}</div>
+            <span class="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-indigo px-4 py-2 text-sm font-semibold text-white transition group-hover:bg-indigo-bright">
+              Descargar
+              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </span>
+          </a>
+        ))}
+      </div>
+      <p class="reveal mt-8 text-center text-sm text-slate-500">
+        ¿Prefieres compilarlo tú? El repo tiene las instrucciones de desarrollo. <a href={`${GITHUB}#instalación-desarrollo`} target="_blank" rel="noopener" class="text-indigo-bright underline-offset-4 hover:underline">Ver en GitHub →</a>
+      </p>
+    </section>
+
+    <!-- ===== CTA ===== -->
+    <section class="mx-auto max-w-6xl px-5 pb-24">
+      <div class="reveal glass relative overflow-hidden rounded-3xl px-6 py-14 text-center sm:px-12">
+        <div class="bg-grid absolute inset-0 -z-10 opacity-60"></div>
+        <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Deja de adivinar. <span class="text-gradient">Mídelo.</span></h2>
+        <p class="mx-auto mt-4 max-w-xl text-slate-400">Qué cuantización te entra, a cuántos tok/s va y qué motor es más rápido en tu hardware — respondido con datos reales, en local.</p>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a href={RELEASES} target="_blank" rel="noopener" class="glow inline-flex items-center gap-2 rounded-xl bg-indigo px-6 py-3 font-semibold text-white transition hover:-translate-y-0.5 hover:bg-indigo-bright">Descargar InferBench</a>
+          <a href={GITHUB} target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-6 py-3 font-semibold text-slate-200 transition hover:border-slate-500">⭐ Estrella en GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="border-t border-slate-800/60">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-slate-500 sm:flex-row">
+      <div class="flex items-center gap-2 font-semibold text-slate-300">
+        <span class="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-indigo to-purple">
+          <svg viewBox="0 0 24 24" class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>
+        </span>
+        InferBench
+      </div>
+      <p>MIT © 2026 Jonathan Martin · Hecho con datos reales, no inventados.</p>
+      <a href={GITHUB} target="_blank" rel="noopener" class="transition hover:text-white">GitHub ↗</a>
+    </div>
+  </footer>
+
+  <!-- ===== Animación de la demo ===== -->
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const log = $("log");
+    const bar = $("bar");
+    const phaseLabel = $("phase-label");
+    const phasePct = $("phase-pct");
+    const mTps = $("m-tps");
+    const mTtft = $("m-ttft");
+    const mVram = $("m-vram");
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    function addLog(text, cls = "text-slate-400") {
+      if (!log) return;
+      const line = document.createElement("div");
+      line.className = cls;
+      line.textContent = text;
+      log.appendChild(line);
+      while (log.childNodes.length > 6) log.removeChild(log.firstChild);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function ramp(setText, from, to, dur, fmt) {
+      const start = performance.now();
+      return new Promise((resolve) => {
+        function frame(now) {
+          const p = Math.min(1, (now - start) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          setText(fmt(from + (to - from) * eased));
+          if (p < 1) requestAnimationFrame(frame);
+          else resolve();
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    async function setPhase(label, target) {
+      if (phaseLabel) phaseLabel.textContent = label;
+      await ramp((v) => {
+        if (bar) bar.style.width = v + "%";
+        if (phasePct) phasePct.textContent = Math.round(v) + "%";
+      }, parseFloat((bar?.style.width || "0").replace("%", "")) || 0, target, 700, (v) => v);
+    }
+
+    async function loop() {
+      // reset
+      if (mTps) mTps.textContent = "0.0";
+      if (mTtft) mTtft.innerHTML = '— <span class="text-sm">ms</span>';
+      if (mVram) mVram.innerHTML = '0.0 <span class="text-sm">GB</span>';
+      if (bar) bar.style.width = "0%";
+      if (log) log.innerHTML = '<div class="text-slate-600">$ inferbench run --auto</div>';
+
+      addLog("→ Detectando hardware… RTX 4060 · 8 GB · 32 GB RAM", "text-slate-500");
+      await sleep(700);
+      addLog("→ Optimizando: Q4_K_M · ctx 8192 · MoE offload 27 capas", "text-indigo-bright");
+      await setPhase("Descargando binario llama.cpp…", 22);
+      addLog("✓ llama-server (CUDA) listo", "text-emerald");
+      await setPhase("Descargando GGUF desde Hugging Face…", 70);
+      addLog("✓ qwen3-30b-a3b-Q4_K_M.gguf · 18.6 GB", "text-emerald");
+      await setPhase("Arrancando motor…", 85);
+      await sleep(400);
+
+      // TTFT
+      if (mTtft) await ramp((v) => { mTtft.innerHTML = Math.round(v) + ' <span class="text-sm">ms</span>'; }, 0, 213, 600, (v) => v);
+      addLog("→ TTFT 213 ms · generando…", "text-slate-400");
+      await setPhase("Benchmark en vivo…", 100);
+
+      // tok/s + vram suben juntas
+      await Promise.all([
+        mTps ? ramp((v) => (mTps.textContent = v.toFixed(1)), 0, 47.3, 2200, (v) => v) : null,
+        mVram ? ramp((v) => { mVram.innerHTML = v.toFixed(1) + ' <span class="text-sm">GB</span>'; }, 0, 7.4, 2200, (v) => v) : null,
+      ]);
+      addLog("✓ run completada · 47.3 tok/s · calidad 87/100", "text-emerald");
+      if (phaseLabel) phaseLabel.textContent = "Completado ✓";
+
+      await sleep(3200);
+      loop();
+    }
+
+    // Arranca cuando la demo entra en viewport (respeta prefers-reduced-motion)
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) {
+      const demo = $("log");
+      const obs = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          obs.disconnect();
+          loop();
+        }
+      });
+      if (demo) obs.observe(demo);
+    } else {
+      // estado final estático
+      if (mTps) mTps.textContent = "47.3";
+      if (mTtft) mTtft.innerHTML = '213 <span class="text-sm">ms</span>';
+      if (mVram) mVram.innerHTML = '7.4 <span class="text-sm">GB</span>';
+      if (bar) bar.style.width = "100%";
+      if (phasePct) phasePct.textContent = "100%";
+      if (phaseLabel) phaseLabel.textContent = "Completado ✓";
+    }
+  </script>
+</Layout>

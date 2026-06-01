@@ -1,0 +1,15 @@
+# build output
+dist/
+# dependencies
+node_modules/
+# astro
+.astro/
+# logs
+npm-debug.log*
+# env
+.env
+.env.production
+# macOS
+.DS_Store
+# local preview config (rutas absolutas por máquina)
+.claude/

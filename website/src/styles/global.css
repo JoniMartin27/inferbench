@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* ---- Tema InferBench ---- */
+@theme {
+  --color-ink: #020617; /* slate-950 */
+  --color-ink-2: #0b1120;
+  --color-indigo: #6366f1;
+  --color-indigo-bright: #818cf8;
+  --color-emerald: #34d399;
+  --color-purple: #a855f7;
+  --color-amber: #fbbf24;
+  --color-rose: #fb7185;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: #e2e8f0; /* slate-200 */
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 10% 10%, rgba(168, 85, 247, 0.12), transparent 55%),
+    var(--color-ink);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grid sutil de fondo */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 80%);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 80%);
+}
+
+/* Texto con gradiente */
+.text-gradient {
+  background: linear-gradient(110deg, #fff 10%, var(--color-indigo-bright) 45%, var(--color-purple) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Tarjeta glass */
+.glass {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  backdrop-filter: blur(12px);
+}
+.glass:hover {
+  border-color: rgba(129, 140, 248, 0.4);
+}
+
+/* Resplandor de botón */
+.glow {
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4), 0 12px 40px -8px rgba(99, 102, 241, 0.55);
+}
+
+/* Scroll reveal */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Cursor parpadeante del terminal */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cursor {
+  animation: blink 1s step-end infinite;
+}
+
+/* Punto pulsante "live" */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.live-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+/* Flotación suave */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.float { animation: float 6s ease-in-out infinite; }
+
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+}
+
+/* Scrollbar oscura */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: var(--color-ink); }
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: #334155; }

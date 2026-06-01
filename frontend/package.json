@@ -31,6 +31,7 @@
   "build": {
     "appId": "com.inferbench.app",
     "productName": "InferBench",
+    "electronVersion": "33.4.11",
     "files": ["dist/**/*", "electron/**/*", "!electron/sidecar/**/*"],
     "extraResources": [
       {

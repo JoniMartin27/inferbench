@@ -2,6 +2,8 @@
   "name": "inferbench-frontend",
   "version": "0.1.0",
   "private": true,
+  "description": "InferBench desktop UI (Electron + React)",
+  "author": "Jonathan Martin",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -32,6 +34,7 @@
     "appId": "com.inferbench.app",
     "productName": "InferBench",
     "electronVersion": "33.4.11",
+    "npmRebuild": false,
     "files": ["dist/**/*", "electron/**/*", "!electron/sidecar/**/*"],
     "extraResources": [
       {

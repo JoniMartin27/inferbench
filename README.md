@@ -1,6 +1,26 @@
-# InferBench
+<h1 align="center">InferBench</h1>
 
-Panel de escritorio multiplataforma para **descargar, arrancar, medir y comparar** motores de inferencia LLM con un solo click. Sin Docker obligatorio, sin tocar la línea de comandos.
+<p align="center">
+  <b>Descarga, arranca y benchmarkea motores de inferencia LLM locales con un solo click.</b><br>
+  Sin Docker obligatorio. Sin tocar la línea de comandos. Tus datos nunca salen de tu máquina.
+</p>
+
+<p align="center">
+  <img alt="Plataformas" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2b2b2b">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white">
+  <a href="https://github.com/JoniMartin27/inferbench/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/JoniMartin27/inferbench?label=descargar"></a>
+</p>
+
+<p align="center">
+  <!-- Graba este GIF y déjalo en assets/demo.gif (ver assets/README.md). Es la pieza clave de conversión. -->
+  <img src="assets/demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
+</p>
+
+---
+
+¿Quieres correr LLMs en local pero no sabes **qué cuantización te entra en tu GPU**, ni **a cuántos tok/s va a ir**, ni **qué motor es más rápido para tu hardware**? InferBench lo responde por ti, midiendo de verdad — sin números inventados.
 
 ```
 Eliges modelo + cuantizaciones → InferBench:
@@ -10,6 +30,18 @@ Eliges modelo + cuantizaciones → InferBench:
   ④ ejecuta la suite de prompts midiendo TTFT, tok/s, VRAM, calidad
   ⑤ guarda los resultados y te deja compararlos lado a lado
 ```
+
+## Descargar
+
+Coge el instalador para tu sistema desde la [**página de Releases**](https://github.com/JoniMartin27/inferbench/releases) — no necesitas Python ni Node instalados, el backend va embebido como sidecar:
+
+| Sistema | Archivo |
+|---|---|
+| Windows | `InferBench Setup *.exe` (NSIS) |
+| macOS | `InferBench-*.dmg` |
+| Linux | `InferBench-*.AppImage` |
+
+> ¿Prefieres compilarlo tú? Salta a [Instalación (desarrollo)](#instalación-desarrollo).
 
 ---
 
@@ -327,6 +359,10 @@ Métricas medidas por prompt:
 
 ---
 
+## Contribuir
+
+Las PRs son bienvenidas. Los siguientes pasos con mayor impacto están en [Pendientes / siguientes pasos](#pendientes--siguientes-pasos) — los adaptadores reales para `ollama`/`vllm`/`sglang`/`tgi` y los tests de `compat.py`/`optimizer.py` son buenos primeros aportes. Abre un issue antes de un cambio grande para acordar el enfoque.
+
 ## Licencia
 
-MIT (pendiente de añadir LICENSE).
+[MIT](LICENSE) © 2026 Jonathan Martin.

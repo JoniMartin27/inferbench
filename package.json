@@ -2,7 +2,15 @@
   "name": "inferbench",
   "version": "0.1.0",
   "private": true,
-  "description": "Panel local de benchmarks LLM",
+  "description": "Panel de escritorio multiplataforma para descargar, arrancar y benchmarkear motores de inferencia LLM locales (llama.cpp nativo + APIs cloud) con un solo click.",
+  "author": "Jonathan Martin",
+  "license": "MIT",
+  "homepage": "https://github.com/JoniMartin27/inferbench",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoniMartin27/inferbench.git"
+  },
+  "keywords": ["llm", "benchmark", "llama-cpp", "gguf", "local-llm", "inference", "electron", "fastapi"],
   "workspaces": ["frontend"],
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",

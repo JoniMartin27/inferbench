@@ -696,7 +696,7 @@ function PowerByCompression({ engine, contextLen, selected }) {
 
 function JudgeField({ mode, onMode, api, onApi, running }) {
   const MODES = [
-    { id: "heuristic", label: "Heurística", hint: "Longitud + solapamiento con la referencia. Rápido y aproximado (no mide corrección real)." },
+    { id: "heuristic", label: "Referencia (offline)", hint: "Cobertura de la respuesta de referencia (datos clave, números) + no-degeneración. Sin GPU/API: funciona en cualquier PC. Aproximado en tareas abiertas (chat)." },
     { id: "self", label: "LLM-judge (motor local)", hint: "El propio modelo puntúa. Sin coste, pero solo fiable con modelos capaces (≥7-8B); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo)." },
     { id: "api", label: "LLM-judge (API externa)", hint: "Un modelo cloud OpenAI-compatible (p.ej. gpt-4o-mini) juzga. Lo más fiable e imparcial; requiere API key." },
   ];

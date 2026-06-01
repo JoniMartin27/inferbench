@@ -143,17 +143,93 @@ def _get_vram_used_gb() -> float:
         return 0.0
 
 
+# --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
+# Basado en la respuesta de referencia: F1 de tokens recall-weighted + recall exacto de
+# números (crítico en mates/razonamiento) + penalización de texto degenerado. Es la opción
+# por defecto porque funciona en todo tipo de ordenadores; el LLM-judge es la mejora opcional.
+
+_QUALITY_STOP = {
+    "de", "la", "el", "en", "y", "a", "los", "las", "un", "una", "que", "es", "por",
+    "con", "para", "su", "se", "del", "al", "lo", "como", "más", "o", "pero", "sus",
+    "le", "ya", "este", "esta", "son", "cada", "paga", "total",
+    "the", "a", "an", "of", "to", "and", "in", "is", "for", "on", "with", "as", "by",
+    "that", "this", "are", "be", "it", "or", "from", "at",
+}
+
+
+def _q_tokens(text: str) -> list[str]:
+    text = re.sub(r"[^\w\s.%+-]", " ", text.lower(), flags=re.UNICODE)
+    return [t for t in text.split() if t]
+
+
+def _q_content(toks: list[str]) -> list[str]:
+    # Stem por prefijo (6 chars): casa inflexiones ES/EN sin dependencias
+    # (energía/energético, regula/regulación, genera/generan). Números intactos.
+    out = []
+    for t in toks:
+        if t in _QUALITY_STOP or not (len(t) > 2 or t.isdigit()):
+            continue
+        out.append(t if t.isdigit() else t[:6])
+    return out
+
+
+def _q_numbers(text: str) -> set[str]:
+    out = set()
+    for r in re.findall(r"\d[\d.,]*", text):
+        digits = r.rstrip(".,").replace(".", "").replace(",", "")
+        if digits:
+            out.add(digits)
+    return out
+
+
+def _q_repetition_penalty(toks: list[str]) -> float:
+    if len(toks) < 12:
+        return 1.0
+    bg = list(zip(toks, toks[1:]))
+    if not bg:
+        return 1.0
+    uniq = len(set(bg)) / len(bg)
+    return 1.0 if uniq >= 0.6 else max(0.3, uniq / 0.6)
+
+
+def _q_fbeta(p: float, r: float, beta: float = 2.0) -> float:
+    b2 = beta * beta
+    denom = b2 * p + r
+    return (1 + b2) * p * r / denom if denom > 0 else 0.0
+
+
 def _quality_heuristic(output: str, ref: str) -> float:
-    if not output.strip():
+    """Calidad 0-100 offline. Con referencia: cobertura de datos clave (F1 recall-weighted
+    + números). Sin referencia: proxy por longitud y no-degeneración (cap 70, no afirma
+    corrección). Para juicio fiable de tareas abiertas, usar el LLM-judge."""
+    out = output.strip()
+    if not out:
         return 0.0
-    base = min(60.0, len(output) / 8.0)
-    if ref:
-        ref_words = {w.lower() for w in ref.split() if len(w) > 3}
-        if ref_words:
-            out_words = {w.lower() for w in output.split() if len(w) > 3}
-            overlap = len(ref_words & out_words) / len(ref_words)
-            base += overlap * 40.0
-    return min(100.0, round(base, 1))
+    out_toks = _q_tokens(out)
+    rep = _q_repetition_penalty(out_toks)
+
+    if not ref.strip():
+        # Sin referencia no se puede medir corrección sin un LLM: proxy honesto.
+        return round(min(70.0, 70.0 * min(1.0, len(out) / 300.0)) * rep, 1)
+
+    out_c, ref_c = _q_content(out_toks), _q_content(_q_tokens(ref))
+    out_set, ref_set = set(out_c), set(ref_c)
+    overlap = out_set & ref_set
+    recall = len(overlap) / len(ref_set) if ref_set else 0.0
+    precision = len(overlap) / len(out_set) if out_set else 0.0
+    f = _q_fbeta(precision, recall, beta=2.0)
+
+    bg_ref = set(zip(ref_c, ref_c[1:]))
+    bg_recall = len(set(zip(out_c, out_c[1:])) & bg_ref) / len(bg_ref) if bg_ref else 0.0
+
+    ref_nums = _q_numbers(ref)
+    if ref_nums:
+        num_recall = len(ref_nums & _q_numbers(out)) / len(ref_nums)
+        base = 0.5 * num_recall + 0.35 * f + 0.15 * bg_recall
+    else:
+        base = 0.8 * f + 0.2 * bg_recall
+
+    return round(min(100.0, 100.0 * base * rep), 1)
 
 
 # Rúbrica en inglés y en un único mensaje de usuario (sin `system`): probado contra

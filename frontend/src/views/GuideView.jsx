@@ -275,7 +275,7 @@ function Faq() {
     },
     {
       q: "¿Cómo de fiable es la calidad medida?",
-      a: "Hay tres modos (en Benchmark → Evaluación de calidad): heurística (longitud + overlap con la referencia, rápida y aproximada), LLM-judge local (el propio motor puntúa, sin coste) y LLM-judge por API externa (un modelo cloud imparcial juzga, lo más fiable). TTFT y tok/s siempre son medidas reales del motor.",
+      a: "Hay tres modos (en Benchmark → Evaluación de calidad). Por defecto: comparación offline con la respuesta de referencia (cobertura de datos clave y números + penalización de texto degenerado), que funciona en cualquier ordenador sin GPU ni API y es buena para tareas con respuesta esperada (razonamiento, código, resumen); en tareas abiertas (chat) es aproximada. Para juicio fiable de tareas abiertas: LLM-judge local (el propio motor puntúa, fiable solo con modelos ≥7-8B) o LLM-judge por API externa (modelo cloud imparcial, lo más fiable). TTFT y tok/s siempre son medidas reales del motor.",
     },
   ];
   return (

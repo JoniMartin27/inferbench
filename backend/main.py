@@ -71,6 +71,17 @@ app.include_router(optimize_router)
 
 
 if __name__ == "__main__":
+    import os
+    import sys
+
     import uvicorn
-    logger.info("Starting InferBench backend on http://localhost:7777")
-    uvicorn.run("main:app", host="127.0.0.1", port=7777, reload=True)
+
+    # Congelado por PyInstaller (sidecar de Electron): SIN reload. El reloader de uvicorn
+    # re-ejecutaría el exe en bucle infinito (fork-bomb) y nunca llegaría a servir.
+    frozen = getattr(sys, "frozen", False)
+    port = int(os.environ.get("INFERBENCH_PORT", "7777"))
+    logger.info(f"Starting InferBench backend on http://127.0.0.1:{port} (frozen={frozen})")
+    if frozen:
+        uvicorn.run(app, host="127.0.0.1", port=port)
+    else:
+        uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

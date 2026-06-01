@@ -8,7 +8,8 @@ try {
     if (-not (Test-Path .venv)) {
         uv venv --python 3.11
     }
-    & .\.venv\Scripts\python.exe -m pip install pyinstaller | Out-Null
+    # La venv de uv no trae pip: instalamos con `uv pip install`.
+    uv pip install pyinstaller
     & .\.venv\Scripts\pyinstaller.exe pyinstaller.spec --clean --noconfirm
 } finally {
     Pop-Location

@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:  # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write  # crear la Release y subir artefactos
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        shell: bash  # disponible en los 3 runners → cp/mkdir portables
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build sidecar (PyInstaller)
+        working-directory: backend
+        run: |
+          uv venv --python 3.11
+          uv pip install -e . pyinstaller
+          uv run pyinstaller pyinstaller.spec --clean --noconfirm
+
+      - name: Copy sidecar into Electron resources
+        run: |
+          mkdir -p frontend/electron/sidecar
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp backend/dist/inferbench-backend.exe frontend/electron/sidecar/
+          else
+            cp backend/dist/inferbench-backend frontend/electron/sidecar/
+            chmod +x frontend/electron/sidecar/inferbench-backend
+          fi
+
+      - name: Install JS deps (workspace)
+        run: npm ci
+
+      - name: Build installer (electron-builder)
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"  # sin firma de código (0.x)
+        run: npm run electron:build
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true  # se publica a mano tras comprobar los 3 binarios
+          files: |
+            frontend/release/*.exe
+            frontend/release/*.dmg
+            frontend/release/*.AppImage
+            frontend/release/latest*.yml

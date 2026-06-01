@@ -135,6 +135,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [judgeMode, setJudgeMode] = useState("heuristic"); // heuristic | self | api
+  const [judgeApi, setJudgeApi] = useState({ engine: "openai", model: "gpt-4o-mini", base_url: "", api_key: "" });
 
   useEffect(() => {
     api.listEngines().then(setEngines).catch(() => {});
@@ -238,6 +240,16 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
         api_key: apiKey || null,
         local_path: localModel ? localModel.path : null,
         engine_opts: engineOpts,
+        judge:
+          judgeMode === "api"
+            ? {
+                mode: "api",
+                engine: judgeApi.engine,
+                model: judgeApi.model,
+                base_url: judgeApi.base_url || null,
+                api_key: judgeApi.api_key || null,
+              }
+            : { mode: judgeMode },
         notes: localModel
           ? `local: ${localModel.filename} · ${compression}`
           : `compresión: ${compression}`,
@@ -491,6 +503,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 ))}
               </div>
             </Field>
+            <JudgeField
+              mode={judgeMode}
+              onMode={setJudgeMode}
+              api={judgeApi}
+              onApi={setJudgeApi}
+              running={!!running}
+            />
             {!engineIsApi && (
               <label className="flex items-center gap-2 text-xs text-slate-400">
                 <input
@@ -672,6 +691,50 @@ function PowerByCompression({ engine, contextLen, selected }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function JudgeField({ mode, onMode, api, onApi, running }) {
+  const MODES = [
+    { id: "heuristic", label: "Heurística", hint: "Longitud + solapamiento con la referencia. Rápido y aproximado (no mide corrección real)." },
+    { id: "self", label: "LLM-judge (motor local)", hint: "El propio modelo puntúa. Sin coste, pero solo fiable con modelos capaces (≥7-8B); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo)." },
+    { id: "api", label: "LLM-judge (API externa)", hint: "Un modelo cloud OpenAI-compatible (p.ej. gpt-4o-mini) juzga. Lo más fiable e imparcial; requiere API key." },
+  ];
+  const cur = MODES.find((m) => m.id === mode) || MODES[0];
+  return (
+    <Field label="Evaluación de calidad" hint={cur.hint}>
+      <Select value={mode} onChange={(e) => onMode(e.target.value)} disabled={running}>
+        {MODES.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+          </option>
+        ))}
+      </Select>
+      {mode === "api" && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <Input
+            placeholder="base_url (ej. https://api.openai.com)"
+            value={api.base_url}
+            onChange={(e) => onApi({ ...api, base_url: e.target.value })}
+            disabled={running}
+          />
+          <Input
+            placeholder="modelo juez (ej. gpt-4o-mini)"
+            value={api.model}
+            onChange={(e) => onApi({ ...api, model: e.target.value })}
+            disabled={running}
+          />
+          <Input
+            type="password"
+            placeholder="API key del juez"
+            value={api.api_key}
+            onChange={(e) => onApi({ ...api, api_key: e.target.value })}
+            disabled={running}
+            className="col-span-2"
+          />
+        </div>
+      )}
+    </Field>
   );
 }
 
@@ -1096,6 +1159,7 @@ function LogLine({ evt }) {
         {evt.prompt ? ` · ${evt.prompt}` : ""}
         {evt.ttft_ms ? ` · ${evt.ttft_ms}ms` : ""}
         {evt.score != null ? ` · score=${evt.score}` : ""}
+        {evt.method ? ` (${evt.method})` : ""}
       </div>
     );
   }

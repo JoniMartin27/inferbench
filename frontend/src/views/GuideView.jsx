@@ -275,7 +275,7 @@ function Faq() {
     },
     {
       q: "¿Cómo de fiable es la calidad medida?",
-      a: "MVP: heurística por longitud + overlap con respuesta de referencia. Para juicio fiable, sustituir por LLM-judge (pendiente). TTFT y tok/s sí son medidas reales del motor.",
+      a: "Hay tres modos (en Benchmark → Evaluación de calidad): heurística (longitud + overlap con la referencia, rápida y aproximada), LLM-judge local (el propio motor puntúa, sin coste) y LLM-judge por API externa (un modelo cloud imparcial juzga, lo más fiable). TTFT y tok/s siempre son medidas reales del motor.",
     },
   ];
   return (

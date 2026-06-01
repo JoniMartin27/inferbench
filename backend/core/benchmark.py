@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -84,6 +85,9 @@ class BenchmarkRequest(BaseModel):
     engine_opts: dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
     local_path: str | None = None  # ruta directa a un GGUF local (salta descarga HF)
+    # Evaluación de calidad. mode: "heuristic" (default) | "self" (el motor local se
+    # autoevalúa) | "api" (juez OpenAI-compatible externo). Para "api": base_url, model, api_key.
+    judge: dict[str, Any] = Field(default_factory=dict)
 
 
 def _extra_engine_args_static(opts: dict[str, Any]) -> list[str]:
@@ -150,6 +154,66 @@ def _quality_heuristic(output: str, ref: str) -> float:
             overlap = len(ref_words & out_words) / len(ref_words)
             base += overlap * 40.0
     return min(100.0, round(base, 1))
+
+
+# Rúbrica en inglés y en un único mensaje de usuario (sin `system`): probado contra
+# modelos pequeños (incluso 1B), este formato QUESTION/ANSWER + "Return only the score
+# as a number from 0 to 100" es el que discrimina de forma fiable bien/mal. Meter la
+# instrucción en `system` o reformularla hacía que modelos débiles colapsaran a 0.
+def _build_judge_user(prompt: Prompt, output: str) -> str:
+    parts = [
+        "You are grading an AI assistant answer. Give an integer quality score from "
+        "0 (terrible, empty or wrong) to 100 (perfect: correct, complete and relevant). "
+        "Be strict and penalize hallucinations and incompleteness.",
+        f"QUESTION: {prompt.prompt.strip()}",
+    ]
+    if prompt.reference:
+        parts.append(f"REFERENCE (a guide, not literal): {prompt.reference.strip()}")
+    parts.append(f"ANSWER: {output.strip()[:6000]}")
+    parts.append("Return only the score as a number from 0 to 100:")
+    return "\n".join(parts)
+
+
+def _parse_judge_score(content: str) -> float | None:
+    """Primer entero en rango 0-100 de la respuesta del juez (robusto ante texto extra)."""
+    for tok in re.findall(r"\d{1,3}", content or ""):
+        n = int(tok)
+        if 0 <= n <= 100:
+            return float(n)
+    return None
+
+
+async def _llm_judge_score(
+    prompt: Prompt,
+    output: str,
+    base_url: str,
+    model: str,
+    headers: dict[str, str],
+) -> float | None:
+    """Pide a un LLM-juez (endpoint OpenAI-compatible) que puntúe la respuesta 0-100.
+
+    Devuelve el score o None si falla / no devuelve número (el llamador cae a la heurística).
+    """
+    if not output.strip():
+        return 0.0
+    url = f"{base_url.rstrip('/')}/v1/chat/completions"
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": _build_judge_user(prompt, output)}],
+        "max_tokens": 16,
+        "temperature": 0.0,
+        "stream": False,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
+            resp = await client.post(url, json=body, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+    except Exception as e:
+        logger.warning(f"LLM-judge falló: {e}")
+        return None
+    return _parse_judge_score(content)
 
 
 async def _stream_openai_chat(
@@ -620,9 +684,25 @@ class BenchmarkRunner:
         gen_time = elapsed_total - (ttft_ms or 0) / 1000.0
         tps = token_count / gen_time if gen_time > 0 else 0.0
         output = "".join(text_chunks)
-        quality = _quality_heuristic(output, prompt.reference)
 
-        await self.emit({"type": "phase", "phase": "quality", "score": quality})
+        quality = _quality_heuristic(output, prompt.reference)
+        method = "heuristic"
+        judge_mode = (self.req.judge or {}).get("mode", "heuristic")
+        if judge_mode in ("self", "api") and output.strip() and not error:
+            j_url, j_model, j_headers = self._resolve_judge(headers, model_for_engine)
+            if j_url and j_model:
+                await self.emit({"type": "phase", "phase": "judging"})
+                score = await _llm_judge_score(prompt, output, j_url, j_model, j_headers)
+                if score is not None:
+                    quality = score
+                    method = f"llm:{judge_mode}"
+                else:
+                    await self.emit({
+                        "type": "log", "level": "warn",
+                        "text": f"{prompt.id}: LLM-judge no respondió, uso heurística",
+                    })
+
+        await self.emit({"type": "phase", "phase": "quality", "score": quality, "method": method})
 
         result = ResultPayload(
             model_id=self.req.model,
@@ -639,6 +719,26 @@ class BenchmarkRunner:
         )
         self.results.append(result)
         await self.emit({"type": "result", "result": result.model_dump()})
+
+    def _resolve_judge(
+        self, engine_headers: dict[str, str], model_for_engine: str
+    ) -> tuple[str | None, str | None, dict[str, str]]:
+        """Devuelve (base_url, model, headers) del juez según req.judge."""
+        j = self.req.judge or {}
+        mode = j.get("mode", "heuristic")
+        if mode == "self":
+            # El propio motor local se autoevalúa (offline, sin coste).
+            return self.base_url, model_for_engine, engine_headers
+        if mode == "api":
+            j_engine = j.get("engine")
+            base_url = j.get("base_url") or DEFAULT_BASE_URLS.get(j_engine or "")
+            model = j.get("model")
+            headers = {"Content-Type": "application/json"}
+            key = j.get("api_key")
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            return base_url, model, headers
+        return None, None, engine_headers
 
     def _record_error(self, prompt: Prompt, err: str) -> None:
         self.results.append(

@@ -4,6 +4,10 @@
   "private": true,
   "description": "InferBench desktop UI (Electron + React)",
   "author": "Jonathan Martin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoniMartin27/inferbench.git"
+  },
   "main": "electron/main.js",
   "type": "module",
   "scripts": {

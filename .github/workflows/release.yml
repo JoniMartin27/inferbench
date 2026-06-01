@@ -57,10 +57,13 @@ jobs:
 
       - name: Build installer (electron-builder)
         working-directory: frontend
+        # Sin GH_TOKEN aquí: no queremos que electron-builder publique (lo hace
+        # softprops más abajo). --publish never evita que intente detectar el repo.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"  # sin firma de código (0.x)
-        run: npm run electron:build
+        run: |
+          npm run build
+          npx electron-builder --publish never
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2

@@ -94,7 +94,7 @@ export default function HistoryView() {
                   />
                   <button
                     onClick={() => setSelected(r.id)}
-                    className="flex-1 text-left"
+                    className="min-w-0 flex-1 text-left"
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{opts.model || r.engine}</span>

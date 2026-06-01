@@ -16,7 +16,12 @@ REPO_FIX = {
     "llama-3-8b": ("bartowski/Meta-Llama-3-8B-Instruct-GGUF", "Meta-Llama-3-8B-Instruct-{quant}.gguf"),
     "ministral-8b": ("bartowski/Ministral-8B-Instruct-2410-HF-GGUF", "Ministral-8B-Instruct-2410-HF-{quant}.gguf"),
     "glm-4-9b": ("bartowski/glm-4-9b-chat-GGUF", "glm-4-9b-chat-{quant}.gguf"),
+    "phi-2": ("TheBloke/phi-2-GGUF", "phi-2.{quant}.gguf"),
+    "qwen2-vl-7b": ("bartowski/Qwen2-VL-7B-Instruct-GGUF", "Qwen2-VL-7B-Instruct-{quant}.gguf"),
 }
+
+# Modelos a descartar tras verificar (fuente dudosa / versión incorrecta)
+DROP = {"neural-chat-7b"}
 
 # n_layer por arquitectura (para los que el config.json estaba gated → None)
 NLAYER_FIX = {
@@ -34,6 +39,9 @@ added, skipped, errors = [], [], []
 for m in new:
     if m["id"] in existing_ids:
         skipped.append(m["id"])
+        continue
+    if m["id"] in DROP:
+        skipped.append(m["id"] + " (descartado)")
         continue
     if m["id"] in REPO_FIX:
         repo, tmpl = REPO_FIX[m["id"]]

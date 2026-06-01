@@ -1963,5 +1963,681 @@
     },
     "n_layer": 36,
     "size_base_gb": 16.4
+  },
+  {
+    "id": "qwen2-vl-7b",
+    "name": "Qwen2-VL 7B Instruct (Vision)",
+    "family": "qwen",
+    "params_b": 8.29,
+    "active_b": 8.29,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "vision",
+      "chat"
+    ],
+    "hf_repo": "Qwen/Qwen2-VL-7B-Instruct",
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2-VL-7B-Instruct-GGUF",
+      "file_template": "Qwen2-VL-7B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 16.6
+  },
+  {
+    "id": "qwen2-vl-2b",
+    "name": "Qwen2-VL 2B Instruct (Vision)",
+    "family": "qwen",
+    "params_b": 2.21,
+    "active_b": 2.21,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "vision",
+      "chat",
+      "small"
+    ],
+    "hf_repo": "Qwen/Qwen2-VL-2B-Instruct",
+    "hf_gguf": {
+      "repo": "bartowski/Qwen2-VL-2B-Instruct-GGUF",
+      "file_template": "Qwen2-VL-2B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 4.4
+  },
+  {
+    "id": "qwen2.5-vl-7b",
+    "name": "Qwen2.5-VL 7B Instruct (Vision)",
+    "family": "qwen",
+    "params_b": 8.29,
+    "active_b": 8.29,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 128000,
+    "license": "apache-2.0",
+    "tags": [
+      "vision",
+      "chat"
+    ],
+    "hf_repo": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "hf_gguf": {
+      "repo": "bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF",
+      "file_template": "Qwen_Qwen2.5-VL-7B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 16.6
+  },
+  {
+    "id": "minicpm-v-2.6",
+    "name": "MiniCPM-V 2.6 (Vision)",
+    "family": "minicpm",
+    "params_b": 8.1,
+    "active_b": 8.1,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "vision",
+      "chat"
+    ],
+    "hf_repo": "openbmb/MiniCPM-V-2_6",
+    "hf_gguf": {
+      "repo": "bartowski/MiniCPM-V-2_6-GGUF",
+      "file_template": "MiniCPM-V-2_6-{quant}.gguf"
+    },
+    "size_base_gb": 16.2
+  },
+  {
+    "id": "codellama-7b",
+    "name": "Code Llama 7B Instruct",
+    "family": "llama",
+    "params_b": 6.74,
+    "active_b": 6.74,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 16384,
+    "license": "llama2",
+    "tags": [
+      "code"
+    ],
+    "hf_repo": "codellama/CodeLlama-7b-Instruct-hf",
+    "ollama_tag": "codellama:7b",
+    "hf_gguf": {
+      "repo": "TheBloke/CodeLlama-7B-Instruct-GGUF",
+      "file_template": "codellama-7b-instruct.{quant}.gguf"
+    },
+    "size_base_gb": 13.5
+  },
+  {
+    "id": "codellama-13b",
+    "name": "Code Llama 13B Instruct",
+    "family": "llama",
+    "params_b": 13.0,
+    "active_b": 13.0,
+    "is_moe": false,
+    "n_layer": 40,
+    "max_ctx": 16384,
+    "license": "llama2",
+    "tags": [
+      "code"
+    ],
+    "hf_repo": "codellama/CodeLlama-13b-Instruct-hf",
+    "ollama_tag": "codellama:13b",
+    "hf_gguf": {
+      "repo": "TheBloke/CodeLlama-13B-Instruct-GGUF",
+      "file_template": "codellama-13b-instruct.{quant}.gguf"
+    },
+    "size_base_gb": 26.0
+  },
+  {
+    "id": "codellama-34b",
+    "name": "Code Llama 34B Instruct",
+    "family": "llama",
+    "params_b": 33.7,
+    "active_b": 33.7,
+    "is_moe": false,
+    "n_layer": 48,
+    "max_ctx": 16384,
+    "license": "llama2",
+    "tags": [
+      "code",
+      "large"
+    ],
+    "hf_repo": "codellama/CodeLlama-34b-Instruct-hf",
+    "ollama_tag": "codellama:34b",
+    "hf_gguf": {
+      "repo": "TheBloke/CodeLlama-34B-Instruct-GGUF",
+      "file_template": "codellama-34b-instruct.{quant}.gguf"
+    },
+    "size_base_gb": 67.4
+  },
+  {
+    "id": "codegemma-7b",
+    "name": "CodeGemma 7B Instruct",
+    "family": "gemma",
+    "params_b": 8.54,
+    "active_b": 8.54,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 8192,
+    "license": "gemma",
+    "tags": [
+      "code"
+    ],
+    "hf_repo": "google/codegemma-7b-it",
+    "ollama_tag": "codegemma:7b",
+    "hf_gguf": {
+      "repo": "bartowski/codegemma-7b-it-GGUF",
+      "file_template": "codegemma-7b-it-{quant}.gguf"
+    },
+    "size_base_gb": 17.1
+  },
+  {
+    "id": "deepseek-coder-6.7b",
+    "name": "DeepSeek Coder 6.7B Instruct",
+    "family": "deepseek",
+    "params_b": 6.74,
+    "active_b": 6.74,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 16384,
+    "license": "deepseek",
+    "tags": [
+      "code"
+    ],
+    "hf_repo": "deepseek-ai/deepseek-coder-6.7b-instruct",
+    "ollama_tag": "deepseek-coder:6.7b",
+    "hf_gguf": {
+      "repo": "TheBloke/deepseek-coder-6.7B-instruct-GGUF",
+      "file_template": "deepseek-coder-6.7b-instruct.{quant}.gguf"
+    },
+    "size_base_gb": 13.5
+  },
+  {
+    "id": "deepseek-coder-33b",
+    "name": "DeepSeek Coder 33B Instruct",
+    "family": "deepseek",
+    "params_b": 33.3,
+    "active_b": 33.3,
+    "is_moe": false,
+    "n_layer": 62,
+    "max_ctx": 16384,
+    "license": "deepseek",
+    "tags": [
+      "code",
+      "large"
+    ],
+    "hf_repo": "deepseek-ai/deepseek-coder-33b-instruct",
+    "ollama_tag": "deepseek-coder:33b",
+    "hf_gguf": {
+      "repo": "TheBloke/deepseek-coder-33B-instruct-GGUF",
+      "file_template": "deepseek-coder-33b-instruct.{quant}.gguf"
+    },
+    "size_base_gb": 66.6
+  },
+  {
+    "id": "stable-code-3b",
+    "name": "Stable Code 3B",
+    "family": "stablelm",
+    "params_b": 2.8,
+    "active_b": 2.8,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 16384,
+    "license": "stabilityai-community",
+    "tags": [
+      "code",
+      "small"
+    ],
+    "hf_repo": "stabilityai/stable-code-instruct-3b",
+    "hf_gguf": {
+      "repo": "bartowski/stable-code-instruct-3b-GGUF",
+      "file_template": "stable-code-instruct-3b-{quant}.gguf"
+    },
+    "size_base_gb": 5.6
+  },
+  {
+    "id": "granite-3.1-3b-a800m",
+    "name": "Granite 3.1 3B A800M (MoE, IBM)",
+    "family": "granite",
+    "params_b": 3.3,
+    "active_b": 0.8,
+    "is_moe": true,
+    "n_layer": 32,
+    "max_ctx": 131072,
+    "license": "apache-2.0",
+    "tags": [
+      "moe",
+      "small"
+    ],
+    "hf_repo": "ibm-granite/granite-3.1-3b-a800m-instruct",
+    "hf_gguf": {
+      "repo": "bartowski/granite-3.1-3b-a800m-instruct-GGUF",
+      "file_template": "granite-3.1-3b-a800m-instruct-{quant}.gguf"
+    },
+    "size_base_gb": 6.6
+  },
+  {
+    "id": "solar-10.7b",
+    "name": "SOLAR 10.7B Instruct",
+    "family": "solar",
+    "params_b": 10.7,
+    "active_b": 10.7,
+    "is_moe": false,
+    "n_layer": 48,
+    "max_ctx": 4096,
+    "license": "cc-by-nc-4.0",
+    "tags": [
+      "chat"
+    ],
+    "hf_repo": "upstage/SOLAR-10.7B-Instruct-v1.0",
+    "ollama_tag": "solar:10.7b",
+    "hf_gguf": {
+      "repo": "TheBloke/SOLAR-10.7B-Instruct-v1.0-GGUF",
+      "file_template": "solar-10.7b-instruct-v1.0.{quant}.gguf"
+    },
+    "size_base_gb": 21.4
+  },
+  {
+    "id": "openchat-3.6-8b",
+    "name": "OpenChat 3.6 8B",
+    "family": "llama",
+    "params_b": 8.03,
+    "active_b": 8.03,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 8192,
+    "license": "llama3",
+    "tags": [
+      "chat",
+      "tuned"
+    ],
+    "hf_repo": "openchat/openchat-3.6-8b-20240522",
+    "ollama_tag": "openchat:latest",
+    "hf_gguf": {
+      "repo": "bartowski/openchat-3.6-8b-20240522-GGUF",
+      "file_template": "openchat-3.6-8b-20240522-{quant}.gguf"
+    },
+    "size_base_gb": 16.1
+  },
+  {
+    "id": "starling-lm-7b",
+    "name": "Starling LM 7B beta",
+    "family": "mistral",
+    "params_b": 7.24,
+    "active_b": 7.24,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 8192,
+    "license": "apache-2.0",
+    "tags": [
+      "chat",
+      "tuned"
+    ],
+    "hf_repo": "Nexusflow/Starling-LM-7B-beta",
+    "ollama_tag": "starling-lm:7b",
+    "hf_gguf": {
+      "repo": "bartowski/Starling-LM-7B-beta-GGUF",
+      "file_template": "Starling-LM-7B-beta-{quant}.gguf"
+    },
+    "size_base_gb": 14.5
+  },
+  {
+    "id": "zephyr-7b-beta",
+    "name": "Zephyr 7B beta",
+    "family": "mistral",
+    "params_b": 7.24,
+    "active_b": 7.24,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 32768,
+    "license": "mit",
+    "tags": [
+      "chat",
+      "tuned"
+    ],
+    "hf_repo": "HuggingFaceH4/zephyr-7b-beta",
+    "ollama_tag": "zephyr:7b",
+    "hf_gguf": {
+      "repo": "TheBloke/zephyr-7B-beta-GGUF",
+      "file_template": "zephyr-7b-beta.{quant}.gguf"
+    },
+    "size_base_gb": 14.5
+  },
+  {
+    "id": "aya-23-8b",
+    "name": "Aya 23 8B (Cohere)",
+    "family": "command-r",
+    "params_b": 8.03,
+    "active_b": 8.03,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 8192,
+    "license": "cc-by-nc-4.0",
+    "tags": [
+      "chat",
+      "multilingual"
+    ],
+    "hf_repo": "CohereForAI/aya-23-8B",
+    "hf_gguf": {
+      "repo": "bartowski/aya-23-8B-GGUF",
+      "file_template": "aya-23-8B-{quant}.gguf"
+    },
+    "size_base_gb": 16.1
+  },
+  {
+    "id": "yi-1.5-6b",
+    "name": "Yi 1.5 6B Chat",
+    "family": "yi",
+    "params_b": 6.06,
+    "active_b": 6.06,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 4096,
+    "license": "apache-2.0",
+    "tags": [
+      "chat",
+      "small"
+    ],
+    "hf_repo": "01-ai/Yi-1.5-6B-Chat",
+    "hf_gguf": {
+      "repo": "bartowski/Yi-1.5-6B-Chat-GGUF",
+      "file_template": "Yi-1.5-6B-Chat-{quant}.gguf"
+    },
+    "size_base_gb": 12.1
+  },
+  {
+    "id": "internlm2.5-20b",
+    "name": "InternLM 2.5 20B Chat",
+    "family": "internlm",
+    "params_b": 19.9,
+    "active_b": 19.9,
+    "is_moe": false,
+    "n_layer": 48,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "chat"
+    ],
+    "hf_repo": "internlm/internlm2_5-20b-chat",
+    "hf_gguf": {
+      "repo": "bartowski/internlm2_5-20b-chat-GGUF",
+      "file_template": "internlm2_5-20b-chat-{quant}.gguf"
+    },
+    "size_base_gb": 39.8
+  },
+  {
+    "id": "internlm2.5-1.8b",
+    "name": "InternLM 2.5 1.8B Chat",
+    "family": "internlm",
+    "params_b": 1.89,
+    "active_b": 1.89,
+    "is_moe": false,
+    "n_layer": 24,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "chat",
+      "small"
+    ],
+    "hf_repo": "internlm/internlm2_5-1_8b-chat",
+    "hf_gguf": {
+      "repo": "bartowski/internlm2_5-1_8b-chat-GGUF",
+      "file_template": "internlm2_5-1_8b-chat-{quant}.gguf"
+    },
+    "size_base_gb": 3.8
+  },
+  {
+    "id": "phi-2",
+    "name": "Phi 2",
+    "family": "phi",
+    "params_b": 2.78,
+    "active_b": 2.78,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 2048,
+    "license": "mit",
+    "tags": [
+      "small"
+    ],
+    "hf_repo": "microsoft/phi-2",
+    "ollama_tag": "phi:2.7b",
+    "hf_gguf": {
+      "repo": "TheBloke/phi-2-GGUF",
+      "file_template": "phi-2.{quant}.gguf"
+    },
+    "size_base_gb": 5.6
+  },
+  {
+    "id": "stablelm-2-1.6b",
+    "name": "StableLM 2 1.6B",
+    "family": "stablelm",
+    "params_b": 1.64,
+    "active_b": 1.64,
+    "is_moe": false,
+    "n_layer": 24,
+    "max_ctx": 4096,
+    "license": "stabilityai-community",
+    "tags": [
+      "chat",
+      "small"
+    ],
+    "hf_repo": "stabilityai/stablelm-2-1_6b-chat",
+    "hf_gguf": {
+      "repo": "brittlewis12/stablelm-2-1_6b-chat-GGUF",
+      "file_template": "stablelm-2-1_6b-chat.{quant}.gguf"
+    },
+    "size_base_gb": 3.3
+  },
+  {
+    "id": "falcon3-1b",
+    "name": "Falcon3 1B Instruct",
+    "family": "falcon",
+    "params_b": 1.67,
+    "active_b": 1.67,
+    "is_moe": false,
+    "n_layer": 18,
+    "max_ctx": 8192,
+    "license": "falcon-llm",
+    "tags": [
+      "chat",
+      "tiny"
+    ],
+    "hf_repo": "tiiuae/Falcon3-1B-Instruct",
+    "ollama_tag": "falcon3:1b",
+    "hf_gguf": {
+      "repo": "bartowski/Falcon3-1B-Instruct-GGUF",
+      "file_template": "Falcon3-1B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 3.3
+  },
+  {
+    "id": "deepscaler-1.5b",
+    "name": "DeepScaleR 1.5B Preview (Reasoning)",
+    "family": "deepseek",
+    "params_b": 1.78,
+    "active_b": 1.78,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 131072,
+    "license": "mit",
+    "tags": [
+      "reasoning",
+      "small"
+    ],
+    "hf_repo": "agentica-org/DeepScaleR-1.5B-Preview",
+    "hf_gguf": {
+      "repo": "bartowski/agentica-org_DeepScaleR-1.5B-Preview-GGUF",
+      "file_template": "agentica-org_DeepScaleR-1.5B-Preview-{quant}.gguf"
+    },
+    "size_base_gb": 3.6
+  },
+  {
+    "id": "openthinker-7b",
+    "name": "OpenThinker 7B (Reasoning)",
+    "family": "qwen",
+    "params_b": 7.62,
+    "active_b": 7.62,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "reasoning"
+    ],
+    "hf_repo": "open-thoughts/OpenThinker-7B",
+    "hf_gguf": {
+      "repo": "bartowski/OpenThinker-7B-GGUF",
+      "file_template": "OpenThinker-7B-{quant}.gguf"
+    },
+    "size_base_gb": 15.2
+  },
+  {
+    "id": "sky-t1-32b",
+    "name": "Sky-T1 32B Preview (Reasoning)",
+    "family": "qwen",
+    "params_b": 32.8,
+    "active_b": 32.8,
+    "is_moe": false,
+    "n_layer": 64,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "reasoning",
+      "large"
+    ],
+    "hf_repo": "NovaSky-AI/Sky-T1-32B-Preview",
+    "hf_gguf": {
+      "repo": "bartowski/Sky-T1-32B-Preview-GGUF",
+      "file_template": "Sky-T1-32B-Preview-{quant}.gguf"
+    },
+    "size_base_gb": 65.6
+  },
+  {
+    "id": "marco-o1",
+    "name": "Marco-o1 7B (Reasoning)",
+    "family": "qwen",
+    "params_b": 7.62,
+    "active_b": 7.62,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 32768,
+    "license": "apache-2.0",
+    "tags": [
+      "reasoning"
+    ],
+    "hf_repo": "AIDC-AI/Marco-o1",
+    "hf_gguf": {
+      "repo": "bartowski/Marco-o1-GGUF",
+      "file_template": "Marco-o1-{quant}.gguf"
+    },
+    "size_base_gb": 15.2
+  },
+  {
+    "id": "tulu-3-8b",
+    "name": "Llama 3.1 Tulu 3 8B (AllenAI)",
+    "family": "llama",
+    "params_b": 8.03,
+    "active_b": 8.03,
+    "is_moe": false,
+    "n_layer": 32,
+    "max_ctx": 131072,
+    "license": "llama3",
+    "tags": [
+      "chat",
+      "tuned"
+    ],
+    "hf_repo": "allenai/Llama-3.1-Tulu-3-8B",
+    "hf_gguf": {
+      "repo": "bartowski/Llama-3.1-Tulu-3-8B-GGUF",
+      "file_template": "Llama-3.1-Tulu-3-8B-{quant}.gguf"
+    },
+    "size_base_gb": 16.1
+  },
+  {
+    "id": "hermes-3-llama3.2-3b",
+    "name": "Hermes 3 (Llama 3.2 3B)",
+    "family": "llama",
+    "params_b": 3.21,
+    "active_b": 3.21,
+    "is_moe": false,
+    "n_layer": 28,
+    "max_ctx": 131072,
+    "license": "llama3",
+    "tags": [
+      "chat",
+      "tuned",
+      "small"
+    ],
+    "hf_repo": "NousResearch/Hermes-3-Llama-3.2-3B",
+    "hf_gguf": {
+      "repo": "bartowski/Hermes-3-Llama-3.2-3B-GGUF",
+      "file_template": "Hermes-3-Llama-3.2-3B-{quant}.gguf"
+    },
+    "size_base_gb": 6.4
+  },
+  {
+    "id": "granite-3.0-8b",
+    "name": "Granite 3.0 8B Instruct (IBM)",
+    "family": "granite",
+    "params_b": 8.17,
+    "active_b": 8.17,
+    "is_moe": false,
+    "n_layer": 40,
+    "max_ctx": 4096,
+    "license": "apache-2.0",
+    "tags": [
+      "chat"
+    ],
+    "hf_repo": "ibm-granite/granite-3.0-8b-instruct",
+    "hf_gguf": {
+      "repo": "bartowski/granite-3.0-8b-instruct-GGUF",
+      "file_template": "granite-3.0-8b-instruct-{quant}.gguf"
+    },
+    "size_base_gb": 16.3
+  },
+  {
+    "id": "nemotron-51b",
+    "name": "Llama 3.1 Nemotron 51B (NVIDIA)",
+    "family": "nemotron",
+    "params_b": 51.5,
+    "active_b": 51.5,
+    "is_moe": false,
+    "n_layer": 80,
+    "max_ctx": 131072,
+    "license": "llama3",
+    "tags": [
+      "chat",
+      "large"
+    ],
+    "hf_repo": "nvidia/Llama-3_1-Nemotron-51B-Instruct",
+    "hf_gguf": {
+      "repo": "bartowski/Llama-3_1-Nemotron-51B-Instruct-GGUF",
+      "file_template": "Llama-3_1-Nemotron-51B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 103.0
+  },
+  {
+    "id": "exaone-3.5-32b",
+    "name": "EXAONE 3.5 32B Instruct",
+    "family": "exaone",
+    "params_b": 32.0,
+    "active_b": 32.0,
+    "is_moe": false,
+    "n_layer": 64,
+    "max_ctx": 32768,
+    "license": "exaone",
+    "tags": [
+      "chat",
+      "large"
+    ],
+    "hf_repo": "LGAI-EXAONE/EXAONE-3.5-32B-Instruct",
+    "hf_gguf": {
+      "repo": "bartowski/EXAONE-3.5-32B-Instruct-GGUF",
+      "file_template": "EXAONE-3.5-32B-Instruct-{quant}.gguf"
+    },
+    "size_base_gb": 64.0
   }
 ]

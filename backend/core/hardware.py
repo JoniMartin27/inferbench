@@ -5,6 +5,7 @@ import platform
 import re
 import shutil
 import subprocess
+from functools import lru_cache
 from typing import Literal
 
 import psutil
@@ -163,17 +164,29 @@ def _detect_apple() -> list[GPUInfo]:
         return []
 
 
-def detect_hardware() -> HardwareInfo:
-    """Detecta CPU, RAM y todas las GPUs disponibles."""
-    cpu = _detect_cpu()
-    vm = psutil.virtual_memory()
-    ram_gb = round(vm.total / (1024**3), 2)
-    ram_avail = round(vm.available / (1024**3), 2)
+@lru_cache(maxsize=1)
+def _detect_static() -> tuple[CPUInfo, tuple[GPUInfo, ...]]:
+    """Detección cara (subprocesos nvidia-smi/wmi/system_profiler) cacheada.
 
+    CPU y GPUs no cambian durante la sesión; sondearlas en cada request añadía
+    ~30ms a /models/compat/all, /optimize/recommendations, dashboard, etc.
+    La RAM disponible SÍ es dinámica y se recalcula aparte (psutil, ~0ms).
+    """
+    cpu = _detect_cpu()
     gpus: list[GPUInfo] = []
     gpus.extend(_detect_nvidia())
     gpus.extend(_detect_amd())
     gpus.extend(_detect_apple())
+    return cpu, tuple(gpus)
+
+
+def detect_hardware() -> HardwareInfo:
+    """Detecta CPU, RAM y todas las GPUs disponibles (CPU/GPU cacheados)."""
+    cpu, gpus_t = _detect_static()
+    gpus = list(gpus_t)
+    vm = psutil.virtual_memory()
+    ram_gb = round(vm.total / (1024**3), 2)
+    ram_avail = round(vm.available / (1024**3), 2)
 
     primary_vram = gpus[0].vram_gb if gpus else 0.0
 

@@ -96,7 +96,7 @@ async def optimize(req: OptimizeRequest) -> OptimizeResponse:
 
 
 @router.get("/optimize/recommendations", response_model=list[RecommendationRow])
-async def recommendations(top: int = Query(15, ge=1, le=53)) -> list[RecommendationRow]:
+async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[RecommendationRow]:
     """Para cada modelo del catálogo, encuentra el mejor motor+cuantización+KV que cabe en el hardware
     actual. Devuelve los top N modelos más potentes y ejecutables, ordenados por calidad de status
     y luego por número de parámetros.

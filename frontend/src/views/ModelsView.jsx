@@ -61,17 +61,22 @@ export default function ModelsView({ onNavigate }) {
 
   useEffect(() => {
     setLoading(true);
-    api
-      .modelCompat({
-        engine,
-        quant,
-        kvCache,
-        contextLen,
-        moeOffload: moeOffload ? Number(moeOffload) : null,
-      })
-      .then(setRows)
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
+    // Debounce: al teclear en contexto/MoE (inputs numéricos) no disparamos una
+    // petición por pulsación; esperamos 250ms a que el usuario pare.
+    const t = setTimeout(() => {
+      api
+        .modelCompat({
+          engine,
+          quant,
+          kvCache,
+          contextLen,
+          moeOffload: moeOffload ? Number(moeOffload) : null,
+        })
+        .then(setRows)
+        .catch(() => setRows([]))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(t);
   }, [engine, quant, kvCache, contextLen, moeOffload]);
 
   const isApi = engines.find((e) => e.meta.id === engine)?.meta.type === "api";

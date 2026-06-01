@@ -42,7 +42,7 @@ const features = [
     desc: "5 presets de Calidad a Extremo, con qué hace cada uno y una tabla de los modelos más potentes que caben con cada nivel en TU GPU.",
   },
   {
-    icon: "gauge",
+    icon: "activity",
     color: "rose",
     title: "Métricas reales en vivo",
     desc: "TTFT, tok/s, pico de VRAM y RAM medidos de verdad vía SSE. Nada simulado: si un motor falla, te lo dice.",
@@ -98,7 +98,7 @@ const icons = {
   stack: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>',
   wand: '<path d="M15 4V2M15 10V8M9 4 8 3M9 4l1-1M6 9H4M6 9l-1 1M14.5 6.5 4 17l3 3 10.5-10.5a2.12 2.12 0 0 0-3-3Z"/>',
   compress: '<path d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2M9 12h6"/>',
-  gauge: '<path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="m13.4 10.6 3.6-3.6"/><path d="M3.3 16A9 9 0 1 1 20.7 16"/>',
+  activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   scale: '<path d="M12 3v18M6 8h12M8 8l-3 7a3 3 0 0 0 6 0l-3-7Zm8 0-3 7a3 3 0 0 0 6 0l-3-7Z"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
   windows: '<path d="M3 5.5 10.5 4.4v7.1H3V5.5ZM3 12.5h7.5v7.1L3 18.5v-6ZM11.5 4.2 21 3v8.5h-9.5V4.2ZM11.5 12.5H21V21l-9.5-1.3v-7.2Z"/>',
@@ -113,7 +113,7 @@ const icons = {
     <nav class="glass mx-auto mt-3 flex max-w-6xl items-center justify-between rounded-2xl px-4 py-2.5 sm:px-6">
       <a href="#top" class="flex items-center gap-2.5 font-bold tracking-tight">
         <span class="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo to-purple shadow-lg shadow-indigo/30">
-          <svg viewBox="0 0 24 24" class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>
+          <svg viewBox="0 0 24 24" class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5a8.5 8.5 0 1 1 16 0"/><path d="M12 16.5 17 9.5"/><circle cx="12" cy="16.5" r="1.9" fill="currentColor" stroke="none"/></svg>
         </span>
         <span class="text-lg">Infer<span class="text-indigo-bright">Bench</span></span>
       </a>
@@ -399,7 +399,7 @@ const icons = {
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-slate-500 sm:flex-row">
       <div class="flex items-center gap-2 font-semibold text-slate-300">
         <span class="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-indigo to-purple">
-          <svg viewBox="0 0 24 24" class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-4 3 3 4-6"/></svg>
+          <svg viewBox="0 0 24 24" class="h-4 w-4 text-white" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16.5a8.5 8.5 0 1 1 16 0"/><path d="M12 16.5 17 9.5"/><circle cx="12" cy="16.5" r="1.9" fill="currentColor" stroke="none"/></svg>
         </span>
         InferBench
       </div>

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Inter, Segoe UI, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020617"/>
+      <stop offset="1" stop-color="#0b1120"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.82" cy="0.05" r="0.6">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.08" cy="0.95" r="0.6">
+      <stop offset="0" stop-color="#a855f7" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="logo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="grad-text" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#a855f7"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow1)"/>
+  <rect width="1200" height="630" fill="url(#glow2)"/>
+
+  <!-- grid sutil -->
+  <g stroke="#94a3b8" stroke-opacity="0.05" stroke-width="1">
+    <path d="M0 80H1200 M0 160H1200 M0 240H1200 M0 320H1200 M0 400H1200 M0 480H1200 M0 560H1200"/>
+    <path d="M80 0V630 M160 0V630 M240 0V630 M320 0V630 M400 0V630 M480 0V630 M560 0V630 M640 0V630 M720 0V630 M800 0V630 M880 0V630 M960 0V630 M1040 0V630 M1120 0V630"/>
+  </g>
+
+  <!-- logo (velocímetro) + wordmark -->
+  <g transform="translate(80, 66)">
+    <rect width="68" height="68" rx="18" fill="url(#logo)"/>
+    <g transform="translate(7,8) scale(2.25)" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 16.5a8.5 8.5 0 1 1 16 0"/>
+      <path d="M12 16.5 17 9.5"/>
+    </g>
+    <circle cx="34" cy="45.5" r="4.6" fill="#ffffff"/>
+    <text x="88" y="46" font-size="36" font-weight="800" fill="#ffffff">Infer<tspan fill="#818cf8">Bench</tspan></text>
+  </g>
+
+  <!-- badge -->
+  <g transform="translate(80, 168)">
+    <rect width="350" height="42" rx="21" fill="#0f172a" stroke="#334155"/>
+    <circle cx="25" cy="21" r="5" fill="#34d399"/>
+    <text x="42" y="28" font-size="17" fill="#cbd5e1" font-weight="500">Open-source · MIT · Gratis y 100% local</text>
+  </g>
+
+  <!-- headline -->
+  <text x="78" y="296" font-size="62" font-weight="800" fill="#ffffff">Benchmarkea LLMs</text>
+  <text x="78" y="370" font-size="62" font-weight="800" fill="url(#grad-text)">locales con un click.</text>
+
+  <!-- subtitle -->
+  <text x="80" y="426" font-size="25" fill="#94a3b8" font-weight="400">Qué cuantización te entra, a cuántos tok/s va y qué</text>
+  <text x="80" y="460" font-size="25" fill="#94a3b8" font-weight="400">motor es más rápido en tu GPU. Medido de verdad.</text>
+
+  <!-- métricas como mini-tarjetas (estilo app) -->
+  <g transform="translate(80, 496)" font-family="JetBrains Mono, ui-monospace, monospace">
+    <!-- tok/s -->
+    <g>
+      <rect width="172" height="92" rx="16" fill="#0f172a" fill-opacity="0.7" stroke="#1e293b"/>
+      <rect x="16" y="16" width="26" height="4" rx="2" fill="#34d399"/>
+      <text x="16" y="46" font-size="15" fill="#64748b">tok/s</text>
+      <text x="16" y="76" font-size="32" font-weight="700" fill="#34d399">47.3</text>
+    </g>
+    <!-- TTFT -->
+    <g transform="translate(188,0)">
+      <rect width="172" height="92" rx="16" fill="#0f172a" fill-opacity="0.7" stroke="#1e293b"/>
+      <rect x="16" y="16" width="26" height="4" rx="2" fill="#818cf8"/>
+      <text x="16" y="46" font-size="15" fill="#64748b">TTFT</text>
+      <text x="16" y="76" font-size="32" font-weight="700" fill="#818cf8">213 ms</text>
+    </g>
+    <!-- VRAM -->
+    <g transform="translate(376,0)">
+      <rect width="172" height="92" rx="16" fill="#0f172a" fill-opacity="0.7" stroke="#1e293b"/>
+      <rect x="16" y="16" width="26" height="4" rx="2" fill="#a855f7"/>
+      <text x="16" y="46" font-size="15" fill="#64748b">VRAM</text>
+      <text x="16" y="76" font-size="32" font-weight="700" fill="#a855f7">7.4 GB</text>
+    </g>
+  </g>
+
+  <!-- panel derecha: 124+ modelos -->
+  <g transform="translate(744, 150)">
+    <rect width="376" height="334" rx="24" fill="#0f172a" fill-opacity="0.6" stroke="#1e293b"/>
+    <text x="34" y="92" font-size="84" font-weight="800" fill="url(#grad-text)">124+</text>
+    <text x="36" y="124" font-size="19" fill="#94a3b8">modelos verificados contra HF</text>
+
+    <g transform="translate(36,168)" font-size="17" fill="#cbd5e1">
+      <circle cx="6" cy="-5" r="4" fill="#6366f1"/><text x="22" y="0">Llama · Qwen · Gemma · Mistral</text>
+      <circle cx="6" cy="33" r="4" fill="#a855f7"/><text x="22" y="38">Phi · DeepSeek · QwQ · MoE</text>
+      <circle cx="6" cy="71" r="4" fill="#34d399"/><text x="22" y="76">Visión · Código · Reasoning</text>
+    </g>
+
+    <line x1="36" y1="268" x2="340" y2="268" stroke="#1e293b"/>
+    <text x="36" y="300" font-size="16" fill="#64748b">⚡ Auto-bootstrap · Windows · macOS · Linux</text>
+  </g>
+</svg>

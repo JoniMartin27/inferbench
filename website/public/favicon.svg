@@ -6,6 +6,11 @@
     </linearGradient>
   </defs>
   <rect width="32" height="32" rx="8" fill="url(#g)"/>
-  <path d="M7 7v18h18" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="m11 19 3.5-5 3.5 3.5 5-7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(4,4.5)" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <!-- arco del velocímetro -->
+    <path d="M4 16.5a8.5 8.5 0 1 1 16 0"/>
+    <!-- aguja apuntando a tope -->
+    <path d="M12 16.5 17 9.5"/>
+  </g>
+  <circle cx="16" cy="21" r="2.1" fill="#fff"/>
 </svg>

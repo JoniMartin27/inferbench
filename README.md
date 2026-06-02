@@ -85,16 +85,18 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 | Motor | Tipo | Modo nativo | Modo Docker | Auto-descarga modelo |
 |-------|------|-------------|-------------|----------------------|
 | `llamacpp` | local | ✅ binarios oficiales | ✅ | ✅ HuggingFace GGUF |
-| `ollama` | local | — | ⚠️ stub | — |
-| `vllm` | local | — | ⚠️ stub | — |
-| `sglang` | local | — | ⚠️ stub | — |
-| `tgi` | local | — | ⚠️ stub | — |
+| `ollama` | local | ✅ daemon Ollama | ✅ | ✅ registro Ollama |
+| `vllm` | local | — | ✅ (GPU NVIDIA) | ✅ HF (en contenedor) |
+| `sglang` | local | — | ✅ (GPU NVIDIA) | ✅ HF (en contenedor) |
+| `tgi` | local | — | ✅ (GPU NVIDIA) | ✅ HF (en contenedor) |
 | `openai` | API | n/a | n/a | n/a |
 | `anthropic` | API | n/a | n/a | n/a |
 | `openrouter` | API | n/a | n/a | n/a |
 | `nvidia` | API | n/a | n/a | n/a |
 
-> "Stub" = aparece en la lista pero no implementado todavía. Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local).
+> Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local).
+>
+> **Estado de verificación:** `llamacpp`, `vllm`, `sglang` y `tgi` verificados end-to-end (arranque → inferencia → parada) en GPU NVIDIA (RTX 3070). `ollama` tiene el adaptador completo (daemon + pull desde su registro); pendiente de verificación E2E (requiere Ollama instalado).
 
 ---
 

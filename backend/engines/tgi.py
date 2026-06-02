@@ -28,7 +28,7 @@ class TgiEngine(Engine):
         if hf_id:
             cmd += ["--model-id", hf_id]
 
-        cmd += ["--port", "80", "--hostname", "0.0.0.0"]
+        cmd += ["--port", str(req.port or self.meta.default_port), "--hostname", "0.0.0.0"]
 
         if opts.get("contextLen"):
             cmd += ["--max-input-tokens", str(int(opts["contextLen"]))]

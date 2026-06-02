@@ -428,7 +428,13 @@ class BenchmarkRunner:
             if self._owns_engine and (not self.req.keep_alive or self.cancelled.is_set()):
                 try:
                     await self.emit({"type": "log", "level": "info", "text": "Deteniendo motor…"})
-                    native_runtime.stop(self.req.engine)
+                    # engine.stop() cubre ambos runtimes: nativo (llamacpp/ollama) y Docker
+                    # (vllm/sglang/tgi). Usar native_runtime.stop directamente dejaba el
+                    # contenedor Docker corriendo y ocupando la GPU tras el benchmark.
+                    from engines import registry
+
+                    registry.get_engine(self.req.engine).stop()
+                    native_runtime.set_loaded(self.req.engine, None)
                 except Exception:
                     pass
             await self.queue.put({"type": "_eof"})

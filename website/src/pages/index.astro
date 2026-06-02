@@ -299,29 +299,31 @@ const icons = {
                 <th class="px-5 py-2 text-left font-medium">Motor</th>
                 <th class="py-2 text-center font-medium">Tipo</th>
                 <th class="py-2 text-center font-medium">Nativo</th>
+                <th class="py-2 text-center font-medium">Docker</th>
                 <th class="px-5 py-2 text-center font-medium">Auto-descarga</th>
               </tr>
             </thead>
             <tbody class="text-slate-300">
               {[
-                ["llama.cpp","local","✅","✅ HF GGUF"],
-                ["ollama","local","—","—"],
-                ["vLLM","local","—","—"],
-                ["SGLang","local","—","—"],
-                ["TGI","local","—","—"],
-                ["OpenAI / Anthropic","API","n/a","n/a"],
-                ["OpenRouter / NVIDIA","API","n/a","n/a"],
+                ["llama.cpp","local","✅","✅","✅ HF GGUF"],
+                ["ollama","local","✅","✅","✅ registro"],
+                ["vLLM","local","—","✅ GPU","✅ HF"],
+                ["SGLang","local","—","✅ GPU","✅ HF"],
+                ["TGI","local","—","✅ GPU","✅ HF"],
+                ["OpenAI / Anthropic","API","n/a","n/a","n/a"],
+                ["OpenRouter / NVIDIA","API","n/a","n/a","n/a"],
               ].map((r, i) => (
                 <tr class={i % 2 ? "bg-slate-900/30" : ""}>
                   <td class="px-5 py-2.5 font-medium">{r[0]}</td>
                   <td class="py-2.5 text-center text-slate-400">{r[1]}</td>
                   <td class="py-2.5 text-center">{r[2]}</td>
-                  <td class="px-5 py-2.5 text-center text-slate-400">{r[3]}</td>
+                  <td class="py-2.5 text-center">{r[3]}</td>
+                  <td class="px-5 py-2.5 text-center text-slate-400">{r[4]}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div class="border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-500">llama.cpp es el motor de referencia (nativo completo). El resto está como stub o vía API con tu key.</div>
+          <div class="border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-500">Todos los motores locales tienen adaptador completo. llama.cpp/ollama corren nativos (sin Docker); vLLM/SGLang/TGI vía Docker + GPU NVIDIA, descargando el modelo de HuggingFace en el contenedor. Las APIs cloud usan tu key (sólo sampling).</div>
         </div>
       </div>
     </section>

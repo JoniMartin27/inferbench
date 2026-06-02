@@ -18,6 +18,11 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Opta por Node.js 24 en los runtimes de las actions (silencia el aviso de
+# deprecación de Node 20; ver github.blog/changelog/2025-09-19-...)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     runs-on: ubuntu-latest

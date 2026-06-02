@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jonimartin27.github.io/inferbench/sitemap.xml

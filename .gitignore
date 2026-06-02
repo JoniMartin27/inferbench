@@ -35,3 +35,6 @@ Thumbs.db
 .env
 .env.local
 *.key
+
+# driver de la skill run-inferbench-backend
+backend/_driver_uvicorn.log

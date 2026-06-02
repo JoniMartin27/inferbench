@@ -82,8 +82,8 @@ export default function GuideView({ onNavigate }) {
       detail:
         localCount > 0
           ? `${localCount} GGUF(s) detectados en tu disco — InferBench escanea LM Studio, HF cache, llama.cpp y más`
-          : "Aún no tienes GGUFs en disco. El primer benchmark descargará uno desde Hugging Face.",
-      why: "Puedes usar cualquier GGUF que ya tengas o descargar del catálogo. Compatibilidad calculada en tiempo real con tu hardware.",
+          : "Catálogo de 124+ modelos verificados (Llama, Qwen, Gemma 3, DeepSeek, visión, código…) listos para auto-descargar desde Hugging Face.",
+      why: "Usa cualquier GGUF que ya tengas o descarga del catálogo. La compatibilidad se calcula en tiempo real con tu hardware (incluido offload MoE y GPU+CPU).",
       action: { label: "Ver catálogo + locales", view: "models" },
     },
     {
@@ -236,6 +236,16 @@ function Tips() {
       icon: HardDrive,
       title: "Reusa GGUFs que ya tengas",
       body: "InferBench detecta modelos de LM Studio, llama.cpp, HuggingFace cache, GPT4All... Si tienes un GGUF en otra carpeta, añádela en Modelos → 'Carpetas escaneadas'.",
+    },
+    {
+      icon: Layers,
+      title: "Compresión de KV-cache",
+      body: "En Benchmark, despliega '¿Qué hace cada compresión?' para entender cada preset (Calidad→Extremo), y mira la tabla 'Modelos más potentes por compresión': comprimir la KV libera VRAM para cargar modelos más grandes.",
+    },
+    {
+      icon: GitCompare,
+      title: "Evaluación de calidad fiable",
+      body: "La calidad por defecto se mide offline contra la referencia (cualquier PC, sin GPU). Para juicio fiable de tareas abiertas, cambia a LLM-judge (motor local ≥7B o API externa) en Benchmark → Evaluación de calidad.",
     },
   ];
   return (

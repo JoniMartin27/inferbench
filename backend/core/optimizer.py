@@ -110,7 +110,7 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     + 0.6
                 )
                 # Calcular ngl óptimo para llama.cpp
-                flags = _default_flags(engine_id, model, status)
+                flags = _default_flags(engine_id, model, status, snap)
                 if engine_id in ("llamacpp",):
                     ngl, mode = compute_optimal_ngl(
                         model, snap, quant, kv, max_ctx,
@@ -293,7 +293,20 @@ def _estimate_moe_offload(model: Model, hw: compat.HardwareSnapshot) -> int | No
     return max(1, min(n_layers, n_offload))
 
 
-def _default_flags(engine_id: str, model: Model, status: str) -> dict[str, Any]:
+def _gpu_mem_fraction(vram_total_gb: float, headroom_gb: float = 1.0) -> float:
+    """Fracción de VRAM a reservar dejando margen. vLLM/SGLang pre-asignan
+    `fraccion * total` y fallan si la GPU no está vacía; planificar con 0.9
+    asume GPU vacía. Reservamos `headroom_gb` (el runtime afina luego con la
+    VRAM libre real). 0.9 de respaldo si no se detecta VRAM."""
+    if vram_total_gb <= 0:
+        return 0.9
+    return round(max(0.30, min(0.92, (vram_total_gb - headroom_gb) / vram_total_gb)), 2)
+
+
+def _default_flags(
+    engine_id: str, model: Model, status: str, snap: "compat.HardwareSnapshot | None" = None
+) -> dict[str, Any]:
+    vram = snap.vram_gb if snap else 0.0
     if engine_id == "llamacpp":
         return {
             "flashAttn": True,
@@ -304,9 +317,13 @@ def _default_flags(engine_id: str, model: Model, status: str) -> dict[str, Any]:
     if engine_id == "ollama":
         return {"flashAttn": True}
     if engine_id == "vllm":
-        return {"prefixCaching": True, "gpuMemUtil": 0.9}
+        return {"prefixCaching": True, "gpuMemUtil": _gpu_mem_fraction(vram)}
     if engine_id == "sglang":
-        return {"chunkedPrefill": 8192, "torchCompile": False}
+        return {
+            "chunkedPrefill": 8192,
+            "torchCompile": False,
+            "memFraction": _gpu_mem_fraction(vram),
+        }
     if engine_id == "tgi":
         return {}
     return {}

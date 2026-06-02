@@ -554,19 +554,23 @@ class BenchmarkRunner:
 
             from engines.base import StartRequest as EngineStartRequest
 
-            # Defaults de memoria GPU calculados desde la VRAM LIBRE actual.
-            # Sin esto, vLLM/SGLang usan su default (~0.9 del total) y se niegan
-            # a arrancar si la GPU no está vacía (p.ej. 8GB con ~1GB en uso).
-            mem_opts: dict[str, Any] = {}
-            extra_env: dict[str, str] = {}
+            # Fracción de VRAM segura calculada desde la memoria LIBRE actual.
+            # vLLM/SGLang pre-asignan `fraccion * total` y se niegan a arrancar
+            # si la GPU no está vacía (p.ej. 8GB con ~1GB en uso). Tratamos esta
+            # fracción como TECHO: incluso si el usuario o el optimizador piden
+            # más, lo acotamos a lo que de verdad cabe (evita falsos positivos).
             frac = _gpu_mem_fraction()
+            user_opts = dict(self.req.engine_opts)
+            extra_env: dict[str, str] = {}
             if frac is not None:
                 if self.req.engine == "vllm":
-                    mem_opts["gpuMemUtil"] = frac
+                    user_opts["gpuMemUtil"] = min(user_opts.get("gpuMemUtil", frac), frac)
                 elif self.req.engine == "sglang":
-                    mem_opts["memFraction"] = frac
+                    user_opts["memFraction"] = min(user_opts.get("memFraction", frac), frac)
                 elif self.req.engine == "tgi":
-                    extra_env["CUDA_MEMORY_FRACTION"] = str(frac)
+                    cur = user_opts.pop("gpuMemUtil", None)  # TGI lo toma por env, no flag
+                    env_frac = min(cur, frac) if isinstance(cur, (int, float)) else frac
+                    extra_env["CUDA_MEMORY_FRACTION"] = str(env_frac)
 
             ereq = EngineStartRequest(
                 runtime="docker",
@@ -576,8 +580,7 @@ class BenchmarkRunner:
                     "hf_model_id": hf_id,
                     "contextLen": self.req.engine_opts.get("contextLen") or 4096,
                     "quant": self.req.quant if self.req.quant.lower() != "q4_k_m" else None,
-                    **mem_opts,
-                    **self.req.engine_opts,
+                    **user_opts,
                 },
             )
             await self.emit({

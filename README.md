@@ -96,7 +96,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 
 > Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local).
 >
-> **Estado de verificación:** `llamacpp`, `vllm`, `sglang` y `tgi` verificados end-to-end (arranque → inferencia → parada) en GPU NVIDIA (RTX 3070). `ollama` tiene el adaptador completo (daemon + pull desde su registro); pendiente de verificación E2E (requiere Ollama instalado).
+> **Estado de verificación:** los **5 motores locales** (`llamacpp`, `ollama`, `vllm`, `sglang`, `tgi`) verificados end-to-end por el runner de producción (bootstrap → arranque → inferencia real con tps>0 → parada sin contenedores colgados) en GPU NVIDIA (RTX 3070, 8 GB). vLLM/SGLang ajustan la fracción de VRAM a la memoria libre real para no fallar en GPUs no vacías.
 
 ---
 

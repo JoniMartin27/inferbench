@@ -142,6 +142,35 @@ def _get_vram_used_gb() -> float:
         return 0.0
 
 
+def _get_vram_free_total_gb() -> tuple[float, float]:
+    """(libre, total) de la GPU 0 en GiB. (0, 0) si no hay NVIDIA/pynvml."""
+    try:
+        import pynvml  # type: ignore
+        pynvml.nvmlInit()
+        try:
+            h = pynvml.nvmlDeviceGetHandleByIndex(0)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+            return round(mem.free / (1024**3), 2), round(mem.total / (1024**3), 2)
+        finally:
+            pynvml.nvmlShutdown()
+    except Exception:
+        return 0.0, 0.0
+
+
+def _gpu_mem_fraction(headroom_gb: float = 0.6) -> float | None:
+    """Fracción de VRAM total que cabe en la memoria LIBRE actual, con margen.
+
+    vLLM/SGLang pre-asignan `fraccion * total` y fallan si excede la memoria
+    libre (típico en GPUs no vacías). Calculamos la fracción desde lo realmente
+    libre en vez de asumir la GPU vacía. None si no hay GPU NVIDIA detectable.
+    """
+    free, total = _get_vram_free_total_gb()
+    if total <= 0 or free <= 0:
+        return None
+    frac = (free - headroom_gb) / total
+    return round(max(0.30, min(0.92, frac)), 2)
+
+
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
 # Basado en la respuesta de referencia: F1 de tokens recall-weighted + recall exacto de
 # números (crítico en mates/razonamiento) + penalización de texto degenerado. Es la opción
@@ -525,13 +554,29 @@ class BenchmarkRunner:
 
             from engines.base import StartRequest as EngineStartRequest
 
+            # Defaults de memoria GPU calculados desde la VRAM LIBRE actual.
+            # Sin esto, vLLM/SGLang usan su default (~0.9 del total) y se niegan
+            # a arrancar si la GPU no está vacía (p.ej. 8GB con ~1GB en uso).
+            mem_opts: dict[str, Any] = {}
+            extra_env: dict[str, str] = {}
+            frac = _gpu_mem_fraction()
+            if frac is not None:
+                if self.req.engine == "vllm":
+                    mem_opts["gpuMemUtil"] = frac
+                elif self.req.engine == "sglang":
+                    mem_opts["memFraction"] = frac
+                elif self.req.engine == "tgi":
+                    extra_env["CUDA_MEMORY_FRACTION"] = str(frac)
+
             ereq = EngineStartRequest(
                 runtime="docker",
                 gpu=True,
+                extra_env=extra_env,
                 engine_opts={
                     "hf_model_id": hf_id,
                     "contextLen": self.req.engine_opts.get("contextLen") or 4096,
                     "quant": self.req.quant if self.req.quant.lower() != "q4_k_m" else None,
+                    **mem_opts,
                     **self.req.engine_opts,
                 },
             )

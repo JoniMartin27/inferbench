@@ -39,6 +39,7 @@
     "productName": "InferBench",
     "electronVersion": "33.4.11",
     "npmRebuild": false,
+    "directories": { "output": "release" },
     "files": ["dist/**/*", "electron/**/*", "!electron/sidecar/**/*"],
     "extraResources": [
       {

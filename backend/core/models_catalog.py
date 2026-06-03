@@ -14,6 +14,7 @@ class HfGguf(BaseModel):
     repo: str
     file_template: str  # debe contener {quant}, ej. "Llama-3.2-3B-Instruct-{quant}.gguf"
     mmproj: str | None = None  # filename del projector multimodal en el mismo repo (visión)
+    multipart: bool = False  # GGUF partido en shards (-00001-of-000NN.gguf) para modelos enormes
 
 
 class Model(BaseModel):

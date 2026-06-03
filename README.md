@@ -133,7 +133,7 @@ Por defecto, basadas en `core/optimizer.py`:
 - **Código**: Code Llama, CodeGemma, StarCoder2, Yi-Coder, OpenCoder, Stable Code
 - **Más**: Granite (IBM), Falcon3, GLM-4, EXAONE, InternLM, OLMo, Aya/Command-R (Cohere), SmolLM2, SOLAR, Zephyr…
 
-> **Sin datos inventados.** Cada entrada se verifica contra HuggingFace antes de añadirse: el repo GGUF existe, el `file_template` se deriva de los archivos reales publicados y se comprueba que el `Q4_K_M` resuelve. La herramienta está en `backend/scripts/` (`verify_models.py` + `merge_models.py`); ejecútala para ampliar el catálogo de forma segura. Los modelos huge multi-parte (Llama 4, DeepSeek-V3) se excluyen a propósito porque la descarga es de archivo único.
+> **Sin datos inventados.** Cada entrada se verifica contra HuggingFace antes de añadirse: el repo GGUF existe, el `file_template` se deriva de los archivos reales publicados y se comprueba que el `Q4_K_M` resuelve. La herramienta está en `backend/scripts/` (`verify_models.py` + `merge_models.py`); ejecútala para ampliar el catálogo de forma segura. Los modelos enormes partidos en **shards** (`-00001-of-000NN.gguf`, p.ej. DeepSeek-V3, Llama 4 70B+) también se soportan: el catálogo marca `hf_gguf.multipart` y la descarga junta todos los shards (llama.cpp carga las hermanas del mismo directorio).
 
 ---
 
@@ -390,7 +390,6 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 - Más cobertura de tests (ya hay 42 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`)
 - Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
-- Soporte de modelos MoE multi-parte para auto-descarga (split GGUF, manejo de varios shards)
 
 ---
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Awaitable, Callable
@@ -118,19 +119,74 @@ async def ollama_model_exists(tag: str) -> bool:
 ProgressCb = Callable[[dict], Awaitable[None]] | None
 
 
+def _repo_dir(model: Model) -> Path:
+    return MODELS_ROOT / model.hf_gguf.repo.replace("/", "__")
+
+
 def _model_file(model: Model, quant: str) -> Path:
     if not model.hf_gguf:
         raise RuntimeError(f"Modelo {model.id} no tiene fuente HF GGUF configurada")
-    repo = model.hf_gguf.repo
-    filename = model.hf_gguf.file_template.format(quant=quant)
-    return MODELS_ROOT / repo.replace("/", "__") / filename
+    return _repo_dir(model) / model.hf_gguf.file_template.format(quant=quant)
+
+
+# ---- GGUF multi-parte (modelos enormes partidos en shards -00001-of-000NN.gguf) ----
+def _shard_base(model: Model, quant: str) -> str:
+    """Nombre base sin .gguf del fichero de un quant, p.ej. 'Model-Q4_K_M'."""
+    name = model.hf_gguf.file_template.format(quant=quant)
+    return name[:-5] if name.endswith(".gguf") else name
+
+
+def _cached_shard1(model: Model, quant: str) -> Path | None:
+    """Shard 1 ya cacheada de un quant multi-parte (puede estar en subdir), o None."""
+    repo_dir = _repo_dir(model)
+    if not repo_dir.exists():
+        return None
+    matches = sorted(repo_dir.glob(f"**/{_shard_base(model, quant)}-00001-of-*.gguf"))
+    return matches[0] if matches else None
+
+
+def _multipart_installed(model: Model, quant: str) -> bool:
+    """¿Están TODOS los shards del quant ya en disco? (el total va en el nombre -of-000NN)."""
+    s1 = _cached_shard1(model, quant)
+    if not s1:
+        return False
+    m = re.search(r"-00001-of-(\d{5})\.gguf$", s1.name)
+    if not m:
+        return False
+    total = int(m.group(1))
+    return all(
+        (s1.parent / re.sub(r"-00001-of-", f"-{i:05d}-of-", s1.name)).exists()
+        for i in range(1, total + 1)
+    )
+
+
+def _filter_shards(rfilenames: list[str], base: str) -> list[str]:
+    """De una lista de rfilenames, los shards `<base>-NNNNN-of-NNNNN.gguf`, ordenados."""
+    pat = re.compile(re.escape(base) + r"-\d{5}-of-\d{5}\.gguf$")
+    return sorted(f for f in rfilenames if pat.search(f))
+
+
+async def _fetch_shard_files(repo: str, base: str) -> list[str]:
+    """rfilenames de los shards de `base` en el repo (vía HF API), ordenados. [] si no hay."""
+    url = f"https://huggingface.co/api/models/{repo}"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
+        resp = await client.get(url, headers={"User-Agent": "inferbench"})
+        resp.raise_for_status()
+        data = resp.json()
+    return _filter_shards([s.get("rfilename", "") for s in data.get("siblings", [])], base)
 
 
 def gguf_path(model: Model, quant: str) -> Path:
+    if model.hf_gguf and model.hf_gguf.multipart:
+        s1 = _cached_shard1(model, quant)
+        if s1:
+            return s1  # llama.cpp carga el resto de shards del mismo dir
     return _model_file(model, quant)
 
 
 def gguf_installed(model: Model, quant: str) -> bool:
+    if model.hf_gguf and model.hf_gguf.multipart:
+        return _multipart_installed(model, quant)
     return _model_file(model, quant).exists()
 
 
@@ -246,6 +302,37 @@ async def _download_resilient(
         )
 
 
+async def _ensure_gguf_multipart(
+    model: Model, quant: str, progress: ProgressCb, cancel_event: asyncio.Event | None
+) -> Path:
+    """Descarga TODOS los shards de un GGUF multi-parte y devuelve el path de la shard 1
+    (llama.cpp carga las hermanas del mismo directorio automáticamente)."""
+    if _multipart_installed(model, quant):
+        return _cached_shard1(model, quant)  # type: ignore[return-value]
+    repo = model.hf_gguf.repo
+    base = _shard_base(model, quant)
+    if progress:
+        await progress({"phase": "model.lookup", "model": model.id, "quant": quant,
+                        "multipart": True})
+    shards = await _fetch_shard_files(repo, base)
+    if not shards:
+        raise RuntimeError(
+            f"No se encontraron shards de {quant} para {model.id} en {repo}. "
+            f"Prueba otro quant o revisa el catálogo."
+        )
+    repo_dir = _repo_dir(model)
+    logger.info(f"Descargando {len(shards)} shards de {model.id} {quant}")
+    for idx, rf in enumerate(shards, 1):
+        await _download_resilient(
+            f"https://huggingface.co/{repo}/resolve/main/{rf}",
+            repo_dir / rf,  # preserva el subdir → los shards quedan juntos
+            progress, cancel_event,
+            label=f"shard {idx}/{len(shards)} de {model.id} {quant}",
+            progress_meta={"model": model.id, "shard": idx, "shards": len(shards)},
+        )
+    return repo_dir / shards[0]
+
+
 async def ensure_gguf(
     model: Model,
     quant: str,
@@ -255,11 +342,14 @@ async def ensure_gguf(
     """Descarga el GGUF si no existe localmente. Devuelve la ruta absoluta.
 
     Resiliente: reintentos con backoff y reanudación vía Range (ver `_download_resilient`).
+    Si el modelo es multi-parte (`hf_gguf.multipart`), descarga todos los shards.
     """
     if not model.hf_gguf:
         raise RuntimeError(
             f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo"
         )
+    if model.hf_gguf.multipart:
+        return await _ensure_gguf_multipart(model, quant, progress, cancel_event)
     target = _model_file(model, quant)
     if target.exists():
         return target

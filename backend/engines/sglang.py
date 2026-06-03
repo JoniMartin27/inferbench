@@ -14,7 +14,7 @@ class SglangEngine(Engine):
                 default_port=30000,
                 image="lmsysorg/sglang:latest",
                 optimizable=True,
-                description="SGLang server con chunked prefill + EAGLE3 speculative decoding. Solo Docker + GPU NVIDIA.",
+                description="SGLang server con chunked prefill + speculative decoding (EAGLE3/DFLASH). Solo Docker + GPU NVIDIA.",
                 runtimes=["docker"],
                 default_runtime="docker",
             )
@@ -45,5 +45,15 @@ class SglangEngine(Engine):
 
         if opts.get("torchCompile"):
             cmd += ["--enable-torch-compile"]
+
+        # Speculative decoding (DFLASH, EAGLE3, …): SGLang es la ruta oficial de DFLASH.
+        spec_method = opts.get("specMethod")
+        spec_draft = opts.get("specDraftModel")
+        if spec_method and spec_draft:
+            cmd += [
+                "--speculative-algorithm", str(spec_method).upper(),
+                "--speculative-draft-model-path", spec_draft,
+                "--speculative-num-draft-tokens", str(int(opts.get("specNumTokens") or 16)),
+            ]
 
         return cmd

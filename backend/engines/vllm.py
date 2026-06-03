@@ -1,6 +1,8 @@
 """Adaptador para vLLM (Docker only, requiere GPU NVIDIA)."""
 from __future__ import annotations
 
+import json
+
 from .base import Engine, EngineMeta, StartRequest
 
 
@@ -14,7 +16,7 @@ class VllmEngine(Engine):
                 default_port=8000,
                 image="vllm/vllm-openai:latest",
                 optimizable=True,
-                description="Servidor vLLM con prefix caching y speculative decoding. Solo Docker + GPU NVIDIA.",
+                description="Servidor vLLM con prefix caching y speculative decoding (DFLASH/EAGLE). Solo Docker + GPU NVIDIA.",
                 runtimes=["docker"],
                 default_runtime="docker",
             )
@@ -53,5 +55,18 @@ class VllmEngine(Engine):
 
         if opts.get("prefixCaching"):
             cmd += ["--enable-prefix-caching"]
+
+        # Speculative decoding (DFLASH, EAGLE, …): acelera con un modelo draft. vLLM lo
+        # configura con --speculative-config (JSON). DFLASH además exige flash_attn.
+        spec_method = opts.get("specMethod")
+        spec_draft = opts.get("specDraftModel")
+        if spec_method and spec_draft:
+            cmd += ["--speculative-config", json.dumps({
+                "method": str(spec_method).lower(),
+                "model": spec_draft,
+                "num_speculative_tokens": int(opts.get("specNumTokens") or 5),
+            })]
+            if str(spec_method).lower() == "dflash":
+                cmd += ["--attention-backend", "flash_attn"]
 
         return cmd

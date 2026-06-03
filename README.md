@@ -99,6 +99,8 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 
 > Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local): **OpenAI / OpenRouter / NVIDIA** usan el endpoint OpenAI-compatible `/v1/chat/completions`; **Anthropic** usa su **API nativa** (`/v1/messages`, header `x-api-key` + `anthropic-version`, `system` aparte), no es OpenAI-compatible.
 >
+> **Speculative decoding (DFLASH)**: vLLM y SGLang aceptan acelerar con un modelo *draft* block-diffusion ([DFLASH](https://github.com/z-lab/dflash), 6-8× sin pérdida de calidad). En Benchmark, con vLLM/SGLang seleccionado, activa DFLASH e indica el modelo draft (p.ej. `z-lab/Qwen3.5-35B-A3B-DFlash`). SGLang es la ruta oficial; vLLM necesita una build con soporte. Requiere VRAM para el modelo **y** el draft, así que no entra en GPUs pequeñas.
+>
 > **Estado de verificación:** los **5 motores locales** (`llamacpp`, `ollama`, `vllm`, `sglang`, `tgi`) verificados end-to-end por el runner de producción (bootstrap → arranque → inferencia real con tps>0 → parada sin contenedores colgados) en GPU NVIDIA (RTX 3070, 8 GB). vLLM/SGLang ajustan la fracción de VRAM a la memoria libre real para no fallar en GPUs no vacías.
 
 ---

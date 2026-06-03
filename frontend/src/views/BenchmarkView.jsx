@@ -138,6 +138,10 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const [apiKey, setApiKey] = useState("");
   const [judgeMode, setJudgeMode] = useState("heuristic"); // heuristic | self | api
   const [judgeApi, setJudgeApi] = useState({ engine: "openai", model: "gpt-4o-mini", base_url: "", api_key: "" });
+  // Speculative decoding (DFLASH) — solo vLLM/SGLang
+  const [dflash, setDflash] = useState(false);
+  const [dflashDraft, setDflashDraft] = useState("");
+  const [dflashTokens, setDflashTokens] = useState(16);
 
   useEffect(() => {
     api.listEngines().then(setEngines).catch(() => {});
@@ -206,6 +210,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // Cuantizaciones válidas para el motor elegido (GGUF en llama.cpp, awq/gptq/fp8 en los
   // Docker, vacío en ollama/API). Las publica el backend en la metadata del motor.
   const engineQuants = selectedEngine?.meta?.quants ?? [];
+  // DFLASH (speculative decoding) solo aplica a vLLM/SGLang
+  const supportsSpec = engine === "vllm" || engine === "sglang";
   const apiNeedsKey = engineIsApi && !apiKey;
   // Determinar si el motor está listo para arrancar
   const engineNativeReady = selectedEngine?.runtimes?.some(
@@ -235,6 +241,11 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
         swaFull: !!preset?.swaFull,
       };
       if (customCtx) engineOpts.contextLen = Number(customCtx);
+      if (dflash && dflashDraft.trim()) {
+        engineOpts.specMethod = "dflash";
+        engineOpts.specDraftModel = dflashDraft.trim();
+        engineOpts.specNumTokens = Number(dflashTokens) || 16;
+      }
       await startBench({
         engine,
         model: localModel ? (localModel.architecture || "local") + "-local" : model,
@@ -489,7 +500,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 </Field>
               </>
             )}
-            {!engineIsApi && (
+            {!engineIsApi && !supportsSpec && (
               <CompressionField
                 value={compression}
                 onChange={setCompression}
@@ -499,6 +510,48 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 customCtx={customCtx}
                 onCustomCtx={setCustomCtx}
               />
+            )}
+            {supportsSpec && (
+              <Field
+                label="Speculative decoding (DFLASH)"
+                hint="Acelera con un modelo draft block-diffusion. Necesita el modelo DFLASH y VRAM extra"
+              >
+                <label className="mb-2 flex items-center gap-2 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={dflash}
+                    onChange={(e) => setDflash(e.target.checked)}
+                    disabled={!!running}
+                    className="accent-indigo-500"
+                  />
+                  Activar DFLASH
+                </label>
+                {dflash && (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Modelo draft, ej. z-lab/Qwen3.5-35B-A3B-DFlash"
+                      value={dflashDraft}
+                      onChange={(e) => setDflashDraft(e.target.value)}
+                      disabled={!!running}
+                    />
+                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <span>Tokens spec:</span>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={dflashTokens}
+                        onChange={(e) => setDflashTokens(e.target.value)}
+                        disabled={!!running}
+                        className="w-20"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      SGLang es la ruta oficial de DFLASH; en vLLM requiere una build con
+                      soporte. Acelera 6-8×, sin pérdida de calidad, si cabe en tu VRAM.
+                    </p>
+                  </div>
+                )}
+              </Field>
             )}
             {engineIsApi && (
               <Field label="API key" hint="Vacío = usa la guardada en Ajustes (keyring del SO)">

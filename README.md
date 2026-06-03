@@ -62,6 +62,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Comparación**: selecciona varias runs del historial, ve métricas y gráficos lado a lado
 - **SSE en vivo**: progreso de descargas (con %), TTFT, tok/s actual, log estilo terminal
 - **Descargas resilientes**: GGUFs de decenas de GB con reintentos automáticos (backoff exponencial) y **reanudación** desde el parcial vía cabecera Range si la red se corta
+- **API keys en el keyring del SO**: guarda las claves de OpenAI/Anthropic/OpenRouter/NVIDIA en el gestor de credenciales del sistema (Ajustes → API keys); el benchmark las usa solo, nunca se escriben a disco
 - **Stop en cualquier momento**: cancela bootstrap, descarga o ejecución
 - **Persistencia**: SQLite con todos los runs (engine, modelo, quant, flags, métricas por prompt, output bruto)
 
@@ -386,7 +387,6 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 ## Pendientes / siguientes pasos
 
-- API keys persistidas vía `keyring` del SO (el LLM-judge por API ya acepta key por request)
 - Más cobertura de tests (ya hay 42 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`)
 - Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp

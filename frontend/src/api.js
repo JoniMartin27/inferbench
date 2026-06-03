@@ -89,6 +89,12 @@ export const api = {
   deleteHistory: (runId) => request(`/api/history/${runId}`, { method: "DELETE" }),
   compareHistory: (ids) => request(`/api/history/compare/runs?ids=${ids.join(",")}`),
 
+  // API keys de cloud — guardadas en el keyring del SO. listKeys() solo devuelve presencia.
+  listKeys: () => request("/api/keys"),
+  saveKey: (provider, key) =>
+    request("/api/keys", { method: "POST", body: JSON.stringify({ provider, key }) }),
+  deleteKey: (provider) => request(`/api/keys/${provider}`, { method: "DELETE" }),
+
   startSweep: (base, quants) =>
     request("/api/benchmark/sweep", {
       method: "POST",

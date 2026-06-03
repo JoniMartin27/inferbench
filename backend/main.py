@@ -11,6 +11,7 @@ from api.engines import router as engines_router
 from api.models import router as models_router
 from api.benchmark import router as benchmark_router
 from api.history import router as history_router
+from api.keys import router as keys_router
 from api.optimize import router as optimize_router
 from db import init_db
 
@@ -67,6 +68,7 @@ app.include_router(engines_router)
 app.include_router(models_router)
 app.include_router(benchmark_router)
 app.include_router(history_router)
+app.include_router(keys_router)
 app.include_router(optimize_router)
 
 

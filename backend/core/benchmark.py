@@ -30,7 +30,15 @@ import psutil
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from . import binary_manager, compat, docker_mgr, model_manager, native_runtime, ollama_manager
+from . import (
+    binary_manager,
+    compat,
+    docker_mgr,
+    model_manager,
+    native_runtime,
+    ollama_manager,
+    secrets,
+)
 from .hardware import detect_hardware
 from .models_catalog import get_model
 from .optimizer import get_optimal_config, plan_llamacpp_run
@@ -653,6 +661,10 @@ class BenchmarkRunner:
                 await self.emit({"type": "done", "run_id": self.run_id, "cancelled": True})
                 return
 
+            # APIs: si el request no trae key, usar la guardada en el keyring del SO.
+            if self.is_api and not self.req.api_key:
+                self.req.api_key = secrets.get_key(self.req.engine)
+
             headers = {"Content-Type": "application/json"}
             if self.req.api_key:
                 if self.req.engine == "anthropic":  # API nativa: auth distinta a OpenAI
@@ -1181,7 +1193,8 @@ class BenchmarkRunner:
             base_url = j.get("base_url") or DEFAULT_BASE_URLS.get(j_engine or "")
             model = j.get("model")
             headers = {"Content-Type": "application/json"}
-            key = j.get("api_key")
+            # key del request o, si falta, la guardada en el keyring para ese proveedor
+            key = j.get("api_key") or (secrets.get_key(j_engine) if j_engine else None)
             if key:
                 headers["Authorization"] = f"Bearer {key}"
             return base_url, model, headers

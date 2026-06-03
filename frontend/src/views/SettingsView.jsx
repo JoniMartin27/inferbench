@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
-import { PageHeader, Card, Stat, Badge } from "../components/ui.jsx";
+import { api, humanizeError } from "../api";
+import { PageHeader, Card, Stat, Badge, Button, Input } from "../components/ui.jsx";
+import { useToast } from "../components/toast.jsx";
 
 export default function SettingsView() {
   const [hw, setHw] = useState(null);
@@ -62,8 +63,87 @@ export default function SettingsView() {
             ))}
           </ul>
         </Card>
+
+        <ApiKeysCard />
       </div>
     </>
+  );
+}
+
+const PROVIDERS = [
+  { id: "openai", label: "OpenAI", ph: "sk-…" },
+  { id: "anthropic", label: "Anthropic", ph: "sk-ant-…" },
+  { id: "openrouter", label: "OpenRouter", ph: "sk-or-…" },
+  { id: "nvidia", label: "NVIDIA NIM", ph: "nvapi-…" },
+];
+
+function ApiKeysCard() {
+  const toast = useToast();
+  const [saved, setSaved] = useState({});
+  const [inputs, setInputs] = useState({});
+
+  const refresh = () => api.listKeys().then(setSaved).catch(() => {});
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const save = async (id) => {
+    const key = (inputs[id] || "").trim();
+    if (!key) return;
+    try {
+      await api.saveKey(id, key);
+      setInputs((s) => ({ ...s, [id]: "" }));
+      await refresh();
+      toast.success(`Key de ${id} guardada`);
+    } catch (e) {
+      toast.error(humanizeError(e, "No se pudo guardar la key"));
+    }
+  };
+
+  const clear = async (id) => {
+    try {
+      await api.deleteKey(id);
+      await refresh();
+      toast.success(`Key de ${id} borrada`);
+    } catch (e) {
+      toast.error(humanizeError(e, "No se pudo borrar la key"));
+    }
+  };
+
+  return (
+    <Card title="API keys (cloud)" className="md:col-span-2">
+      <p className="mb-3 text-xs text-slate-500">
+        Se guardan en el gestor de credenciales del sistema (no en disco ni en la base de
+        datos). Una vez guardada, el benchmark la usa automáticamente para ese proveedor.
+      </p>
+      <div className="space-y-2">
+        {PROVIDERS.map((p) => (
+          <div key={p.id} className="flex items-center gap-2">
+            <div className="w-28 shrink-0 text-sm text-slate-300">{p.label}</div>
+            <Input
+              type="password"
+              autoComplete="off"
+              placeholder={saved[p.id] ? "•••••••••• (guardada)" : p.ph}
+              value={inputs[p.id] || ""}
+              onChange={(e) => setInputs((s) => ({ ...s, [p.id]: e.target.value }))}
+            />
+            <Button size="sm" onClick={() => save(p.id)} disabled={!(inputs[p.id] || "").trim()}>
+              Guardar
+            </Button>
+            {saved[p.id] ? (
+              <>
+                <Badge tone="emerald">guardada</Badge>
+                <Button size="sm" variant="ghost" onClick={() => clear(p.id)}>
+                  Borrar
+                </Button>
+              </>
+            ) : (
+              <Badge tone="slate">sin key</Badge>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

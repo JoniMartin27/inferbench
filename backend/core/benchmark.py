@@ -42,7 +42,7 @@ from . import (
 )
 from .hardware import detect_hardware, gpu_used_gb
 from .models_catalog import get_model
-from .optimizer import get_optimal_config, plan_llamacpp_run
+from .optimizer import _estimate_moe_offload, get_optimal_config, plan_llamacpp_run
 
 PROMPTS_FILE = Path(__file__).resolve().parent.parent / "data" / "prompts.json"
 
@@ -222,8 +222,14 @@ class BenchmarkRequest(BaseModel):
     @field_validator("local_path")
     @classmethod
     def _check_local_path(cls, v):
-        if v is not None and not v.lower().endswith(".gguf"):
+        if v is None:
+            return v
+        if not v.lower().endswith(".gguf"):
             raise ValueError("local_path debe apuntar a un fichero .gguf")
+        # Rechaza rutas UNC (\\host\share o //host/share) y bytes nulos: en Windows, abrir
+        # una UNC a un host atacante filtra el hash NTLM del usuario. Solo rutas locales.
+        if v.startswith("\\\\") or v.startswith("//") or "\x00" in v:
+            raise ValueError("local_path no puede ser una ruta UNC ni contener bytes nulos")
         return v
 
     @field_validator("engine_opts")
@@ -251,6 +257,15 @@ class BenchmarkRequest(BaseModel):
                     raise ValueError(f"engine_opts.{key} debe ser entero")
                 if not (lo <= ival <= hi):
                     raise ValueError(f"engine_opts.{key}={ival} fuera de rango [{lo}, {hi}]")
+        return v
+
+    @field_validator("judge")
+    @classmethod
+    def _check_judge(cls, v):
+        # Si el juez es una API externa, su base_url pasa por el MISMO allowlist anti-SSRF
+        # que base_url (lleva la API key en Authorization). Rechazo temprano en el borde.
+        if isinstance(v, dict) and v.get("mode") == "api":
+            _validate_base_url(v.get("base_url"))
         return v
 
 
@@ -729,7 +744,9 @@ class BenchmarkRunner:
                     # contenedor Docker corriendo y ocupando la GPU tras el benchmark.
                     from engines import registry
 
-                    registry.get_engine(self.req.engine).stop()
+                    # stop() Docker es bloqueante (hasta ~10s); en un hilo para no congelar
+                    # el event loop justo en la cancelación/teardown.
+                    await asyncio.to_thread(registry.get_engine(self.req.engine).stop)
                     native_runtime.set_loaded(self.req.engine, None)
                 except Exception:
                     pass
@@ -817,7 +834,7 @@ class BenchmarkRunner:
         else:
             if st and st.state == "running":
                 await self.emit({"type": "log", "level": "info", "text": "Reiniciando contenedor…"})
-                engine.stop()
+                await asyncio.to_thread(engine.stop)
 
             from engines.base import StartRequest as EngineStartRequest
 
@@ -1015,6 +1032,10 @@ class BenchmarkRunner:
             kv_v = req_opts.get("kvCacheV") or req_opts.get("kvCache") or kv_default
             kv_in_ram = bool(req_opts.get("nkvo"))
             moe = optimal.moe_offload
+            # El optimizer estimó el offload con Q4_K_M; recalcúlalo para el quant REAL que se
+            # ejecuta (un Q8_0 ocupa ~2× y necesita descargar MÁS capas para no saturar la VRAM).
+            if moe and model.is_moe:
+                moe = _estimate_moe_offload(model, snap, self.req.quant) or moe
 
             ctx, ngl, ngl_mode = plan_llamacpp_run(
                 model, snap, quant=self.req.quant, kv_k=kv_k, kv_v=kv_v,
@@ -1125,7 +1146,9 @@ class BenchmarkRunner:
                     token_count += 1
                     if token_count % 8 == 0:
                         elapsed = now - t0 - (ttft_ms or 0) / 1000.0
-                        tps_now = token_count / elapsed if elapsed > 0 else 0.0
+                        # tok/s de generación: tokens TRAS el primero / tiempo TRAS el primero
+                        # (el 1er token ya está contado, pero su tiempo es el TTFT, excluido aquí)
+                        tps_now = (token_count - 1) / elapsed if elapsed > 0 and token_count > 1 else 0.0
                         await self.emit({
                             "type": "tokens",
                             "current": token_count,
@@ -1145,7 +1168,10 @@ class BenchmarkRunner:
 
         elapsed_total = time.perf_counter() - t0
         gen_time = elapsed_total - (ttft_ms or 0) / 1000.0
-        tps = token_count / gen_time if gen_time > 0 else 0.0
+        # tok/s de generación = tokens generados TRAS el primero / tiempo TRAS el primero.
+        # token_count incluye el 1er token, cuyo tiempo es el TTFT (ya excluido de gen_time);
+        # contarlo en el numerador inflaba el tok/s en respuestas cortas (la métrica estrella).
+        tps = (token_count - 1) / gen_time if gen_time > 0 and token_count > 1 else 0.0
         output = "".join(text_chunks)
 
         # Surfacing honesto: si el modelo no generó NADA y no hubo error/cancelación, suele
@@ -1213,6 +1239,10 @@ class BenchmarkRunner:
         if mode == "api":
             j_engine = j.get("engine")
             base_url = j.get("base_url") or DEFAULT_BASE_URLS.get(j_engine or "")
+            # Mismo allowlist anti-SSRF que el base_url principal: el juez también lleva la
+            # API key del keyring en Authorization, así que su URL NO puede apuntar a
+            # metadatos cloud (169.254.169.254) ni a la red interna.
+            _validate_base_url(base_url)
             model = j.get("model")
             headers = {"Content-Type": "application/json"}
             # key del request o, si falta, la guardada en el keyring para ese proveedor

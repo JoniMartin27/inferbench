@@ -1,6 +1,7 @@
 """Interfaz abstracta de motor de inferencia (Docker o nativo)."""
 from __future__ import annotations
 
+import asyncio
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -109,7 +110,9 @@ class Engine(ABC):
             raise ValueError(f"Motor {self.meta.id} es API, no se arranca")
         runtime = self.resolve_runtime(req)
         if runtime == "docker":
-            return self._start_docker(req)
+            # _start_docker es bloqueante (Docker SDK síncrono: images.pull de varios GB
+            # puede tardar minutos). En un hilo para no congelar el event loop de FastAPI.
+            return await asyncio.to_thread(self._start_docker, req)
         return await self._start_native(req, progress)
 
     def _start_docker(self, req: StartRequest):
@@ -130,7 +133,10 @@ class Engine(ABC):
                     f"Cierra apps que usen la GPU, elige un modelo más pequeño/cuantizado, o "
                     f"baja INFERBENCH_GPU_RESERVE_GB si esta GPU no pinta tu monitor."
                 )
-        ports = {f"{self.meta.default_port}/tcp": port}
+        # El contenedor escucha en `port` (build_command usa req.port or default_port);
+        # publicar host:port → container:port. Clavarlo a default_port dejaba el motor
+        # inalcanzable si el llamador pasaba un req.port distinto.
+        ports = {f"{port}/tcp": port}
         st = docker_mgr.start(
             self.meta.id,
             image=self.meta.image,

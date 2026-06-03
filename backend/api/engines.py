@@ -142,7 +142,8 @@ async def stop_engine(engine_id: str):
     if engine.is_api:
         raise HTTPException(400, f"Motor {engine_id} es API")
     try:
-        return engine.stop()
+        # stop() Docker es bloqueante (hasta ~10s); en un hilo para no congelar el event loop.
+        return await asyncio.to_thread(engine.stop)
     except Exception as e:
         raise HTTPException(500, str(e)) from e
 

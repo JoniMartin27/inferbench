@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Cpu,
@@ -23,6 +23,35 @@ const ModelsView = lazy(() => import("./views/ModelsView.jsx"));
 const BenchmarkView = lazy(() => import("./views/BenchmarkView.jsx"));
 const HistoryView = lazy(() => import("./views/HistoryView.jsx"));
 const SettingsView = lazy(() => import("./views/SettingsView.jsx"));
+
+// Boundary para los chunks lazy: si un import() de vista falla (chunk no carga tras un
+// deploy, throw en el módulo) mostramos un fallback en vez de tumbar toda la app a pantalla
+// en blanco. key={active} en el uso lo resetea al cambiar de vista (reintenta la siguiente).
+class ViewErrorBoundary extends Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Error al cargar la vista:", error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
+          <p className="text-sm">No se pudo cargar esta vista.</p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const NAV_GROUPS = [
   {
@@ -206,20 +235,22 @@ export default function App() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center text-slate-500">
-                <Spinner className="text-indigo-400" />
-              </div>
-            }
-          >
-            <Current
-              dockerDown={dockerDown}
-              onNavigate={navigate}
-              navPayload={navPayload}
-              benchmark={benchmark}
-            />
-          </Suspense>
+          <ViewErrorBoundary key={active}>
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-slate-500">
+                  <Spinner className="text-indigo-400" />
+                </div>
+              }
+            >
+              <Current
+                dockerDown={dockerDown}
+                onNavigate={navigate}
+                navPayload={navPayload}
+                benchmark={benchmark}
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         </main>
       </div>
     </div>

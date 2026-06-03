@@ -23,6 +23,16 @@ export function useBenchmarkRun() {
     unsubRef.current?.();
     setRunning(runId); // mostrar "running" inmediatamente; el evento "done" lo limpia
     unsubRef.current = subscribeBenchmark(runId, (evt) => {
+      if (evt.type === "stream_error") {
+        // El stream cayó antes de terminar: surfacea el error y desbloquea la UI.
+        setEvents((arr) => [
+          ...arr.slice(-MAX_EVENTS),
+          { type: "log", level: "error", text: evt.error || "Se perdió la conexión con el backend" },
+        ]);
+        setRunning(null);
+        unsubRef.current = null;
+        return;
+      }
       setEvents((arr) => [...arr.slice(-MAX_EVENTS), evt]);
 
       if (evt.type === "engine.install") {

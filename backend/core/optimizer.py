@@ -239,9 +239,13 @@ def most_powerful_per_compression(
                 if st in ("ok", "moe", "partial"):
                     if top_runnable is None:
                         top_runnable = _rec_entry(m, q, st, kv_f, context_len, snap, in_ram)
-                    if st == "ok" and top_ok is None:
-                        top_ok = _rec_entry(m, q, "ok", kv_f, context_len, snap, in_ram)
-                    break
+                    if st == "ok":
+                        if top_ok is None:
+                            top_ok = _rec_entry(m, q, "ok", kv_f, context_len, snap, in_ram)
+                        break  # 100% GPU para este modelo: no probar quants menores
+                # Si este quant no cabe entero (partial/moe), seguimos probando quants MENORES
+                # del MISMO modelo buscando un "ok" — no saltamos a un modelo más débil sin
+                # antes comprobar si una cuantización más agresiva lo mete entero en GPU.
             if top_ok and top_runnable:
                 break
         out.append({
@@ -275,16 +279,20 @@ def _rec_entry(model, quant, status, kv_f, context_len, snap, in_ram) -> dict[st
     }
 
 
-def _estimate_moe_offload(model: Model, hw: compat.HardwareSnapshot) -> int | None:
-    """Estima un valor sensato de --n-cpu-moe.
+def _estimate_moe_offload(
+    model: Model, hw: compat.HardwareSnapshot, quant: str = "Q4_K_M"
+) -> int | None:
+    """Estima un valor sensato de --n-cpu-moe para el `quant` indicado.
 
     Heurística: descargamos a CPU las suficientes capas MoE para que las partes
     "shared" + KV quepan en VRAM. Usa model.n_layer real cuando está disponible.
+    El tamaño se mide para el quant REAL (un Q8_0 ocupa ~2× un Q4_K_M → hay que
+    descargar más capas; estimarlo siempre con Q4_K_M provocaba OOM a quant alto).
     """
     if hw.vram_gb <= 0 or model.params_b <= 0:
         return None
     n_layers = model.n_layer or 32
-    base_size = compat.get_model_size_gb(model, "Q4_K_M")
+    base_size = compat.get_model_size_gb(model, quant)
     if base_size <= hw.vram_gb:
         return None
     # Cuántas capas MoE deben ir a CPU para que el resto quepa

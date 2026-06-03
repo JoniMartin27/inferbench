@@ -190,7 +190,11 @@ def summarize(meta: dict[str, Any]) -> dict[str, Any]:
     n_head_kv = meta.get(f"{arch}.attention.head_count_kv") or n_head
     n_embd = meta.get(f"{arch}.embedding_length")
     ctx = meta.get(f"{arch}.context_length")
-    head_dim = (n_embd // n_head) if (n_embd and n_head) else None
+    # head_dim desde key_length (igual que estimate_param_count): en modelos con head_dim
+    # desacoplado de n_embd/n_head, n_embd//n_head da mal la KV-cache exacta.
+    head_dim = meta.get(f"{arch}.attention.key_length") or (
+        (n_embd // n_head) if (n_embd and n_head) else None
+    )
     return {
         "architecture": arch,
         "name": name,

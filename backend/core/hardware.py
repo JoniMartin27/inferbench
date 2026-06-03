@@ -290,12 +290,15 @@ def safe_gpu_fraction() -> float:
 
 def capped_gpu_fraction(requested: float | str | None = None) -> float:
     """Fracción de VRAM a pasar a un motor Docker: la pedida ACOTADA al tope seguro
-    (`min`), nunca por debajo de 0.1. Punto único de la lógica de capado (la usan
-    vLLM/SGLang/TGI) para que la invariante de seguridad esté en un solo sitio."""
+    (`min`). Punto único de la lógica de capado (la usan vLLM/SGLang/TGI) para que la
+    invariante de seguridad esté en un solo sitio. NUNCA devuelve más que lo seguro:
+    el suelo de 0.1 solo se aplica si lo seguro lo permite (si `safe < 0.1` el guard de
+    `_start_docker` ya aborta el arranque; aquí no inflamos por encima de lo seguro)."""
     safe = safe_gpu_fraction()
+    want = safe
     if requested is not None and requested != "":
         try:
-            return round(max(0.1, min(float(requested), safe)), 2)
+            want = min(float(requested), safe)
         except (TypeError, ValueError):
-            pass
-    return round(max(0.1, safe), 2)
+            want = safe
+    return round(min(safe, max(0.1, want)) if safe >= 0.1 else safe, 2)

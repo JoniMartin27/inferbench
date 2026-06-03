@@ -109,12 +109,16 @@ export const api = {
 // onEvent({type, ...data}) recibe cada evento parseado.
 export function subscribeBenchmark(runId, onEvent) {
   const es = new EventSource(api.benchmarkStreamUrl(runId));
+  let finished = false;
   const handle = (e) => {
+    let evt;
     try {
-      onEvent(JSON.parse(e.data));
+      evt = JSON.parse(e.data);
     } catch {
-      onEvent({ type: e.type, raw: e.data });
+      evt = { type: e.type, raw: e.data };
     }
+    if (evt.type === "done") finished = true;
+    onEvent(evt);
   };
   [
     "start",
@@ -128,7 +132,15 @@ export function subscribeBenchmark(runId, onEvent) {
     "engine.start",
     "engine.ready",
   ].forEach((t) => es.addEventListener(t, handle));
-  es.onerror = () => es.close();
+  es.onerror = () => {
+    // Si el stream cae ANTES del "done" (backend caído, red, timeout) avisamos al consumidor
+    // para que limpie el estado "running"; si no, la UI se quedaría colgada para siempre.
+    if (!finished) {
+      finished = true;
+      onEvent({ type: "stream_error", error: "Se perdió la conexión con el backend" });
+    }
+    es.close();
+  };
   return () => es.close();
 }
 

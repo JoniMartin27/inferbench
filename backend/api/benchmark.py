@@ -46,7 +46,9 @@ async def start_run(req: BenchmarkRequest) -> dict[str, str]:
 
 
 async def _run_and_persist(runner: BenchmarkRunner) -> None:
+    started = time.time()
     await runner.run()
+    ended = time.time()
     with get_session() as s:
         run = s.get(BenchmarkRun, runner.run_id)
         if run:
@@ -55,6 +57,14 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
         for r in runner.results:
             s.add(BenchmarkResult(run_id=runner.run_id, **r.model_dump()))
         s.commit()
+
+    # Observabilidad opt-in: exporta el run como trace a lookspan (best-effort, no rompe nada)
+    from core import lookspan
+
+    await lookspan.export_run(
+        runner.run_id, runner.req.engine, runner.req.model, runner.req.quant,
+        runner.results, started, ended, runner.req.engine_opts,
+    )
 
 
 class SweepRequest(BaseModel):

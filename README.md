@@ -63,6 +63,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **SSE en vivo**: progreso de descargas (con %), TTFT, tok/s actual, log estilo terminal
 - **Descargas resilientes**: GGUFs de decenas de GB con reintentos automáticos (backoff exponencial) y **reanudación** desde el parcial vía cabecera Range si la red se corta
 - **API keys en el keyring del SO**: guarda las claves de OpenAI/Anthropic/OpenRouter/NVIDIA en el gestor de credenciales del sistema (Ajustes → API keys); el benchmark las usa solo, nunca se escriben a disco
+- **Observabilidad con lookspan** (opt-in): si defines `LOOKSPAN_ENDPOINT`, cada run de benchmark se exporta como un **trace** a [lookspan](https://github.com/JoniMartin27/lookspan) (span raíz + un `llm_call` por prompt con TTFT, tok/s, VRAM y calidad reales). Best-effort: un fallo de red nunca rompe el benchmark
 - **Stop en cualquier momento**: cancela bootstrap, descarga o ejecución
 - **Persistencia**: SQLite con todos los runs (engine, modelo, quant, flags, métricas por prompt, output bruto)
 

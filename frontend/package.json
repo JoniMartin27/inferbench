@@ -24,20 +24,20 @@
     "recharts": "^2.13.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0",
-    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16",
     "tailwindcss": "^3.4.0",
     "postcss": "^8.4.0",
     "autoprefixer": "^10.4.0",
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1",
     "concurrently": "^9.0.0",
     "wait-on": "^8.0.0"
   },
   "build": {
     "appId": "com.inferbench.app",
     "productName": "InferBench",
-    "electronVersion": "33.4.11",
+    "electronVersion": "42.3.3",
     "npmRebuild": false,
     "directories": { "output": "release" },
     "files": ["dist/**/*", "electron/**/*", "!electron/sidecar/**/*"],

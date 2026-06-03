@@ -43,6 +43,25 @@ _register(SglangEngine())
 _register(TgiEngine())
 
 
+# Cuantizaciones válidas por motor (fuente única: optimizer.ENGINE_QUANTS). Las publicamos
+# en la metadata para que la UI ofrezca los quants correctos por motor (GGUF en llama.cpp,
+# awq/gptq/fp8 en los Docker). Ollama va por tag pre-cuantizado y las APIs no cuantizan → [].
+def _attach_quants() -> None:
+    from core.optimizer import ENGINE_QUANTS
+
+    _NO_QUANT_UI = {"ollama"}  # el quant lo fija el tag de Ollama
+    for engine in _REGISTRY.values():
+        if engine.meta.type == "api" or engine.meta.id in _NO_QUANT_UI:
+            continue
+        quants = list(ENGINE_QUANTS.get(engine.meta.id, []))
+        if engine.meta.id in ("vllm", "sglang", "tgi"):
+            quants = ["none", *quants]  # fp16 sin cuantizar = opción por defecto segura
+        engine.meta.quants = quants
+
+
+_attach_quants()
+
+
 # APIs cloud
 for eid, name, desc in [
     ("openai", "OpenAI", "API cloud — solo sampling."),

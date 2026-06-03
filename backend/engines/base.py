@@ -24,6 +24,7 @@ class EngineMeta(BaseModel):
     description: str = ""
     runtimes: list[RuntimeKind] = []  # qué runtimes soporta
     default_runtime: RuntimeKind = "docker"
+    quants: list[str] = []  # cuantizaciones válidas para ESTE motor (vacío = no aplica)
 
 
 class StartRequest(BaseModel):

@@ -15,11 +15,6 @@ const ALL_PROMPTS = [
 ];
 const VISION_PROMPT_IDS = ALL_PROMPTS.filter((p) => p.vision).map((p) => p.id);
 
-const QUANTS = [
-  "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
-  "Q3_K_M", "IQ3_M", "Q2_K", "IQ2_M", "IQ2_XS", "IQ2_XXS", "IQ1_M", "IQ1_S",
-];
-
 // Mapea kv_cache del optimizador → preset de compresión del frontend
 const KV_TO_COMPRESSION = { f16: "quality", q8_0: "balanced", q5_0: "compressed", q4_0: "aggressive" };
 
@@ -208,6 +203,9 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const selectedModel = models.find((m) => m.id === model);
   const modelHasGguf = !!selectedModel?.hf_gguf;
   const isVisionModel = !!selectedModel?.tags?.includes("vision");
+  // Cuantizaciones válidas para el motor elegido (GGUF en llama.cpp, awq/gptq/fp8 en los
+  // Docker, vacío en ollama/API). Las publica el backend en la metadata del motor.
+  const engineQuants = selectedEngine?.meta?.quants ?? [];
   const apiNeedsKey = engineIsApi && !apiKey;
   // Determinar si el motor está listo para arrancar
   const engineNativeReady = selectedEngine?.runtimes?.some(
@@ -333,6 +331,15 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
     if (!isVisionModel) setPrompts((p) => p.filter((id) => !VISION_PROMPT_IDS.includes(id)));
   }, [isVisionModel]);
 
+  // Al cambiar de motor, si el quant actual no es válido para él, salta al primero válido
+  // y limpia del sweep los quants que ese motor no admite.
+  useEffect(() => {
+    if (!engineQuants.length) return;
+    if (!engineQuants.includes(quant)) setQuant(engineQuants[0]);
+    setSweepQuants((s) => s.filter((q) => engineQuants.includes(q)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, engineQuants.join("|")]);
+
   return (
     <>
       <PageHeader
@@ -427,14 +434,14 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 )}
               </Field>
             )}
-            {!engineIsApi && !localModel && (
+            {!engineIsApi && !localModel && engineQuants.length > 0 && (
               <>
                 <Field
                   label="Cuantización"
                   hint={loadingQuants ? "Comprobando compatibilidad…" : "Para una sola corrida"}
                 >
                   <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
-                    {QUANTS.map((q) => {
+                    {engineQuants.map((q) => {
                       const st = feasibleQuants[q];
                       const disabled = isQuantDisabled(st);
                       return (
@@ -447,7 +454,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 </Field>
                 <Field label="Sweep" hint="Marca varias para comparar (corre secuencial)">
                   <div className="flex flex-wrap gap-2">
-                    {QUANTS.map((q) => {
+                    {engineQuants.map((q) => {
                       const st = feasibleQuants[q];
                       const infeasible = isQuantDisabled(st);
                       const selected = sweepQuants.includes(q);

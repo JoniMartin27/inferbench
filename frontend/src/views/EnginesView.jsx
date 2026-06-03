@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Play, Square, RefreshCw, Download } from "lucide-react";
 import { api, installEngine } from "../api";
 import { PageHeader, Card, Button, Badge, Field, Input, Spinner } from "../components/ui.jsx";
@@ -9,12 +9,18 @@ export default function EnginesView({ dockerDown }) {
   const [error, setError] = useState(null);
   const [forms, setForms] = useState({});
   const [installing, setInstalling] = useState({}); // id → progress
+  const installAbortRef = useRef(null);
 
   const refresh = () => api.listEngines().then(setEngines).catch((e) => setError(e.message));
   useEffect(() => {
     refresh();
     const id = setInterval(refresh, 4000);
-    return () => clearInterval(id);
+    // Al desmontar: parar el polling y abortar cualquier descarga de binario en curso
+    // (si no, el fetch del stream seguiría vivo mutando estado de un componente muerto).
+    return () => {
+      clearInterval(id);
+      installAbortRef.current?.abort();
+    };
   }, []);
 
   const start = async (id) => {
@@ -29,9 +35,13 @@ export default function EnginesView({ dockerDown }) {
       // Auto-instalar si el runtime nativo aún no está listo
       if (wanted === "native" && rt && !rt.ready) {
         setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
-        await installEngine(id, (evt) => {
-          setInstalling((s) => ({ ...s, [id]: evt }));
-        });
+        const ctrl = new AbortController();
+        installAbortRef.current = ctrl;
+        await installEngine(
+          id,
+          (evt) => setInstalling((s) => ({ ...s, [id]: evt })),
+          ctrl.signal
+        );
         setInstalling((s) => ({ ...s, [id]: null }));
         await refresh();
       }
@@ -50,7 +60,7 @@ export default function EnginesView({ dockerDown }) {
       await api.startEngine(id, body);
       await refresh();
     } catch (e) {
-      setError(e.message);
+      if (e.name !== "AbortError") setError(e.message); // abort = vista desmontada, no error
       setInstalling((s) => ({ ...s, [id]: null }));
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
@@ -72,13 +82,17 @@ export default function EnginesView({ dockerDown }) {
   const install = async (id) => {
     setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
     setError(null);
+    const ctrl = new AbortController();
+    installAbortRef.current = ctrl;
     try {
-      await installEngine(id, (evt) => {
-        setInstalling((s) => ({ ...s, [id]: evt }));
-      });
+      await installEngine(
+        id,
+        (evt) => setInstalling((s) => ({ ...s, [id]: evt })),
+        ctrl.signal
+      );
       await refresh();
     } catch (e) {
-      setError(e.message);
+      if (e.name !== "AbortError") setError(e.message); // abort = vista desmontada, no error
     } finally {
       setTimeout(() => setInstalling((s) => ({ ...s, [id]: null })), 1500);
     }

@@ -285,6 +285,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
     }
   };
 
+  // Cancela el polling del sweep si el usuario navega fuera (desmonta la vista): sin esto,
+  // el while(true) seguiría vivo en segundo plano abriendo EventSources nuevos.
+  const sweepCancelRef = useRef(false);
+  useEffect(() => () => {
+    sweepCancelRef.current = true;
+  }, []);
+
   const startSweep = async () => {
     if (!sweepQuants.length) return;
     bClear();
@@ -301,6 +308,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
       };
       const { sweep_id } = await api.startSweep(base, sweepQuants);
       bLog("info", `Sweep arrancado: ${sweep_id}`);
+      sweepCancelRef.current = false; // re-armar para esta corrida
       pollSweep(sweep_id);
     } catch (e) {
       bLog("error", e.message);
@@ -311,6 +319,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const pollSweep = async (sweepId) => {
     let lastRunId = null;
     while (true) {
+      if (sweepCancelRef.current) return; // vista desmontada: detener el polling
       try {
         const status = await api.sweepStatus(sweepId);
         if (status.current && status.current !== lastRunId) {

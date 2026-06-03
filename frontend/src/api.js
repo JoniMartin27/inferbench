@@ -147,27 +147,37 @@ export function subscribeBenchmark(runId, onEvent) {
 // Suscripción a la instalación de binarios nativos.
 // Nota: el navegador EventSource solo soporta GET, así que arrancamos la instalación con fetch
 // y consumimos manualmente el stream SSE.
-export async function installEngine(engineId, onEvent) {
-  const res = await fetch(`${API_BASE}/api/engines/${engineId}/install`, { method: "POST" });
+export async function installEngine(engineId, onEvent, signal) {
+  // signal (AbortSignal opcional): permite cancelar la descarga si la vista se desmonta,
+  // en vez de seguir leyendo el stream (cientos de MB) y mutar estado de un componente muerto.
+  const res = await fetch(`${API_BASE}/api/engines/${engineId}/install`, { method: "POST", signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf("\n\n")) >= 0) {
-      const block = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
-      if (!dataLine) continue;
-      try {
-        onEvent(JSON.parse(dataLine.slice(6)));
-      } catch {
-        /* ignore */
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
+        if (!dataLine) continue;
+        try {
+          onEvent(JSON.parse(dataLine.slice(6)));
+        } catch {
+          /* ignore */
+        }
       }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
     }
   }
 }

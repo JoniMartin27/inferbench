@@ -1,7 +1,9 @@
 """Interfaz abstracta de motor de inferencia (Docker o nativo)."""
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
 from pydantic import BaseModel, Field
@@ -36,6 +38,18 @@ class StartRequest(BaseModel):
     extra_env: dict[str, str] = Field(default_factory=dict)
 
 
+def _docker_hf_cache() -> Path:
+    """Directorio host del caché HF que comparten los contenedores (persistente)."""
+    base = (
+        Path(os.environ["APPDATA"]) / "InferBench"
+        if os.name == "nt" and os.environ.get("APPDATA")
+        else Path.home() / ".inferbench"
+    )
+    d = base / "docker-hf-cache"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 class Engine(ABC):
     meta: EngineMeta
 
@@ -56,10 +70,11 @@ class Engine(ABC):
     def build_volumes(self, req: StartRequest) -> dict[str, dict[str, str]]:
         vols: dict[str, dict[str, str]] = {}
         if req.model_path:
-            import os
-
             host_dir = os.path.dirname(os.path.abspath(req.model_path))
             vols[host_dir] = {"bind": "/models", "mode": "ro"}
+        # Caché HF persistente: vLLM/SGLang/TGI descargan el modelo dentro del contenedor;
+        # sin este volumen lo re-descargarían en CADA run (lento y puede agotar el timeout).
+        vols[str(_docker_hf_cache())] = {"bind": "/root/.cache/huggingface", "mode": "rw"}
         return vols
 
     def container_model_path(self, req: StartRequest) -> str | None:

@@ -46,7 +46,10 @@ class VllmEngine(Engine):
             cmd += ["--gpu-memory-utilization", str(opts["gpuMemUtil"])]
 
         if opts.get("enforceEager"):
-            cmd += ["--enforce-eager"]
+            cmd += ["--enforce-eager"]  # sin CUDA graphs → ahorra VRAM (clave en GPUs chicas)
+
+        if opts.get("maxNumSeqs"):
+            cmd += ["--max-num-seqs", str(int(opts["maxNumSeqs"]))]
 
         if opts.get("prefixCaching"):
             cmd += ["--enable-prefix-caching"]

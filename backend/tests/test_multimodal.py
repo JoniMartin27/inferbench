@@ -1,11 +1,12 @@
-"""Tests del soporte multimodal (visión): catálogo, mmproj y payload de la API."""
+"""Tests del soporte multimodal (visión): catálogo, mmproj, payload y scorer de calidad."""
 import base64
 
 from core import benchmark, model_manager
-from core.benchmark import Prompt, _build_chat_body, _image_data_url
+from core.benchmark import Prompt, _build_chat_body, _image_data_url, _quality_keywords
 from core.models_catalog import get_model
 
 VISION_IDS = ["qwen2-vl-7b", "qwen2-vl-2b", "qwen2.5-vl-7b", "minicpm-v-2.6"]
+VISION_PROMPTS = ["vision-scene", "vision-count"]
 
 
 def test_vision_models_flagged_and_have_mmproj():
@@ -45,7 +46,7 @@ def test_chat_body_text_only_is_string():
 
 
 def test_chat_body_with_image_is_multimodal_array():
-    p = Prompt(id="vision", name="V", type="vision", prompt="¿qué ves?", image="vision_test.png")
+    p = Prompt(id="v", name="V", type="vision", prompt="¿qué ves?", image="vision_scene.png")
     body = _build_chat_body("m", p, {})
     user = next(msg for msg in body["messages"] if msg["role"] == "user")
     assert isinstance(user["content"], list)
@@ -53,12 +54,50 @@ def test_chat_body_with_image_is_multimodal_array():
     assert user["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
-def test_vision_test_asset_exists_and_decodes():
-    head, b64 = _image_data_url("vision_test.png").split(",", 1)
-    assert head == "data:image/png;base64"
-    assert base64.b64decode(b64)[:8] == b"\x89PNG\r\n\x1a\n"  # PNG válido
+def test_vision_assets_exist_and_decode():
+    for img in ("vision_scene.png", "vision_count.png"):
+        head, b64 = _image_data_url(img).split(",", 1)
+        assert head == "data:image/png;base64"
+        assert base64.b64decode(b64)[:8] == b"\x89PNG\r\n\x1a\n"  # PNG válido
 
 
-def test_vision_prompt_registered_in_suite():
-    p = benchmark.get_prompt("vision")
-    assert p is not None and p.type == "vision" and p.image == "vision_test.png"
+def test_vision_prompts_registered_with_checklist():
+    for pid in VISION_PROMPTS:
+        p = benchmark.get_prompt(pid)
+        assert p is not None and p.type == "vision"
+        assert p.image and p.image.endswith(".png")
+        assert p.keywords and all(isinstance(g, list) and g for g in p.keywords)
+
+
+# ---- scorer por checklist (la mejora de calidad de verdad) ----
+
+GROUPS = [["círculo", "circle"], ["rojo", "red"], ["3", "tres", "three"]]
+
+
+def test_keywords_perfect_match_is_100():
+    assert _quality_keywords("Hay 3: un círculo rojo y más", GROUPS) == 100.0
+
+
+def test_keywords_partial_is_fraction():
+    # acierta círculo (1/3) pero no color ni conteo
+    assert _quality_keywords("Veo un circulo", GROUPS) == round(1 / 3 * 100, 1)
+
+
+def test_keywords_empty_output_is_zero():
+    assert _quality_keywords("", GROUPS) == 0.0
+    assert _quality_keywords("nada relevante", GROUPS) == 0.0
+
+
+def test_keywords_accent_and_language_insensitive():
+    # 'circulo' (sin tilde) y términos en inglés cuentan igual
+    assert _quality_keywords("a red circle, three of them", GROUPS) == 100.0
+    assert _quality_keywords("un circulo", [["círculo"]]) == 100.0
+
+
+def test_scene_checklist_scores_a_correct_answer_high():
+    # Respuesta ideal a vision-scene → debería puntuar 100 con su propio checklist.
+    p = benchmark.get_prompt("vision-scene")
+    ideal = "Hay 3 figuras: un círculo rojo, un cuadrado azul y un triángulo verde."
+    assert _quality_keywords(ideal, p.keywords) == 100.0
+    # Una respuesta pobre puntúa mucho menos.
+    assert _quality_keywords("Una figura azul.", p.keywords) < 50.0

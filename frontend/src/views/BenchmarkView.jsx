@@ -9,8 +9,10 @@ const ALL_PROMPTS = [
   { id: "code", label: "Código" },
   { id: "summary", label: "Resumen" },
   { id: "chat", label: "Chat" },
-  { id: "vision", label: "Visión", vision: true },
+  { id: "vision-scene", label: "Visión: escena", vision: true },
+  { id: "vision-count", label: "Visión: conteo", vision: true },
 ];
+const VISION_PROMPT_IDS = ALL_PROMPTS.filter((p) => p.vision).map((p) => p.id);
 
 const QUANTS = [
   "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
@@ -327,7 +329,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // El prompt de visión solo aplica a modelos multimodales: deselecciónalo al cambiar
   // a un modelo sin visión para no enviarlo (el backend igual lo gatea, esto evita ruido).
   useEffect(() => {
-    if (!isVisionModel) setPrompts((p) => p.filter((id) => id !== "vision"));
+    if (!isVisionModel) setPrompts((p) => p.filter((id) => !VISION_PROMPT_IDS.includes(id)));
   }, [isVisionModel]);
 
   return (

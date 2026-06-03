@@ -283,7 +283,7 @@ inferbench/
 
 ## Suite de prompts
 
-`backend/data/prompts.json` define 5 prompts representativos:
+`backend/data/prompts.json` define 6 prompts representativos:
 
 | ID | Tipo | Tokens objetivo |
 |----|------|-----------------|
@@ -291,9 +291,10 @@ inferbench/
 | `code` | generación de código | 512 |
 | `summary` | resumen | 384 |
 | `chat` | conversación corta | 128 |
-| `vision` | descripción de imagen (multimodal) | 64 |
+| `vision-scene` | visión: 3 figuras de 3 colores (forma+color+conteo) | 96 |
+| `vision-count` | visión: contar objetos | 48 |
 
-> El prompt `vision` solo se ejecuta en **modelos de visión** (con `mmproj`); para el resto se omite automáticamente. Envía una imagen real (`data/vision_test.png`) por la API de visión OpenAI-compatible.
+> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Envían imágenes reales con ground-truth conocido (`data/vision_scene.png`, `data/vision_count.png`, generadas por `scripts/make_vision_test.py`) por la API de visión OpenAI-compatible, y se puntúan con un **checklist de atributos** (ver abajo) en vez de F1 de tokens.
 
 Métricas medidas por prompt:
 - **TTFT** (ms): tiempo al primer token
@@ -307,15 +308,16 @@ Métricas medidas por prompt:
 
 ## Evaluación de calidad
 
-La nota de calidad (0-100) tiene 3 modos, seleccionables en **Benchmark → Evaluación de calidad** (TTFT y tok/s siempre son medidas reales del motor):
+La nota de calidad (0-100) tiene varios modos (TTFT y tok/s siempre son medidas reales del motor):
 
 | Modo | Cómo funciona | Cuándo usarlo |
 |------|---------------|---------------|
 | **Referencia (offline)** · *default* | Compara la respuesta con la de referencia: F1 de tokens *recall-weighted* + recall exacto de números + stemming por prefijo + penalización de texto degenerado. Python puro, **sin GPU/modelo/red** | Funciona en **cualquier ordenador**. Bueno en tareas con respuesta esperada (razonamiento, código, resumen); aproximado en tareas abiertas (chat) |
+| **Checklist de atributos** · *visión y hechos* | El prompt define grupos de sinónimos (el ground-truth: formas, colores, conteo…); la nota es la fracción de atributos que aparecen en la respuesta. Robusto a acentos y bilingüe (ES/EN). Sin red | **Visión** (mide si el modelo *vio* bien la imagen, no el solapamiento de tokens) y cualquier tarea con hechos verificables. Es el scorer de los prompts `vision-*` |
 | **LLM-judge (motor local)** | El propio motor puntúa sus respuestas (rúbrica 0-100) | Fiable solo con modelos capaces (**≥7-8B**); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo) |
 | **LLM-judge (API externa)** | Un modelo cloud OpenAI-compatible (p.ej. `gpt-4o-mini`) juzga | Lo **más fiable e imparcial**; requiere API key |
 
-El default es offline a propósito para que funcione en máquinas sin GPU ni API. El LLM-judge es la mejora opcional para juicio fiable de tareas abiertas.
+El default es offline a propósito para que funcione en máquinas sin GPU ni API. Los prompts con `keywords` usan el checklist automáticamente (no lo sustituye el LLM-judge, que no ve la imagen). El LLM-judge es la mejora opcional para juicio fiable de tareas abiertas de texto.
 
 ---
 

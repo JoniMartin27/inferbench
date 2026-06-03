@@ -44,6 +44,10 @@ class Prompt(BaseModel):
     target_tokens: int = 256
     reference: str = ""
     image: str | None = None  # filename (relativo a data/) de una imagen → prompt multimodal
+    # Checklist de atributos verificables: lista de grupos de sinónimos. La calidad es la
+    # fracción de grupos que aparecen en la respuesta. Útil para visión (ground-truth de la
+    # imagen) y para cualquier tarea con hechos comprobables. Tiene prioridad sobre reference.
+    keywords: list[list[str]] | None = None
 
 
 def _image_data_url(image: str) -> str:
@@ -273,6 +277,26 @@ def _q_fbeta(p: float, r: float, beta: float = 2.0) -> float:
     b2 = beta * beta
     denom = b2 * p + r
     return (1 + b2) * p * r / denom if denom > 0 else 0.0
+
+
+def _q_norm(s: str) -> str:
+    """Minúsculas + sin diacríticos, para casar 'círculo'/'circulo' y ES/EN."""
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c)
+    )
+
+
+def _quality_keywords(output: str, groups: list[list[str]]) -> float:
+    """Calidad 0-100 por checklist: fracción de grupos de sinónimos cuyo término aparece
+    en la respuesta. Cada grupo es un atributo verificable (p.ej. un color o una forma de
+    la imagen); basta con que el modelo mencione UNA de sus variantes. Robusto a acentos."""
+    if not groups:
+        return 0.0
+    low = _q_norm(output)
+    hits = sum(1 for group in groups if any(_q_norm(term) in low for term in group))
+    return round(hits / len(groups) * 100, 1)
 
 
 def _quality_heuristic(output: str, ref: str) -> float:
@@ -921,10 +945,17 @@ class BenchmarkRunner:
         tps = token_count / gen_time if gen_time > 0 else 0.0
         output = "".join(text_chunks)
 
-        quality = _quality_heuristic(output, prompt.reference)
-        method = "heuristic"
+        if prompt.keywords:
+            # Checklist de atributos (p.ej. ground-truth de una imagen): mide corrección
+            # de verdad, no solo solapamiento de tokens con una frase de referencia.
+            quality = _quality_keywords(output, prompt.keywords)
+            method = "checklist"
+        else:
+            quality = _quality_heuristic(output, prompt.reference)
+            method = "heuristic"
         judge_mode = (self.req.judge or {}).get("mode", "heuristic")
-        if judge_mode in ("self", "api") and output.strip() and not error:
+        # El LLM-judge no ve la imagen → no sustituye al checklist en prompts de visión.
+        if not prompt.keywords and judge_mode in ("self", "api") and output.strip() and not error:
             j_url, j_model, j_headers = self._resolve_judge(headers, model_for_engine)
             if j_url and j_model:
                 await self.emit({"type": "phase", "phase": "judging"})

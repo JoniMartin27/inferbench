@@ -36,13 +36,37 @@
     "reference": ""
   },
   {
-    "id": "vision",
-    "name": "Visión (imagen)",
+    "id": "vision-scene",
+    "name": "Visión: escena",
     "type": "vision",
-    "system": "Eres un asistente que describe imágenes con precisión y brevedad.",
-    "prompt": "¿Qué figura geométrica y de qué color aparece en la imagen? Responde en una sola frase.",
-    "target_tokens": 64,
-    "reference": "Un círculo rojo sobre un fondo blanco.",
-    "image": "vision_test.png"
+    "system": "Eres un asistente que describe imágenes con precisión.",
+    "prompt": "Describe la imagen: ¿qué figuras geométricas hay, de qué color es cada una, y cuántas son en total?",
+    "target_tokens": 96,
+    "reference": "Tres figuras: un círculo rojo, un cuadrado azul y un triángulo verde.",
+    "image": "vision_scene.png",
+    "keywords": [
+      ["círculo", "circle"],
+      ["cuadrado", "square"],
+      ["triángulo", "triangle"],
+      ["rojo", "red"],
+      ["azul", "blue"],
+      ["verde", "green"],
+      ["3", "tres", "three"]
+    ]
+  },
+  {
+    "id": "vision-count",
+    "name": "Visión: conteo",
+    "type": "vision",
+    "system": "Eres un asistente que cuenta objetos en imágenes con precisión.",
+    "prompt": "¿Cuántos círculos hay en la imagen y de qué color son? Responde brevemente.",
+    "target_tokens": 48,
+    "reference": "Cuatro círculos naranjas.",
+    "image": "vision_count.png",
+    "keywords": [
+      ["4", "cuatro", "four"],
+      ["círculo", "circle"],
+      ["naranja", "orange"]
+    ]
   }
 ]

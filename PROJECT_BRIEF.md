@@ -211,13 +211,28 @@ con `QUANT_FACTOR`: Q2_K=0.32, Q3_K_M=0.42, Q4_K_M=0.55, Q5_K_M=0.67, Q6_K=0.81,
 
 ### Memoria del KV-cache por token
 
+**Exacta** (cuando hay metadata de arquitectura — el caso por defecto):
+
 ```
-kv_per_token_MB(model, kv_type) = 0.5 * (params/7)^0.7 * KV_FACTOR[kv_type]
+kv_per_token_MB_f16(model) = 2·(K+V) · n_layer · n_head_kv · head_dim · 2 bytes / 1MiB
+kv_per_token_MB(model, kv)  = kv_per_token_MB_f16(model) * KV_FACTOR[kv]
+```
+
+`n_head_kv` (no `n_head`) fija el tamaño: captura GQA/MQA. Las dims se leen de la
+metadata GGUF (catálogo poblado por `scripts/enrich_arch.py` leyendo el header del
+GGUF vía HTTP Range; modelos locales vía `core/gguf_reader.py`).
+
+**Fallback heurístico** si faltan dims (p.ej. modelos huge sin GGUF abierto):
+
+```
+kv_per_token_MB(model, kv) = 0.5 * (params/7)^0.7 * KV_FACTOR[kv]
 ```
 
 con `KV_FACTOR`: f16=1.0, q8_0=0.5, q4_0=0.25, fp8=0.5, fp8_e5m2=0.5
 
-> ⚠️ Esta es una **aproximación**. En el backend real, leer `n_layer`, `n_kv_heads`, `head_dim` del archivo de config del modelo (`config.json` o metadata GGUF) para precisión exacta.
+> La heurística sobrestimaba la KV hasta ~16× en modelos GQA (que son la mayoría del
+> catálogo moderno), provocando contextos máximos artificialmente bajos. La fórmula
+> exacta lo corrige; en modelos MHA (sin GQA) ambas coinciden.
 
 ### Compatibilidad
 

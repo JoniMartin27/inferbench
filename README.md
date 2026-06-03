@@ -106,7 +106,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 Por defecto, basadas en `core/optimizer.py`:
 
 - **Cuantización óptima**: itera de mayor a menor calidad (Q8 → Q2) hasta que cabe
-- **Contexto máximo automático** según VRAM disponible y KV-cache
+- **Contexto máximo automático** según VRAM disponible y KV-cache, con **KV-cache exacta** calculada de la arquitectura real (`n_layer`·`n_head_kv`·`head_dim`) — captura GQA/MQA, que la heurística antigua ignoraba
 - **KV-cache compresión** (`-ctk -ctv`): f16 / q8_0 / q4_0
 - **MoE offload** (`--n-cpu-moe N`) para modelos MoE en GPUs pequeñas
 - **Flash Attention** (`-fa on`)
@@ -371,12 +371,12 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | **Bonus** | **Params reales** de GGUFs locales desde metadata (independiente del quant) | ✅ |
 | **Bonus** | **Compresión KV explicada** + tabla de modelos más potentes por compresión | ✅ |
 | **Bonus** | **Calidad offline basada en referencia** + **LLM-judge** (local / API) | ✅ |
+| **Bonus** | **KV-cache exacta** desde metadata (`n_head_kv`/`head_dim`, capta GQA/MQA) en 123/124 modelos del catálogo | ✅ |
 
 ---
 
 ## Pendientes / siguientes pasos
 
-- KV-cache exacta para el cálculo de compat usando `n_kv_heads`/`head_dim` de la metadata (la cuenta de **parámetros** ya se lee de la metadata GGUF; el contexto máximo sigue siendo heurístico)
 - API keys persistidas vía `keyring` del SO (el LLM-judge por API ya acepta key por request)
 - Más cobertura de tests (ya hay 31 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `security`)
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp

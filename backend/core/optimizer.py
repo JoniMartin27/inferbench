@@ -179,7 +179,8 @@ def _fit_status_kv(
     y la opción kv_in_ram (--no-kv-offload): la KV va a RAM, no a VRAM.
     """
     model_size = compat.get_model_size_gb(model, quant)
-    kv_per_tok_gb = (0.5 * ((model.params_b / 7.0) ** 0.7) * kv_factor) / 1024.0
+    # KV exacta desde arquitectura si hay metadata; si no, heurística. × factor del preset.
+    kv_per_tok_gb = compat.kv_per_token_mb_f16(model) * kv_factor / 1024.0
     kv_overhead = context_len * kv_per_tok_gb
 
     if kv_in_ram:
@@ -259,7 +260,7 @@ def most_powerful_per_compression(
 
 def _rec_entry(model, quant, status, kv_f, context_len, snap, in_ram) -> dict[str, Any]:
     size = compat.get_model_size_gb(model, quant)
-    kv_per_tok_gb = (0.5 * ((model.params_b / 7.0) ** 0.7) * kv_f) / 1024.0
+    kv_per_tok_gb = compat.kv_per_token_mb_f16(model) * kv_f / 1024.0
     kv_gb = context_len * kv_per_tok_gb
     return {
         "id": model.id,

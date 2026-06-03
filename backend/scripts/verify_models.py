@@ -100,11 +100,23 @@ def main():
         cfg = fetch_config(config_repo)
         n_layer = cfg.get("num_hidden_layers") or cfg.get("n_layers") or c.get("n_layer")
         max_ctx = cfg.get("max_position_embeddings") or c.get("max_ctx")
+        n_head = cfg.get("num_attention_heads") or cfg.get("n_heads")
+        n_head_kv = cfg.get("num_key_value_heads") or n_head  # sin GQA: KV = nº cabezas
+        head_dim = cfg.get("head_dim") or (
+            (cfg["hidden_size"] // n_head) if (cfg.get("hidden_size") and n_head) else None
+        )
         c["hf_gguf"] = {"repo": repo, "file_template": tmpl}
         if n_layer:
             c["n_layer"] = int(n_layer)
         if max_ctx:
             c["max_ctx"] = int(max_ctx)
+        # Dims de arquitectura para la KV-cache exacta (captura GQA/MQA)
+        if n_head:
+            c["n_head"] = int(n_head)
+        if n_head_kv:
+            c["n_head_kv"] = int(n_head_kv)
+        if head_dim:
+            c["head_dim"] = int(head_dim)
         c.setdefault("size_base_gb", round(c["params_b"] * 2, 1))
         out.append(c)
         print(f"OK  {c['id']:32s} -> {repo}  tmpl={tmpl}  ctx={max_ctx} layers={n_layer}", file=sys.stderr)

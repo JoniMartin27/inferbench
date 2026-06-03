@@ -29,7 +29,10 @@ class Model(BaseModel):
     hf_gguf: HfGguf | None = None  # fuente para auto-descarga (llama.cpp)
     ollama_tag: str | None = None  # tag en el registro de Ollama (ej. "llama3.2:1b")
     hf_repo: str | None = None     # repo HF del modelo no-cuantizado (vLLM/SGLang/TGI)
-    n_layer: int | None = None     # número de capas (para calcular ngl partial)
+    n_layer: int | None = None     # número de capas (para ngl partial y KV exacta)
+    n_head: int | None = None      # cabezas de atención (query)
+    n_head_kv: int | None = None   # cabezas de KV (GQA/MQA); fija el tamaño de KV-cache
+    head_dim: int | None = None    # dimensión por cabeza (para KV-cache exacta)
 
 
 @lru_cache(maxsize=1)

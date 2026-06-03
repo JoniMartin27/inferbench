@@ -2,11 +2,14 @@
 
 Implementa las fórmulas del PROJECT_BRIEF:
 - size_GB(model, quant) = base * QUANT_FACTOR[quant] / 0.55
-- kv_per_token_MB(model, kv) = 0.5 * (params/7)^0.7 * KV_FACTOR[kv]
+- kv_per_token_MB(model, kv): EXACTO desde la arquitectura cuando hay metadata
+  (n_layer · n_head_kv · head_dim), si no, heurístico 0.5·(params/7)^0.7. Ambos × KV_FACTOR[kv].
 - check_compat() devuelve "api" | "ok" | "moe" | "partial" | "cpu" | "disk" | "fail" | "nofile"
 - compute_max_context() devuelve int (tokens)
 
-Aproximación: en futuro leer n_layer/n_kv_heads/head_dim del config real.
+La KV-cache exacta usa n_layer/n_head_kv/head_dim leídos de la metadata GGUF
+(catálogo enriquecido vía scripts/enrich_arch.py; locales vía gguf_reader). Esto
+captura GQA/MQA, que la heurística antigua ignoraba (sobrestimaba la KV hasta 8×).
 """
 from __future__ import annotations
 
@@ -147,9 +150,40 @@ def get_model_size_gb(model: Model, quant: str) -> float:
     return model.size_base_gb * factor / 2.0  # FP16=2 → ratio relativo a FP16
 
 
+def _exact_kv_per_token_mb_f16(model: Model) -> float | None:
+    """KV por token a f16 calculada de la arquitectura real, o None si faltan dims.
+
+    La KV-cache guarda, por capa y por token, los vectores K y V; con GQA/MQA su
+    tamaño lo fija n_head_kv (cabezas de KV), no n_head (cabezas de query):
+
+        bytes/token (f16) = 2 (K+V) · n_layer · n_head_kv · head_dim · 2 (bytes f16)
+
+    Duck-typed con getattr → sirve para Model del catálogo y para cualquier objeto
+    con n_layer/n_head_kv/head_dim (p.ej. un GGUF local).
+    """
+    n_layer = getattr(model, "n_layer", None)
+    n_head_kv = getattr(model, "n_head_kv", None)
+    head_dim = getattr(model, "head_dim", None)
+    if not (n_layer and n_head_kv and head_dim):
+        return None
+    kv_bytes = 4 * n_layer * n_head_kv * head_dim  # 2·(K+V) · 2 bytes f16
+    return kv_bytes / (1024 * 1024)
+
+
+def kv_per_token_mb_f16(model: Model) -> float:
+    """KV por token a f16 (sin compresión): exacta si hay metadata, si no heurística.
+
+    Fuente única de verdad del tamaño base de KV; los factores de compresión se
+    aplican multiplicando por KV_FACTOR (o el factor promedio de un preset).
+    """
+    exact = _exact_kv_per_token_mb_f16(model)
+    if exact is not None:
+        return exact
+    return 0.5 * ((model.params_b / 7.0) ** 0.7)
+
+
 def get_kv_per_token_mb(model: Model, kv_type: str) -> float:
-    factor = KV_FACTOR.get(kv_type, 1.0)
-    return 0.5 * ((model.params_b / 7.0) ** 0.7) * factor
+    return kv_per_token_mb_f16(model) * KV_FACTOR.get(kv_type, 1.0)
 
 
 def get_kv_per_token_gb(model: Model, kv_type: str) -> float:

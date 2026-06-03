@@ -19,7 +19,10 @@
     },
     "ollama_tag": "tinyllama:1.1b",
     "hf_repo": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    "n_layer": 22
+    "n_layer": 22,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 64
   },
   {
     "id": "llama-3.2-1b",
@@ -41,7 +44,10 @@
     },
     "ollama_tag": "llama3.2:1b",
     "hf_repo": "meta-llama/Llama-3.2-1B-Instruct",
-    "n_layer": 16
+    "n_layer": 16,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 64
   },
   {
     "id": "llama-3.2-3b",
@@ -62,7 +68,10 @@
     },
     "ollama_tag": "llama3.2:3b",
     "hf_repo": "meta-llama/Llama-3.2-3B-Instruct",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 24,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "llama-3.1-8b",
@@ -84,7 +93,10 @@
     },
     "ollama_tag": "llama3.1:8b",
     "hf_repo": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "llama-3.1-70b",
@@ -106,7 +118,10 @@
     },
     "ollama_tag": "llama3.1:70b",
     "hf_repo": "meta-llama/Meta-Llama-3.1-70B-Instruct",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "llama-3.3-70b",
@@ -129,7 +144,10 @@
     },
     "ollama_tag": "llama3.3:70b",
     "hf_repo": "meta-llama/Llama-3.3-70B-Instruct",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-0.5b",
@@ -151,7 +169,10 @@
     },
     "ollama_tag": "qwen2.5:0.5b",
     "hf_repo": "Qwen/Qwen2.5-0.5B-Instruct",
-    "n_layer": 24
+    "n_layer": 24,
+    "n_head": 14,
+    "n_head_kv": 2,
+    "head_dim": 64
   },
   {
     "id": "qwen2.5-1.5b",
@@ -173,7 +194,10 @@
     },
     "ollama_tag": "qwen2.5:1.5b",
     "hf_repo": "Qwen/Qwen2.5-1.5B-Instruct",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 12,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-3b",
@@ -194,7 +218,10 @@
     },
     "ollama_tag": "qwen2.5:3b",
     "hf_repo": "Qwen/Qwen2.5-3B-Instruct",
-    "n_layer": 36
+    "n_layer": 36,
+    "n_head": 16,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-7b",
@@ -215,7 +242,10 @@
     },
     "ollama_tag": "qwen2.5:7b",
     "hf_repo": "Qwen/Qwen2.5-7B-Instruct",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-14b",
@@ -236,7 +266,10 @@
     },
     "ollama_tag": "qwen2.5:14b",
     "hf_repo": "Qwen/Qwen2.5-14B-Instruct",
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-32b",
@@ -258,7 +291,10 @@
     },
     "ollama_tag": "qwen2.5:32b",
     "hf_repo": "Qwen/Qwen2.5-32B-Instruct",
-    "n_layer": 64
+    "n_layer": 64,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-72b",
@@ -280,7 +316,10 @@
     },
     "ollama_tag": "qwen2.5:72b",
     "hf_repo": "Qwen/Qwen2.5-72B-Instruct",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-1.5b",
@@ -302,7 +341,10 @@
     },
     "ollama_tag": "qwen2.5-coder:1.5b",
     "hf_repo": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 12,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-3b",
@@ -323,7 +365,10 @@
     },
     "ollama_tag": "qwen2.5-coder:3b",
     "hf_repo": "Qwen/Qwen2.5-Coder-3B-Instruct",
-    "n_layer": 36
+    "n_layer": 36,
+    "n_head": 16,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-7b",
@@ -344,7 +389,10 @@
     },
     "ollama_tag": "qwen2.5-coder:7b",
     "hf_repo": "Qwen/Qwen2.5-Coder-7B-Instruct",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-14b",
@@ -365,7 +413,10 @@
     },
     "ollama_tag": "qwen2.5-coder:14b",
     "hf_repo": "Qwen/Qwen2.5-Coder-14B-Instruct",
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-32b",
@@ -387,7 +438,10 @@
     },
     "ollama_tag": "qwen2.5-coder:32b",
     "hf_repo": "Qwen/Qwen2.5-Coder-32B-Instruct",
-    "n_layer": 64
+    "n_layer": 64,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-0.6b",
@@ -409,7 +463,10 @@
     },
     "ollama_tag": "qwen3:0.6b",
     "hf_repo": "Qwen/Qwen3-0.6B",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 16,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-1.7b",
@@ -431,7 +488,10 @@
     },
     "ollama_tag": "qwen3:1.7b",
     "hf_repo": "Qwen/Qwen3-1.7B",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 16,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-4b",
@@ -452,7 +512,10 @@
     },
     "ollama_tag": "qwen3:4b",
     "hf_repo": "Qwen/Qwen3-4B",
-    "n_layer": 36
+    "n_layer": 36,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-8b",
@@ -474,7 +537,10 @@
     },
     "ollama_tag": "qwen3:8b",
     "hf_repo": "Qwen/Qwen3-8B",
-    "n_layer": 36
+    "n_layer": 36,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-14b",
@@ -495,7 +561,10 @@
     },
     "ollama_tag": "qwen3:14b",
     "hf_repo": "Qwen/Qwen3-14B",
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-32b",
@@ -517,7 +586,10 @@
     },
     "ollama_tag": "qwen3:32b",
     "hf_repo": "Qwen/Qwen3-32B",
-    "n_layer": 64
+    "n_layer": 64,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen3-30b-a3b",
@@ -540,7 +612,10 @@
     },
     "ollama_tag": "qwen3:30b-a3b",
     "hf_repo": "Qwen/Qwen3-30B-A3B",
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen3-235b-a22b",
@@ -557,7 +632,10 @@
       "huge"
     ],
     "hf_repo": "Qwen/Qwen3-235B-A22B",
-    "n_layer": 94
+    "n_layer": 94,
+    "n_head": 64,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "mistral-7b-v0.3",
@@ -578,7 +656,10 @@
     },
     "ollama_tag": "mistral:7b-instruct-v0.3",
     "hf_repo": "mistralai/Mistral-7B-Instruct-v0.3",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "mistral-nemo-12b",
@@ -599,7 +680,10 @@
     },
     "ollama_tag": "mistral-nemo:12b",
     "hf_repo": "mistralai/Mistral-Nemo-Instruct-2407",
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "mistral-small-22b",
@@ -620,7 +704,10 @@
     },
     "ollama_tag": "mistral-small:22b",
     "hf_repo": "mistralai/Mistral-Small-Instruct-2409",
-    "n_layer": 56
+    "n_layer": 56,
+    "n_head": 48,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "codestral-22b",
@@ -641,7 +728,10 @@
     },
     "ollama_tag": "codestral:22b",
     "hf_repo": "mistralai/Codestral-22B-v0.1",
-    "n_layer": 56
+    "n_layer": 56,
+    "n_head": 48,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "mixtral-8x7b",
@@ -659,7 +749,10 @@
     ],
     "ollama_tag": "mixtral:8x7b",
     "hf_repo": "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "mixtral-8x22b",
@@ -677,7 +770,10 @@
     ],
     "ollama_tag": "mixtral:8x22b",
     "hf_repo": "mistralai/Mixtral-8x22B-Instruct-v0.1",
-    "n_layer": 56
+    "n_layer": 56,
+    "n_head": 48,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "gemma-2-2b",
@@ -699,7 +795,10 @@
     },
     "ollama_tag": "gemma2:2b",
     "hf_repo": "google/gemma-2-2b-it",
-    "n_layer": 26
+    "n_layer": 26,
+    "n_head": 8,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "gemma-2-9b",
@@ -720,7 +819,10 @@
     },
     "ollama_tag": "gemma2:9b",
     "hf_repo": "google/gemma-2-9b-it",
-    "n_layer": 42
+    "n_layer": 42,
+    "n_head": 16,
+    "n_head_kv": 8,
+    "head_dim": 256
   },
   {
     "id": "gemma-2-27b",
@@ -741,7 +843,10 @@
     },
     "ollama_tag": "gemma2:27b",
     "hf_repo": "google/gemma-2-27b-it",
-    "n_layer": 46
+    "n_layer": 46,
+    "n_head": 32,
+    "n_head_kv": 16,
+    "head_dim": 128
   },
   {
     "id": "phi-3.5-mini",
@@ -763,7 +868,10 @@
     },
     "ollama_tag": "phi3.5:3.8b",
     "hf_repo": "microsoft/Phi-3.5-mini-instruct",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 96
   },
   {
     "id": "phi-3.5-moe",
@@ -784,7 +892,10 @@
       "file_template": "Phi-3.5-MoE-instruct-{quant}.gguf"
     },
     "hf_repo": "microsoft/Phi-3.5-MoE-instruct",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "phi-4-14b",
@@ -806,7 +917,10 @@
     },
     "ollama_tag": "phi4:14b",
     "hf_repo": "microsoft/phi-4",
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 40,
+    "n_head_kv": 10,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-qwen-1.5b",
@@ -828,7 +942,10 @@
     },
     "ollama_tag": "deepseek-r1:1.5b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 12,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-qwen-7b",
@@ -849,7 +966,10 @@
     },
     "ollama_tag": "deepseek-r1:7b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-    "n_layer": 28
+    "n_layer": 28,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-llama-8b",
@@ -871,7 +991,10 @@
     },
     "ollama_tag": "deepseek-r1:8b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-qwen-14b",
@@ -892,7 +1015,10 @@
     },
     "ollama_tag": "deepseek-r1:14b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-qwen-32b",
@@ -914,7 +1040,10 @@
     },
     "ollama_tag": "deepseek-r1:32b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-    "n_layer": 64
+    "n_layer": 64,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-distill-llama-70b",
@@ -936,7 +1065,10 @@
     },
     "ollama_tag": "deepseek-r1:70b",
     "hf_repo": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "yi-1.5-9b",
@@ -956,7 +1088,10 @@
       "file_template": "Yi-1.5-9B-Chat-{quant}.gguf"
     },
     "hf_repo": "01-ai/Yi-1.5-9B-Chat",
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "yi-1.5-34b",
@@ -977,7 +1112,10 @@
       "file_template": "Yi-1.5-34B-Chat-{quant}.gguf"
     },
     "hf_repo": "01-ai/Yi-1.5-34B-Chat",
-    "n_layer": 60
+    "n_layer": 60,
+    "n_head": 56,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "starcoder2-3b",
@@ -999,7 +1137,10 @@
     },
     "ollama_tag": "starcoder2:3b",
     "hf_repo": "bigcode/starcoder2-3b",
-    "n_layer": 30
+    "n_layer": 30,
+    "n_head": 24,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "starcoder2-15b",
@@ -1020,7 +1161,10 @@
     },
     "ollama_tag": "starcoder2:15b",
     "hf_repo": "bigcode/starcoder2-15b",
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 48,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "command-r-35b",
@@ -1042,7 +1186,10 @@
     },
     "ollama_tag": "command-r:35b",
     "hf_repo": "CohereForAI/c4ai-command-r-08-2024",
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "command-r-plus-104b",
@@ -1080,7 +1227,10 @@
       "file_template": "Hermes-3-Llama-3.1-8B-{quant}.gguf"
     },
     "hf_repo": "NousResearch/Hermes-3-Llama-3.1-8B",
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "hermes-3-70b",
@@ -1098,7 +1248,10 @@
       "tuned"
     ],
     "hf_repo": "NousResearch/Hermes-3-Llama-3.1-70B",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "nemotron-70b",
@@ -1121,7 +1274,10 @@
     },
     "ollama_tag": "nemotron:70b",
     "hf_repo": "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
-    "n_layer": 80
+    "n_layer": 80,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "gemma-3-1b",
@@ -1143,7 +1299,10 @@
       "file_template": "google_gemma-3-1b-it-{quant}.gguf"
     },
     "size_base_gb": 2.0,
-    "n_layer": 26
+    "n_layer": 26,
+    "n_head": 4,
+    "n_head_kv": 1,
+    "head_dim": 256
   },
   {
     "id": "gemma-3-4b",
@@ -1165,7 +1324,10 @@
       "file_template": "google_gemma-3-4b-it-{quant}.gguf"
     },
     "size_base_gb": 8.6,
-    "n_layer": 34
+    "n_layer": 34,
+    "n_head": 8,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "gemma-3-12b",
@@ -1187,7 +1349,10 @@
       "file_template": "google_gemma-3-12b-it-{quant}.gguf"
     },
     "size_base_gb": 24.4,
-    "n_layer": 48
+    "n_layer": 48,
+    "n_head": 16,
+    "n_head_kv": 8,
+    "head_dim": 256
   },
   {
     "id": "gemma-3-27b",
@@ -1210,7 +1375,10 @@
       "file_template": "google_gemma-3-27b-it-{quant}.gguf"
     },
     "size_base_gb": 54.8,
-    "n_layer": 62
+    "n_layer": 62,
+    "n_head": 32,
+    "n_head_kv": 16,
+    "head_dim": 128
   },
   {
     "id": "qwen3-30b-a3b-2507",
@@ -1233,7 +1401,10 @@
       "file_template": "Qwen_Qwen3-30B-A3B-Instruct-2507-{quant}.gguf"
     },
     "n_layer": 48,
-    "size_base_gb": 61.0
+    "size_base_gb": 61.0,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen3-coder-30b-a3b",
@@ -1256,7 +1427,10 @@
       "file_template": "Qwen3-Coder-30B-A3B-Instruct-{quant}.gguf"
     },
     "n_layer": 48,
-    "size_base_gb": 61.0
+    "size_base_gb": 61.0,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen3-4b-2507",
@@ -1276,7 +1450,10 @@
       "file_template": "Qwen_Qwen3-4B-Instruct-2507-{quant}.gguf"
     },
     "n_layer": 36,
-    "size_base_gb": 8.0
+    "size_base_gb": 8.0,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-coder-0.5b",
@@ -1298,7 +1475,10 @@
       "file_template": "Qwen2.5-Coder-0.5B-Instruct-{quant}.gguf"
     },
     "n_layer": 24,
-    "size_base_gb": 1.0
+    "size_base_gb": 1.0,
+    "n_head": 14,
+    "n_head_kv": 2,
+    "head_dim": 64
   },
   {
     "id": "qwq-32b",
@@ -1321,7 +1501,10 @@
       "file_template": "Qwen_QwQ-32B-{quant}.gguf"
     },
     "n_layer": 64,
-    "size_base_gb": 65.6
+    "size_base_gb": 65.6,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-math-7b",
@@ -1341,7 +1524,10 @@
       "file_template": "Qwen2.5-Math-7B-Instruct-{quant}.gguf"
     },
     "n_layer": 28,
-    "size_base_gb": 15.2
+    "size_base_gb": 15.2,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "mistral-small-24b-2501",
@@ -1363,7 +1549,10 @@
       "file_template": "Mistral-Small-24B-Instruct-2501-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 47.2
+    "size_base_gb": 47.2,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "mistral-small-3.1-24b",
@@ -1383,7 +1572,10 @@
       "file_template": "mistralai_Mistral-Small-3.1-24B-Instruct-2503-{quant}.gguf"
     },
     "size_base_gb": 48.0,
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "ministral-8b",
@@ -1405,7 +1597,10 @@
       "file_template": "Ministral-8B-Instruct-2410-HF-{quant}.gguf"
     },
     "n_layer": 36,
-    "size_base_gb": 16.0
+    "size_base_gb": 16.0,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "phi-4-mini",
@@ -1427,7 +1622,10 @@
       "file_template": "microsoft_Phi-4-mini-instruct-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 7.7
+    "size_base_gb": 7.7,
+    "n_head": 24,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "phi-3-medium",
@@ -1448,7 +1646,10 @@
       "file_template": "Phi-3-medium-128k-instruct-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 28.0
+    "size_base_gb": 28.0,
+    "n_head": 40,
+    "n_head_kv": 10,
+    "head_dim": 128
   },
   {
     "id": "llama-3-8b",
@@ -1469,7 +1670,10 @@
       "file_template": "Meta-Llama-3-8B-Instruct-{quant}.gguf"
     },
     "size_base_gb": 16.1,
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "smollm2-1.7b",
@@ -1491,7 +1695,10 @@
       "file_template": "SmolLM2-1.7B-Instruct-{quant}.gguf"
     },
     "n_layer": 24,
-    "size_base_gb": 3.4
+    "size_base_gb": 3.4,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 64
   },
   {
     "id": "smollm2-360m",
@@ -1513,7 +1720,10 @@
       "file_template": "SmolLM2-360M-Instruct-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 0.7
+    "size_base_gb": 0.7,
+    "n_head": 15,
+    "n_head_kv": 5,
+    "head_dim": 64
   },
   {
     "id": "granite-3.1-8b",
@@ -1534,7 +1744,10 @@
       "file_template": "granite-3.1-8b-instruct-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 16.3
+    "size_base_gb": 16.3,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "granite-3.1-2b",
@@ -1556,7 +1769,10 @@
       "file_template": "granite-3.1-2b-instruct-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 5.1
+    "size_base_gb": 5.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 64
   },
   {
     "id": "glm-4-9b",
@@ -1576,7 +1792,10 @@
       "file_template": "glm-4-9b-chat-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 18.8
+    "size_base_gb": 18.8,
+    "n_head": 32,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "falcon3-7b",
@@ -1597,7 +1816,10 @@
       "file_template": "Falcon3-7B-Instruct-{quant}.gguf"
     },
     "n_layer": 28,
-    "size_base_gb": 14.9
+    "size_base_gb": 14.9,
+    "n_head": 12,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "falcon3-10b",
@@ -1618,7 +1840,10 @@
       "file_template": "Falcon3-10B-Instruct-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 20.6
+    "size_base_gb": 20.6,
+    "n_head": 12,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "falcon3-3b",
@@ -1640,7 +1865,10 @@
       "file_template": "Falcon3-3B-Instruct-{quant}.gguf"
     },
     "n_layer": 22,
-    "size_base_gb": 6.5
+    "size_base_gb": 6.5,
+    "n_head": 12,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "exaone-3.5-7.8b",
@@ -1661,7 +1889,10 @@
       "file_template": "EXAONE-3.5-7.8B-Instruct-{quant}.gguf"
     },
     "size_base_gb": 15.6,
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "exaone-3.5-2.4b",
@@ -1683,7 +1914,10 @@
       "file_template": "EXAONE-3.5-2.4B-Instruct-{quant}.gguf"
     },
     "size_base_gb": 4.8,
-    "n_layer": 30
+    "n_layer": 30,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 80
   },
   {
     "id": "aya-expanse-8b",
@@ -1705,7 +1939,10 @@
       "file_template": "aya-expanse-8b-{quant}.gguf"
     },
     "size_base_gb": 16.1,
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "aya-expanse-32b",
@@ -1728,7 +1965,10 @@
       "file_template": "aya-expanse-32b-{quant}.gguf"
     },
     "size_base_gb": 64.6,
-    "n_layer": 40
+    "n_layer": 40,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "command-r7b",
@@ -1749,7 +1989,10 @@
       "file_template": "c4ai-command-r7b-12-2024-{quant}.gguf"
     },
     "size_base_gb": 16.1,
-    "n_layer": 32
+    "n_layer": 32,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "olmo-2-7b",
@@ -1770,7 +2013,10 @@
       "file_template": "OLMo-2-1124-7B-Instruct-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 14.6
+    "size_base_gb": 14.6,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 128
   },
   {
     "id": "olmo-2-13b",
@@ -1791,7 +2037,10 @@
       "file_template": "OLMo-2-1124-13B-Instruct-{quant}.gguf"
     },
     "n_layer": 40,
-    "size_base_gb": 27.4
+    "size_base_gb": 27.4,
+    "n_head": 40,
+    "n_head_kv": 40,
+    "head_dim": 128
   },
   {
     "id": "internlm2.5-7b",
@@ -1812,7 +2061,10 @@
       "file_template": "internlm2_5-7b-chat-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 15.5
+    "size_base_gb": 15.5,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "yi-coder-9b",
@@ -1833,7 +2085,10 @@
       "file_template": "Yi-Coder-9B-Chat-{quant}.gguf"
     },
     "n_layer": 48,
-    "size_base_gb": 17.7
+    "size_base_gb": 17.7,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "opencoder-8b",
@@ -1853,7 +2108,10 @@
       "file_template": "OpenCoder-8B-Instruct-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 15.5
+    "size_base_gb": 15.5,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "deepseek-coder-v2-lite",
@@ -1875,7 +2133,10 @@
       "file_template": "DeepSeek-Coder-V2-Lite-Instruct-{quant}.gguf"
     },
     "n_layer": 27,
-    "size_base_gb": 31.4
+    "size_base_gb": 31.4,
+    "n_head": 16,
+    "n_head_kv": 16,
+    "head_dim": 192
   },
   {
     "id": "hermes-2-pro-llama3-8b",
@@ -1896,7 +2157,10 @@
       "file_template": "Hermes-2-Pro-Llama-3-8B-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 16.1
+    "size_base_gb": 16.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "dolphin3-llama3.1-8b",
@@ -1918,7 +2182,10 @@
       "file_template": "Dolphin3.0-Llama3.1-8B-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 16.1
+    "size_base_gb": 16.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "nemotron-mini-4b",
@@ -1940,7 +2207,10 @@
       "file_template": "Nemotron-Mini-4B-Instruct-{quant}.gguf"
     },
     "n_layer": 32,
-    "size_base_gb": 8.4
+    "size_base_gb": 8.4,
+    "n_head": 24,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "deepseek-r1-0528-qwen3-8b",
@@ -1962,7 +2232,10 @@
       "file_template": "deepseek-ai_DeepSeek-R1-0528-Qwen3-8B-{quant}.gguf"
     },
     "n_layer": 36,
-    "size_base_gb": 16.4
+    "size_base_gb": 16.4,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "qwen2-vl-7b",
@@ -1983,7 +2256,10 @@
       "repo": "bartowski/Qwen2-VL-7B-Instruct-GGUF",
       "file_template": "Qwen2-VL-7B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 16.6
+    "size_base_gb": 16.6,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "qwen2-vl-2b",
@@ -2005,7 +2281,10 @@
       "repo": "bartowski/Qwen2-VL-2B-Instruct-GGUF",
       "file_template": "Qwen2-VL-2B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 4.4
+    "size_base_gb": 4.4,
+    "n_head": 12,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "qwen2.5-vl-7b",
@@ -2026,7 +2305,10 @@
       "repo": "bartowski/Qwen_Qwen2.5-VL-7B-Instruct-GGUF",
       "file_template": "Qwen_Qwen2.5-VL-7B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 16.6
+    "size_base_gb": 16.6,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "minicpm-v-2.6",
@@ -2047,7 +2329,10 @@
       "repo": "bartowski/MiniCPM-V-2_6-GGUF",
       "file_template": "MiniCPM-V-2_6-{quant}.gguf"
     },
-    "size_base_gb": 16.2
+    "size_base_gb": 16.2,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "codellama-7b",
@@ -2068,7 +2353,10 @@
       "repo": "TheBloke/CodeLlama-7B-Instruct-GGUF",
       "file_template": "codellama-7b-instruct.{quant}.gguf"
     },
-    "size_base_gb": 13.5
+    "size_base_gb": 13.5,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 128
   },
   {
     "id": "codellama-13b",
@@ -2089,7 +2377,10 @@
       "repo": "TheBloke/CodeLlama-13B-Instruct-GGUF",
       "file_template": "codellama-13b-instruct.{quant}.gguf"
     },
-    "size_base_gb": 26.0
+    "size_base_gb": 26.0,
+    "n_head": 40,
+    "n_head_kv": 40,
+    "head_dim": 128
   },
   {
     "id": "codellama-34b",
@@ -2111,7 +2402,10 @@
       "repo": "TheBloke/CodeLlama-34B-Instruct-GGUF",
       "file_template": "codellama-34b-instruct.{quant}.gguf"
     },
-    "size_base_gb": 67.4
+    "size_base_gb": 67.4,
+    "n_head": 64,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "codegemma-7b",
@@ -2132,7 +2426,10 @@
       "repo": "bartowski/codegemma-7b-it-GGUF",
       "file_template": "codegemma-7b-it-{quant}.gguf"
     },
-    "size_base_gb": 17.1
+    "size_base_gb": 17.1,
+    "n_head": 16,
+    "n_head_kv": 16,
+    "head_dim": 256
   },
   {
     "id": "deepseek-coder-6.7b",
@@ -2153,7 +2450,10 @@
       "repo": "TheBloke/deepseek-coder-6.7B-instruct-GGUF",
       "file_template": "deepseek-coder-6.7b-instruct.{quant}.gguf"
     },
-    "size_base_gb": 13.5
+    "size_base_gb": 13.5,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 128
   },
   {
     "id": "deepseek-coder-33b",
@@ -2175,7 +2475,10 @@
       "repo": "TheBloke/deepseek-coder-33B-instruct-GGUF",
       "file_template": "deepseek-coder-33b-instruct.{quant}.gguf"
     },
-    "size_base_gb": 66.6
+    "size_base_gb": 66.6,
+    "n_head": 56,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "stable-code-3b",
@@ -2196,7 +2499,10 @@
       "repo": "bartowski/stable-code-instruct-3b-GGUF",
       "file_template": "stable-code-instruct-3b-{quant}.gguf"
     },
-    "size_base_gb": 5.6
+    "size_base_gb": 5.6,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 80
   },
   {
     "id": "granite-3.1-3b-a800m",
@@ -2217,7 +2523,10 @@
       "repo": "bartowski/granite-3.1-3b-a800m-instruct-GGUF",
       "file_template": "granite-3.1-3b-a800m-instruct-{quant}.gguf"
     },
-    "size_base_gb": 6.6
+    "size_base_gb": 6.6,
+    "n_head": 24,
+    "n_head_kv": 8,
+    "head_dim": 64
   },
   {
     "id": "solar-10.7b",
@@ -2238,7 +2547,10 @@
       "repo": "TheBloke/SOLAR-10.7B-Instruct-v1.0-GGUF",
       "file_template": "solar-10.7b-instruct-v1.0.{quant}.gguf"
     },
-    "size_base_gb": 21.4
+    "size_base_gb": 21.4,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "openchat-3.6-8b",
@@ -2260,7 +2572,10 @@
       "repo": "bartowski/openchat-3.6-8b-20240522-GGUF",
       "file_template": "openchat-3.6-8b-20240522-{quant}.gguf"
     },
-    "size_base_gb": 16.1
+    "size_base_gb": 16.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "starling-lm-7b",
@@ -2282,7 +2597,10 @@
       "repo": "bartowski/Starling-LM-7B-beta-GGUF",
       "file_template": "Starling-LM-7B-beta-{quant}.gguf"
     },
-    "size_base_gb": 14.5
+    "size_base_gb": 14.5,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "zephyr-7b-beta",
@@ -2304,7 +2622,10 @@
       "repo": "TheBloke/zephyr-7B-beta-GGUF",
       "file_template": "zephyr-7b-beta.{quant}.gguf"
     },
-    "size_base_gb": 14.5
+    "size_base_gb": 14.5,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "aya-23-8b",
@@ -2325,7 +2646,10 @@
       "repo": "bartowski/aya-23-8B-GGUF",
       "file_template": "aya-23-8B-{quant}.gguf"
     },
-    "size_base_gb": 16.1
+    "size_base_gb": 16.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "yi-1.5-6b",
@@ -2346,7 +2670,10 @@
       "repo": "bartowski/Yi-1.5-6B-Chat-GGUF",
       "file_template": "Yi-1.5-6B-Chat-{quant}.gguf"
     },
-    "size_base_gb": 12.1
+    "size_base_gb": 12.1,
+    "n_head": 32,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "internlm2.5-20b",
@@ -2366,7 +2693,10 @@
       "repo": "bartowski/internlm2_5-20b-chat-GGUF",
       "file_template": "internlm2_5-20b-chat-{quant}.gguf"
     },
-    "size_base_gb": 39.8
+    "size_base_gb": 39.8,
+    "n_head": 48,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "internlm2.5-1.8b",
@@ -2387,7 +2717,10 @@
       "repo": "bartowski/internlm2_5-1_8b-chat-GGUF",
       "file_template": "internlm2_5-1_8b-chat-{quant}.gguf"
     },
-    "size_base_gb": 3.8
+    "size_base_gb": 3.8,
+    "n_head": 16,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "phi-2",
@@ -2408,7 +2741,10 @@
       "repo": "TheBloke/phi-2-GGUF",
       "file_template": "phi-2.{quant}.gguf"
     },
-    "size_base_gb": 5.6
+    "size_base_gb": 5.6,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 80
   },
   {
     "id": "stablelm-2-1.6b",
@@ -2429,7 +2765,10 @@
       "repo": "brittlewis12/stablelm-2-1_6b-chat-GGUF",
       "file_template": "stablelm-2-1_6b-chat.{quant}.gguf"
     },
-    "size_base_gb": 3.3
+    "size_base_gb": 3.3,
+    "n_head": 32,
+    "n_head_kv": 32,
+    "head_dim": 64
   },
   {
     "id": "falcon3-1b",
@@ -2451,7 +2790,10 @@
       "repo": "bartowski/Falcon3-1B-Instruct-GGUF",
       "file_template": "Falcon3-1B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 3.3
+    "size_base_gb": 3.3,
+    "n_head": 8,
+    "n_head_kv": 4,
+    "head_dim": 256
   },
   {
     "id": "deepscaler-1.5b",
@@ -2472,7 +2814,10 @@
       "repo": "bartowski/agentica-org_DeepScaleR-1.5B-Preview-GGUF",
       "file_template": "agentica-org_DeepScaleR-1.5B-Preview-{quant}.gguf"
     },
-    "size_base_gb": 3.6
+    "size_base_gb": 3.6,
+    "n_head": 12,
+    "n_head_kv": 2,
+    "head_dim": 128
   },
   {
     "id": "openthinker-7b",
@@ -2492,7 +2837,10 @@
       "repo": "bartowski/OpenThinker-7B-GGUF",
       "file_template": "OpenThinker-7B-{quant}.gguf"
     },
-    "size_base_gb": 15.2
+    "size_base_gb": 15.2,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "sky-t1-32b",
@@ -2513,7 +2861,10 @@
       "repo": "bartowski/Sky-T1-32B-Preview-GGUF",
       "file_template": "Sky-T1-32B-Preview-{quant}.gguf"
     },
-    "size_base_gb": 65.6
+    "size_base_gb": 65.6,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "marco-o1",
@@ -2533,7 +2884,10 @@
       "repo": "bartowski/Marco-o1-GGUF",
       "file_template": "Marco-o1-{quant}.gguf"
     },
-    "size_base_gb": 15.2
+    "size_base_gb": 15.2,
+    "n_head": 28,
+    "n_head_kv": 4,
+    "head_dim": 128
   },
   {
     "id": "tulu-3-8b",
@@ -2554,7 +2908,10 @@
       "repo": "bartowski/Llama-3.1-Tulu-3-8B-GGUF",
       "file_template": "Llama-3.1-Tulu-3-8B-{quant}.gguf"
     },
-    "size_base_gb": 16.1
+    "size_base_gb": 16.1,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "hermes-3-llama3.2-3b",
@@ -2576,7 +2933,10 @@
       "repo": "bartowski/Hermes-3-Llama-3.2-3B-GGUF",
       "file_template": "Hermes-3-Llama-3.2-3B-{quant}.gguf"
     },
-    "size_base_gb": 6.4
+    "size_base_gb": 6.4,
+    "n_head": 24,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "granite-3.0-8b",
@@ -2596,7 +2956,10 @@
       "repo": "bartowski/granite-3.0-8b-instruct-GGUF",
       "file_template": "granite-3.0-8b-instruct-{quant}.gguf"
     },
-    "size_base_gb": 16.3
+    "size_base_gb": 16.3,
+    "n_head": 32,
+    "n_head_kv": 8,
+    "head_dim": 128
   },
   {
     "id": "nemotron-51b",
@@ -2617,7 +2980,10 @@
       "repo": "bartowski/Llama-3_1-Nemotron-51B-Instruct-GGUF",
       "file_template": "Llama-3_1-Nemotron-51B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 103.0
+    "size_base_gb": 103.0,
+    "n_head": 64,
+    "n_head_kv": 64,
+    "head_dim": 128
   },
   {
     "id": "exaone-3.5-32b",
@@ -2638,6 +3004,9 @@
       "repo": "bartowski/EXAONE-3.5-32B-Instruct-GGUF",
       "file_template": "EXAONE-3.5-32B-Instruct-{quant}.gguf"
     },
-    "size_base_gb": 64.0
+    "size_base_gb": 64.0,
+    "n_head": 40,
+    "n_head_kv": 8,
+    "head_dim": 128
   }
 ]

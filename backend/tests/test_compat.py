@@ -32,6 +32,32 @@ def test_kv_per_token_compresses():
     assert compat.get_kv_per_token_mb(m, "q8_0") > compat.get_kv_per_token_mb(m, "q4_0")
 
 
+def test_kv_exact_from_arch_dims():
+    # KV f16 = 2(K+V) · n_layer · n_head_kv · head_dim · 2 bytes / 1MiB
+    # Llama-3-8B: 32 capas, 8 KV heads, head_dim 128 → 0.125 MB/token (→ 1 GB @ 8192 ctx)
+    m = _model(n_layer=32, n_head_kv=8, head_dim=128)
+    expected = 4 * 32 * 8 * 128 / (1024 * 1024)
+    assert abs(compat.kv_per_token_mb_f16(m) - expected) < 1e-9
+    assert abs(compat.kv_per_token_mb_f16(m) - 0.125) < 1e-6
+    # No depende de params_b cuando hay metadata
+    assert compat.kv_per_token_mb_f16(_model(params_b=70.0, n_layer=32, n_head_kv=8, head_dim=128)) == \
+        compat.kv_per_token_mb_f16(m)
+
+
+def test_kv_exact_captures_gqa():
+    # Misma forma salvo n_head_kv: GQA (8 KV heads) usa 4× menos KV que MHA (32).
+    mha = _model(n_layer=32, n_head_kv=32, head_dim=128)
+    gqa = _model(n_layer=32, n_head_kv=8, head_dim=128)
+    assert compat.kv_per_token_mb_f16(mha) == 4 * compat.kv_per_token_mb_f16(gqa)
+
+
+def test_kv_falls_back_to_heuristic_without_dims():
+    # Sin n_head_kv/head_dim → heurística basada en params (comportamiento previo).
+    m = _model(params_b=7.0)  # sin dims de arquitectura
+    assert m.n_head_kv is None
+    assert abs(compat.kv_per_token_mb_f16(m) - 0.5 * (7.0 / 7.0) ** 0.7) < 1e-9
+
+
 def test_check_compat_fits_on_big_gpu():
     hw = compat.HardwareSnapshot(vram_gb=24.0, ram_gb=64.0)
     opts = compat.EngineOpts(quant="Q4_K_M", kv_cache="q8_0", context_len=4096)

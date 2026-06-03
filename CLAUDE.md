@@ -105,8 +105,9 @@ Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/inst
 ## Ya implementado (no son pendientes)
 - **Catálogo de 124+ modelos** verificados contra HF. Para ampliarlo usa `backend/scripts/verify_models.py` + `merge_models.py` (verifican repo GGUF, derivan `file_template` real y validan contra el schema). NO añadas modelos a mano sin verificar.
 - **Cuenta de parámetros** de GGUFs locales se lee de la metadata (`core/gguf_reader.py::estimate_param_count`), no del tamaño de archivo.
+- **KV-cache exacta** (`core/compat.py::kv_per_token_mb_f16`): `2·n_layer·n_head_kv·head_dim·2B`, captura GQA/MQA. El catálogo trae `n_head_kv`/`head_dim` (poblados por `scripts/enrich_arch.py` leyendo el header GGUF vía Range). Si faltan dims, cae a la heurística `0.5·(params/7)^0.7`. NO reintroduzcas la heurística en `optimizer.py`: usa `compat.kv_per_token_mb_f16`.
 - **`detect_hardware()` cacheado** (`lru_cache`) — no lo "des-cachees"; el listado de compat depende de que sea instantáneo.
 - **Evaluación de calidad** en 3 modos (`core/benchmark.py`): scorer offline basado en referencia (default, sin GPU/API), LLM-judge `self` y `api`. El default DEBE seguir funcionando en cualquier ordenador.
 
 ## Pendientes documentados
-La sección "Pendientes / siguientes pasos" del README es la fuente — incluye adapters reales para `ollama`/`vllm`/`sglang`/`tgi`, KV-cache exacta desde metadata para el cálculo de compat, tests en `compat.py` y `optimizer.py`, soporte MoE multi-parte para auto-descarga, y soporte multimodal real (mmproj).
+La sección "Pendientes / siguientes pasos" del README es la fuente — incluye API keys vía `keyring`, flags extra de tuning de llama.cpp (`cache-reuse`, `--prio-batch`), soporte MoE multi-parte para auto-descarga, y soporte multimodal real (mmproj).

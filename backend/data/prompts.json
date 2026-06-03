@@ -62,6 +62,17 @@
     ]
   },
   {
+    "id": "long-context",
+    "name": "Contexto largo (retrieval)",
+    "type": "long-context",
+    "system": "Lee el texto completo y responde solo con el dato pedido, sin explicaciones.",
+    "prompt": "Pregunta: ¿cuál es el código secreto de acceso del sistema central que aparece en el texto? Responde solo con el código.",
+    "target_tokens": 32,
+    "reference": "AZUL-4729",
+    "context_file": "context_haystack.txt",
+    "keywords": [["azul"], ["4729"]]
+  },
+  {
     "id": "vision-scene",
     "name": "Visión: escena",
     "type": "vision",

@@ -9,6 +9,7 @@ const ALL_PROMPTS = [
   { id: "code", label: "Código" },
   { id: "summary", label: "Resumen" },
   { id: "chat", label: "Conocimiento" },
+  { id: "long-context", label: "Contexto largo" },
   { id: "vision-scene", label: "Visión: escena", vision: true },
   { id: "vision-count", label: "Visión: conteo", vision: true },
 ];

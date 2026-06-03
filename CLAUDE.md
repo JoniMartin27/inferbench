@@ -114,6 +114,8 @@ Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/inst
   - `_quality_keywords`: `Prompt.keywords` = grupos de sinónimos (ground-truth). Nota = fracción presente. Casa por `\b`+prefijo (acepta morfología, pero "500" no cuenta dentro de "1500"). Sin acentos, ES/EN. Scorer de visión, `reasoning`, `summary`, `chat`.
   - `_quality_code` (async): `Prompt.code_tests` = aserciones que se EJECUTAN contra el código del modelo en subproceso aislado (`python -I`, cwd temporal, timeout). Nota = % de casos que pasan. Desactivable con env `INFERBENCH_NO_CODE_EXEC=1`. Scorer de `code`.
   - El LLM-judge solo aplica a prompts SIN scorer verificable (no ve la imagen ni ejecuta el código).
+  - `Prompt.context_file`: antepone un texto largo de `data/` al prompt (test de contexto largo / needle-in-haystack). `_prompt_user_text` lo resuelve para ambos formatos de body.
+- **APIs cloud**: OpenAI/OpenRouter/NVIDIA van por `/v1/chat/completions` (`_stream_openai_chat`, auth `Bearer`). **Anthropic NO es OpenAI-compatible**: usa `_stream_anthropic_chat` (`/v1/messages`, `x-api-key` + `anthropic-version`, `system` como campo aparte, eventos SSE `content_block_delta`). El dispatch está en `_run_one` por `self.req.engine`. Verificados E2E: llamacpp (nativo), ollama (daemon), vllm (Docker+GPU); sglang/tgi comparten el bootstrap Docker de vllm.
 
 ## Pendientes documentados
 La sección "Pendientes / siguientes pasos" del README es la fuente — incluye API keys vía `keyring`, flags extra de tuning de llama.cpp (`cache-reuse`, `--prio-batch`), soporte MoE multi-parte para auto-descarga, y extender la visión a motores Docker / API (hoy corre en `llamacpp` nativo).

@@ -54,16 +54,36 @@ class Prompt(BaseModel):
     # Casos de prueba (aserciones Python) que se ejecutan contra el código del modelo. La
     # calidad es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual.
     code_tests: list[str] | None = None
+    # Fichero (en data/) con un contexto largo que se antepone al prompt. Para tests de
+    # contexto largo / recuperación (needle-in-haystack) que estresan la ventana de contexto.
+    context_file: str | None = None
 
 
-def _image_data_url(image: str) -> str:
-    """Convierte una imagen del directorio data/ en un data URL base64 para la API de visión."""
+def _prompt_user_text(prompt: Prompt) -> str:
+    """Texto de usuario efectivo: si el prompt referencia un `context_file`, antepone su
+    contenido (test de contexto largo). Si no, el prompt tal cual."""
+    if not prompt.context_file:
+        return prompt.prompt
+    path = PROMPTS_FILE.parent / prompt.context_file
+    try:
+        return f"{path.read_text(encoding='utf-8')}\n\n{prompt.prompt}"
+    except OSError:
+        return prompt.prompt
+
+
+def _image_b64(image: str) -> tuple[str, str]:
+    """Devuelve (media_type, base64) de una imagen del directorio data/."""
     import base64
     import mimetypes
 
     path = image if Path(image).is_absolute() else str(PROMPTS_FILE.parent / image)
     mime = mimetypes.guess_type(path)[0] or "image/png"
-    b64 = base64.b64encode(Path(path).read_bytes()).decode("ascii")
+    return mime, base64.b64encode(Path(path).read_bytes()).decode("ascii")
+
+
+def _image_data_url(image: str) -> str:
+    """Data URL base64 de una imagen del directorio data/ (formato OpenAI vision)."""
+    mime, b64 = _image_b64(image)
     return f"data:{mime};base64,{b64}"
 
 
@@ -82,13 +102,14 @@ def _build_chat_body(model_id_for_engine: str, prompt: Prompt, sampling: dict[st
     """Construye el body de /v1/chat/completions. Si el prompt lleva imagen, el content
     del usuario es un array texto+imagen (formato OpenAI vision, que llama-server acepta
     arrancado con --mmproj). Extraído para poder testearlo sin red."""
+    text = _prompt_user_text(prompt)
     if prompt.image:
         user_content: Any = [
-            {"type": "text", "text": prompt.prompt},
+            {"type": "text", "text": text},
             {"type": "image_url", "image_url": {"url": _image_data_url(prompt.image)}},
         ]
     else:
-        user_content = prompt.prompt
+        user_content = text
     messages = [
         {"role": "system", "content": prompt.system} if prompt.system else None,
         {"role": "user", "content": user_content},
@@ -480,6 +501,74 @@ async def _stream_openai_chat(
     yield ("done", None)
 
 
+def _build_anthropic_body(model_id: str, prompt: Prompt, sampling: dict[str, Any]) -> dict:
+    """Body para la API NATIVA de Anthropic (/v1/messages): `system` va aparte (no como
+    rol), `max_tokens` es obligatorio, y las imágenes son bloques {type:image, source:base64}.
+    NO es OpenAI-compatible. Extraído para testearlo sin red."""
+    text = _prompt_user_text(prompt)
+    if prompt.image:
+        mime, b64 = _image_b64(prompt.image)
+        content: Any = [
+            {"type": "text", "text": text},
+            {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
+        ]
+    else:
+        content = text
+    body: dict[str, Any] = {
+        "model": model_id,
+        "max_tokens": prompt.target_tokens,
+        "messages": [{"role": "user", "content": content}],
+        "stream": True,
+    }
+    if prompt.system:
+        body["system"] = prompt.system
+    for k in ("temperature", "top_p", "top_k"):  # Anthropic acepta este subconjunto
+        if k in sampling:
+            body[k] = sampling[k]
+    return body
+
+
+async def _stream_anthropic_chat(
+    base_url: str,
+    model_id_for_engine: str,
+    prompt: Prompt,
+    sampling: dict[str, Any],
+    headers: dict[str, str],
+) -> AsyncIterator[tuple[str, Any]]:
+    """Streaming de la API nativa de Anthropic. Endpoint `/v1/messages`, auth `x-api-key`
+    + `anthropic-version`, y eventos SSE distintos (content_block_delta.delta.text)."""
+    url = f"{base_url.rstrip('/')}/v1/messages"
+    body = _build_anthropic_body(model_id_for_engine, prompt, sampling)
+    first = True
+    async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
+        async with client.stream("POST", url, json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                text = await resp.aread()
+                raise RuntimeError(f"HTTP {resp.status_code}: {text.decode(errors='replace')[:500]}")
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload:
+                    continue
+                try:
+                    evt = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                etype = evt.get("type")
+                if etype == "content_block_delta":
+                    text = (evt.get("delta") or {}).get("text") or ""
+                    if text:
+                        if first:
+                            yield ("first_token", text)
+                            first = False
+                        else:
+                            yield ("token", text)
+                elif etype in ("message_stop", "error"):
+                    break
+    yield ("done", None)
+
+
 async def _wait_engine_ready(base_url: str, timeout: float = 90.0) -> None:
     """Espera a que el endpoint /v1/models responda 200."""
     deadline = time.time() + timeout
@@ -566,7 +655,11 @@ class BenchmarkRunner:
 
             headers = {"Content-Type": "application/json"}
             if self.req.api_key:
-                headers["Authorization"] = f"Bearer {self.req.api_key}"
+                if self.req.engine == "anthropic":  # API nativa: auth distinta a OpenAI
+                    headers["x-api-key"] = self.req.api_key
+                    headers["anthropic-version"] = "2023-06-01"
+                else:
+                    headers["Authorization"] = f"Bearer {self.req.api_key}"
 
             for prompt in prompts:
                 if self.cancelled.is_set():
@@ -978,8 +1071,10 @@ class BenchmarkRunner:
         vram_peak = _get_vram_used_gb()
         error = ""
 
+        # Anthropic tiene API propia (no OpenAI-compatible); el resto van por /v1/chat/completions
+        stream_fn = _stream_anthropic_chat if self.req.engine == "anthropic" else _stream_openai_chat
         try:
-            async for kind, data in _stream_openai_chat(
+            async for kind, data in stream_fn(
                 self.base_url, model_for_engine, prompt, self.req.sampling, headers
             ):
                 if self.cancelled.is_set():

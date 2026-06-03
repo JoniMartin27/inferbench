@@ -96,7 +96,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 | `openrouter` | API | n/a | n/a | n/a |
 | `nvidia` | API | n/a | n/a | n/a |
 
-> Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local).
+> Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local): **OpenAI / OpenRouter / NVIDIA** usan el endpoint OpenAI-compatible `/v1/chat/completions`; **Anthropic** usa su **API nativa** (`/v1/messages`, header `x-api-key` + `anthropic-version`, `system` aparte), no es OpenAI-compatible.
 >
 > **Estado de verificación:** los **5 motores locales** (`llamacpp`, `ollama`, `vllm`, `sglang`, `tgi`) verificados end-to-end por el runner de producción (bootstrap → arranque → inferencia real con tps>0 → parada sin contenedores colgados) en GPU NVIDIA (RTX 3070, 8 GB). vLLM/SGLang ajustan la fracción de VRAM a la memoria libre real para no fallar en GPUs no vacías.
 
@@ -283,7 +283,7 @@ inferbench/
 
 ## Suite de prompts
 
-`backend/data/prompts.json` define 6 prompts representativos. **Cada uno tiene un scorer verificable** (no F1 de tokens): la calidad mide corrección real.
+`backend/data/prompts.json` define 7 prompts representativos. **Cada uno tiene un scorer verificable** (no F1 de tokens): la calidad mide corrección real. Cubren razonamiento, código, resumen, conocimiento, **contexto largo** (recuperación sobre ~5k tokens) y visión.
 
 | ID | Tarea | Cómo se puntúa | Tokens |
 |----|-------|----------------|--------|
@@ -291,6 +291,7 @@ inferbench/
 | `code` | `merge_intervals` (solo stdlib) | **ejecuta** el código contra 5 casos → % que pasan | 512 |
 | `summary` | resumir manteniendo hechos clave | checklist: privacidad / sesgos / energía / regulación / código / traducción | 384 |
 | `chat` | planetas en orden desde el Sol | checklist: los 8 planetas (ES/EN) | 128 |
+| `long-context` | recuperar un dato enterrado en un texto de ~5k tokens (needle-in-haystack) | checklist: el código secreto | 32 |
 | `vision-scene` | describir 3 figuras de 3 colores | checklist: forma×3 + color×3 + conteo | 96 |
 | `vision-count` | contar objetos | checklist: nº + forma + color | 48 |
 

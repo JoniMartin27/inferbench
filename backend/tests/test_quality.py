@@ -93,6 +93,18 @@ def test_keywords_number_boundary_no_false_positive():
     assert _quality_keywords("Bea 250, Ana 500, Carlos 750, total 1500.", groups) == 100.0
 
 
+def test_long_context_prompt_loads_haystack():
+    # El prompt de contexto largo antepone un documento de ~5k tokens con el needle.
+    from core.benchmark import _prompt_user_text, get_prompt
+
+    p = get_prompt("long-context")
+    assert p is not None and p.context_file
+    text = _prompt_user_text(p)
+    assert len(text) > 5000  # el haystack se antepuso (estresa la ventana de contexto)
+    assert "AZUL-4729" in text  # el dato escondido está en el contexto
+    assert text.rstrip().endswith(p.prompt)  # la pregunta va al final
+
+
 def test_every_prompt_has_a_verifiable_scorer():
     # Política: ningún prompt se evalúa por F1 de tokens a secas — todos llevan checklist
     # (keywords) o ejecución de código (code_tests).

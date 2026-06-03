@@ -24,6 +24,20 @@ def test_non_vision_model_not_flagged():
     assert not (m.hf_gguf and m.hf_gguf.mmproj)
 
 
+def test_supports_vision_gating():
+    from core.benchmark import supports_vision
+
+    vis, txt = get_model("qwen2-vl-2b"), get_model("llama-3-8b")
+    # APIs cloud: siempre (gpt-4o, claude… multimodales)
+    assert supports_vision("openai", txt) is True
+    assert supports_vision("anthropic", None) is True
+    # Local (llama.cpp) y Docker (vLLM): solo si el modelo es de visión
+    assert supports_vision("llamacpp", vis) is True
+    assert supports_vision("vllm", vis) is True  # Docker + modelo de visión → sí
+    assert supports_vision("llamacpp", txt) is False
+    assert supports_vision("vllm", txt) is False
+
+
 def test_mmproj_path_in_same_dir_as_gguf():
     m = get_model("qwen2-vl-2b")
     gguf = model_manager.gguf_path(m, "Q4_K_M")

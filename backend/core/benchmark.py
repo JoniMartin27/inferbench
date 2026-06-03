@@ -159,6 +159,16 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 API_ENGINES = {"openai", "anthropic", "openrouter", "nvidia"}
 
 
+def supports_vision(engine: str, model: Any) -> bool:
+    """¿Puede este (motor, modelo) procesar imágenes?
+
+    - APIs cloud: sí (gpt-4o, claude… son multimodales; el usuario elige el modelo).
+    - Locales (llama.cpp nativo, vLLM/SGLang/TGI Docker): si el modelo tiene tag `vision`
+      (lleva mmproj en llama.cpp; vLLM/SGLang sirven el modelo de visión completo).
+    """
+    return engine in API_ENGINES or bool(model and getattr(model, "is_vision", False))
+
+
 class BenchmarkRequest(BaseModel):
     engine: str
     model: str
@@ -629,11 +639,10 @@ class BenchmarkRunner:
             prompts = [p for p in (get_prompt(pid) for pid in self.req.prompts) if p]
             # Gating de visión: un prompt con imagen necesita un modelo multimodal (con
             # mmproj) en local. Para APIs lo dejamos pasar (gpt-4o etc. son multimodales).
-            model_obj = get_model(self.req.model)
-            supports_vision = self.is_api or bool(model_obj and model_obj.is_vision)
+            can_vision = supports_vision(self.req.engine, get_model(self.req.model))
             kept: list[Prompt] = []
             for p in prompts:
-                if p.image and not supports_vision:
+                if p.image and not can_vision:
                     await self.emit({"type": "log", "level": "warn",
                                      "text": f"Prompt '{p.id}' (imagen) omitido: "
                                              f"{self.req.model} no es un modelo de visión"})

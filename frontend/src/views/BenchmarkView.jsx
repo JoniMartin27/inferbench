@@ -328,8 +328,12 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // El prompt de visión solo aplica a modelos multimodales: deselecciónalo al cambiar
   // a un modelo sin visión para no enviarlo (el backend igual lo gatea, esto evita ruido).
   useEffect(() => {
-    if (!isVisionModel) setPrompts((p) => p.filter((id) => !VISION_PROMPT_IDS.includes(id)));
-  }, [isVisionModel]);
+    // Mantén los prompts de visión solo si el modelo es de visión o el motor es una API
+    // multimodal; si no, deselecciónalos.
+    if (!isVisionModel && !engineIsApi) {
+      setPrompts((p) => p.filter((id) => !VISION_PROMPT_IDS.includes(id)));
+    }
+  }, [isVisionModel, engineIsApi]);
 
   // Al cambiar de motor, si el quant actual no es válido para él, salta al primero válido
   // y limpia del sweep los quants que ese motor no admite.
@@ -497,29 +501,36 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
               />
             )}
             {engineIsApi && (
-              <Field label="API key">
+              <Field label="API key" hint="Vacío = usa la guardada en Ajustes (keyring del SO)">
                 <Input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   disabled={!!running}
+                  placeholder="••••••••"
                 />
               </Field>
             )}
             <Field
               label="Prompts"
-              hint={isVisionModel ? "Modelo de visión: el prompt de imagen está disponible" : undefined}
+              hint={
+                isVisionModel
+                  ? "Modelo de visión: el prompt de imagen está disponible"
+                  : engineIsApi
+                  ? "API multimodal (gpt-4o, claude…): los prompts de imagen también valen"
+                  : undefined
+              }
             >
               <div className="flex flex-wrap gap-2">
                 {ALL_PROMPTS.map((p) => {
-                  const blocked = p.vision && !isVisionModel;
+                  const blocked = p.vision && !isVisionModel && !engineIsApi;
                   return (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => togglePrompt(p.id)}
                       disabled={!!running || blocked}
-                      title={blocked ? "Solo modelos de visión (necesitan mmproj)" : undefined}
+                      title={blocked ? "Solo modelos de visión (mmproj) o APIs multimodales" : undefined}
                       className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
                         prompts.includes(p.id)
                           ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"

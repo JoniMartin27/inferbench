@@ -18,6 +18,7 @@ import json
 import re
 import time
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -44,6 +45,7 @@ class Prompt(BaseModel):
     reference: str = ""
 
 
+@lru_cache(maxsize=1)
 def load_prompts() -> list[Prompt]:
     raw = json.loads(PROMPTS_FILE.read_text(encoding="utf-8"))
     return [Prompt.model_validate(p) for p in raw]
@@ -393,7 +395,9 @@ class BenchmarkRunner:
     def __init__(self, req: BenchmarkRequest):
         self.req = req
         self.run_id = uuid.uuid4().hex[:12]
-        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        # Acotada para no crecer sin límite si el cliente SSE se desconecta a
+        # mitad de run. `emit` descarta el evento más viejo cuando está llena.
+        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=2000)
         self.results: list[ResultPayload] = []
         self.hw = detect_hardware()
         self.is_api = req.engine in API_ENGINES
@@ -408,7 +412,15 @@ class BenchmarkRunner:
         return _extra_engine_args_static(opts)
 
     async def emit(self, evt: dict[str, Any]) -> None:
-        await self.queue.put(evt)
+        # Nunca bloquear al productor: si la cola está llena (consumidor SSE lento
+        # o desconectado), descartamos el evento más viejo. Así el log en vivo
+        # conserva siempre lo más reciente y el `_eof` final puede entregarse.
+        if self.queue.full():
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        self.queue.put_nowait(evt)
 
     async def run(self) -> None:
         try:

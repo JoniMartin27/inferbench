@@ -26,7 +26,7 @@ API keys de cloud (OpenAI/Anthropic/etc.) van por `keyring` (ya es dependencia).
 - `ruff` + `black`, línea 100 (configurado en `pyproject.toml`).
 - Type hints en funciones públicas. Pydantic models para entradas/salidas de la API (no dicts sueltos).
 - `loguru` para logging, nunca `print()`.
-- Pytest + pytest-asyncio instalados; aún no hay suite escrita. Cuando añadas tests, prioriza `core/compat.py` y `core/optimizer.py` (figuran en pendientes del README).
+- Pytest + pytest-asyncio instalados. Hay **31 tests** en `backend/tests/` (cubren `compat`, `optimizer`, `quality`, `gguf_reader` y `security`); corre `pytest` antes de tocar `core/`. Al añadir features amplía la cobertura de `core/compat.py` y `core/optimizer.py`.
 
 ### Frontend (`frontend/`)
 - JSX, no TypeScript (decisión deliberada del MVP — no migres sin hablarlo).

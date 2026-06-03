@@ -15,6 +15,30 @@ async function request(path, opts = {}) {
   return res.json();
 }
 
+// Convierte un error de `request()` (o un fallo de red) en un mensaje accionable
+// para el usuario, en vez de mostrar "HTTP 500 /api/..." crudo.
+export function humanizeError(err, fallback = "Algo salió mal") {
+  const msg = err?.message || String(err || "");
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return "No se pudo conectar con el backend (localhost:7777). ¿Está arrancado?";
+  }
+  const m = msg.match(/^HTTP (\d+)[^:]*:\s*([\s\S]*)$/);
+  if (m) {
+    const [, code, rawBody] = m;
+    let detail = (rawBody || "").trim();
+    try {
+      const j = JSON.parse(detail); // FastAPI suele devolver {"detail": "..."}
+      if (j?.detail) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* cuerpo en texto plano */
+    }
+    detail = detail.slice(0, 240);
+    if (code[0] === "5") return detail || "Error interno del backend. Revisa sus logs.";
+    return detail || `Petición rechazada (HTTP ${code}).`;
+  }
+  return msg || fallback;
+}
+
 export const api = {
   health: () => request("/api/health"),
 

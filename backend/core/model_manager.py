@@ -22,6 +22,11 @@ MODELS_ROOT = (
 # Valor: (existe: bool, expira: datetime). TTL de 20 minutos.
 _exists_cache: dict[tuple[str, str], tuple[bool, datetime]] = {}
 _EXISTS_CACHE_TTL = timedelta(minutes=20)
+
+# Descargas resilientes: reintentos con backoff exponencial. Las descargas de
+# GGUF pueden ser de decenas de GB; un corte de red no debe tirar todo el trabajo.
+_MAX_DL_RETRIES = 4
+_DL_BACKOFF_BASE = 1.5  # segundos → 1.5, 3, 6 entre reintentos
 _NET_SEMAPHORE: asyncio.Semaphore | None = None  # inicializado lazy (necesita loop)
 
 
@@ -137,8 +142,11 @@ async def ensure_gguf(
 ) -> Path:
     """Descarga el GGUF si no existe localmente. Devuelve la ruta absoluta.
 
+    Resiliencia: reintenta hasta `_MAX_DL_RETRIES` veces con backoff exponencial y
+    reanuda desde el `.part` parcial vía cabecera Range si el servidor lo soporta.
     Si se pasa `cancel_event` y se setea durante la descarga, se aborta con
-    asyncio.CancelledError. El archivo .part queda en disco (no se completa el rename).
+    asyncio.CancelledError y el `.part` se conserva (permite reanudar). Si se agotan
+    los reintentos, el `.part` se elimina para no dejar basura en disco.
     """
     if not model.hf_gguf:
         raise RuntimeError(
@@ -159,14 +167,14 @@ async def ensure_gguf(
         await progress({"phase": "model.lookup", "model": model.id, "quant": quant, "url": url})
 
     tmp = target.with_suffix(target.suffix + ".part")
-    downloaded = 0
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(None, connect=30.0), follow_redirects=True
     ) as client:
         # HEAD para tamaño y validar 200
         head = await client.head(url)
         # HF devuelve 401/403 (no 404) para archivos inexistentes en repos públicos.
-        # 404 también puede ocurrir si el repo entero no existe.
+        # 404 también puede ocurrir si el repo entero no existe. Son errores
+        # permanentes → no se reintentan.
         if head.status_code in (401, 403, 404):
             raise RuntimeError(
                 f"Cuantización {quant} no disponible para {model.id} en {repo}. "
@@ -175,6 +183,7 @@ async def ensure_gguf(
             )
         head.raise_for_status()
         total = int(head.headers.get("content-length", 0))
+        accept_ranges = head.headers.get("accept-ranges", "").lower() == "bytes"
 
         if progress:
             await progress({
@@ -186,29 +195,82 @@ async def ensure_gguf(
                 "pct": 0,
             })
 
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with open(tmp, "wb") as f:
-                last_pct = -1
-                async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
-                    if cancel_event is not None and cancel_event.is_set():
-                        raise asyncio.CancelledError(
-                            f"Descarga de {filename} cancelada por el usuario"
-                        )
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if progress and total:
-                        pct = round(downloaded / total * 100, 1)
-                        if pct - last_pct >= 0.5:
-                            await progress({
-                                "phase": "model.download",
-                                "model": model.id,
-                                "downloaded": downloaded,
-                                "size": total,
-                                "pct": pct,
-                            })
-                            last_pct = pct
-    tmp.rename(target)
-    if progress:
-        await progress({"phase": "model.ready", "path": str(target)})
-    return target
+        last_err: Exception | None = None
+        for attempt in range(_MAX_DL_RETRIES):
+            # Reanudar desde el .part parcial si el servidor soporta Range.
+            resume_from = tmp.stat().st_size if (accept_ranges and tmp.exists()) else 0
+            if total and resume_from >= total:
+                resume_from = 0  # .part corrupto/sobredimensionado → reempezar
+            headers = {"Range": f"bytes={resume_from}-"} if resume_from else {}
+            mode = "ab" if resume_from else "wb"
+            downloaded = resume_from
+            try:
+                async with client.stream("GET", url, headers=headers) as resp:
+                    # Si pedimos Range pero el servidor responde 200, ignoró la
+                    # reanudación → reempezamos sobreescribiendo el .part.
+                    if resume_from and resp.status_code == 200:
+                        mode, downloaded = "wb", 0
+                    resp.raise_for_status()
+                    last_pct = -1.0
+                    with open(tmp, mode) as f:
+                        async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
+                            if cancel_event is not None and cancel_event.is_set():
+                                raise asyncio.CancelledError(
+                                    f"Descarga de {filename} cancelada por el usuario"
+                                )
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress and total:
+                                pct = round(downloaded / total * 100, 1)
+                                if pct - last_pct >= 0.5:
+                                    await progress({
+                                        "phase": "model.download",
+                                        "model": model.id,
+                                        "downloaded": downloaded,
+                                        "size": total,
+                                        "pct": pct,
+                                    })
+                                    last_pct = pct
+                # Validar que la descarga está completa antes del rename atómico.
+                if total and tmp.stat().st_size < total:
+                    raise httpx.RemoteProtocolError(
+                        f"descarga incompleta: {tmp.stat().st_size}/{total} bytes"
+                    )
+                tmp.rename(target)
+                if progress:
+                    await progress({"phase": "model.ready", "path": str(target)})
+                return target
+            except asyncio.CancelledError:
+                raise  # cancelación del usuario: conservar .part para reanudar
+            except httpx.HTTPStatusError as e:
+                code = e.response.status_code
+                if code < 500 and code != 429:  # 4xx (salvo 429) son permanentes
+                    tmp.unlink(missing_ok=True)
+                    raise RuntimeError(
+                        f"Descarga de {filename} falló con HTTP {code}"
+                    ) from e
+                last_err = e
+            except httpx.TransportError as e:
+                last_err = e
+
+            if attempt < _MAX_DL_RETRIES - 1:
+                delay = _DL_BACKOFF_BASE * (2 ** attempt)
+                logger.warning(
+                    f"Descarga de {filename} falló (intento {attempt + 1}/{_MAX_DL_RETRIES}): "
+                    f"{last_err}. Reintento en {delay:.0f}s"
+                )
+                if progress:
+                    await progress({
+                        "phase": "model.retry",
+                        "model": model.id,
+                        "attempt": attempt + 1,
+                        "max": _MAX_DL_RETRIES,
+                        "delay": delay,
+                    })
+                await asyncio.sleep(delay)
+
+        # Agotados los reintentos: limpiar el .part parcial y abortar con error claro.
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"No se pudo descargar {filename} tras {_MAX_DL_RETRIES} intentos: {last_err}"
+        )

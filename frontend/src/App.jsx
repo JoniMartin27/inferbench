@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
+import { ToastProvider } from "./components/toast.jsx";
 import GuideView from "./views/GuideView.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import EnginesView from "./views/EnginesView.jsx";
@@ -92,6 +93,7 @@ export default function App() {
   const dockerDown = health.status === "ok" && health.docker && health.docker.available === false;
 
   return (
+    <ToastProvider>
     <div className="flex h-full flex-col bg-slate-950">
       {dockerDown && (
         <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900/80 to-slate-900/50 px-6 py-1.5 text-xs text-slate-400">
@@ -209,5 +211,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }

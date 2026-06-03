@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Square } from "lucide-react";
-import { api } from "../api";
+import { api, humanizeError } from "../api";
 import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../components/ui.jsx";
+import { useToast } from "../components/toast.jsx";
 
 const ALL_PROMPTS = [
   { id: "reasoning", label: "Razonamiento" },
@@ -79,6 +80,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // Estado del benchmark vive en App (vía useBenchmarkRun) para sobrevivir
   // al desmontaje de esta vista al cambiar de pestaña.
   const { running, events, results, progress, start: startBench, stop: stopBench, subscribe, log: bLog, clear: bClear } = benchmark;
+  const toast = useToast();
 
   // Aplicar config de navegación (desde Dashboard u otras vistas)
   useEffect(() => {
@@ -257,6 +259,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
     } catch (e) {
       // El hook ya logueó el evento, sólo dejamos un fallback por si la API falla antes
       console.error("startBench failed:", e);
+      toast.error(humanizeError(e, "No se pudo lanzar el benchmark"));
     }
   };
 
@@ -287,6 +290,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
       pollSweep(sweep_id);
     } catch (e) {
       bLog("error", e.message);
+      toast.error(humanizeError(e, "No se pudo lanzar el sweep"));
     }
   };
 

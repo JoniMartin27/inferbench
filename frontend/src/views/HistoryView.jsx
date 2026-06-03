@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, GitCompare, X } from "lucide-react";
+import { Trash2, GitCompare, X, Inbox } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -10,19 +10,27 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { api } from "../api";
-import { PageHeader, Card, Button, Badge, Stat } from "../components/ui.jsx";
+import { api, humanizeError } from "../api";
+import { PageHeader, Card, Button, Badge, Stat, Empty } from "../components/ui.jsx";
+import { useToast } from "../components/toast.jsx";
 
 const PROMPT_ORDER = ["reasoning", "code", "summary", "chat"];
 
-export default function HistoryView() {
+export default function HistoryView({ onNavigate }) {
   const [runs, setRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [checked, setChecked] = useState(new Set());
   const [comparison, setComparison] = useState(null);
+  const toast = useToast();
 
-  const refresh = () => api.listHistory().then(setRuns).catch(() => {});
+  const refresh = () =>
+    api
+      .listHistory()
+      .then(setRuns)
+      .catch((e) => toast.error(humanizeError(e, "No se pudo cargar el historial")))
+      .finally(() => setLoading(false));
   useEffect(() => {
     refresh();
   }, []);
@@ -36,14 +44,21 @@ export default function HistoryView() {
   }, [selected]);
 
   const remove = async (id) => {
-    await api.deleteHistory(id);
+    const prev = runs;
+    setRuns((rs) => rs.filter((r) => r.id !== id)); // optimista: quita ya de la lista
     if (selected === id) setSelected(null);
     setChecked((s) => {
       const next = new Set(s);
       next.delete(id);
       return next;
     });
-    refresh();
+    try {
+      await api.deleteHistory(id);
+      toast.success("Run eliminada");
+    } catch (e) {
+      setRuns(prev); // revertir si el backend falla
+      toast.error(humanizeError(e, "No se pudo eliminar la run"));
+    }
   };
 
   const toggleCheck = (id) => {
@@ -56,8 +71,12 @@ export default function HistoryView() {
 
   const compare = async () => {
     if (checked.size < 2) return;
-    const data = await api.compareHistory(Array.from(checked));
-    setComparison(data);
+    try {
+      const data = await api.compareHistory(Array.from(checked));
+      setComparison(data);
+    } catch (e) {
+      toast.error(humanizeError(e, "No se pudo comparar las runs"));
+    }
   };
 
   return (
@@ -73,8 +92,20 @@ export default function HistoryView() {
       />
       <div className="grid gap-6 p-8 lg:grid-cols-[420px_1fr]">
         <Card title={`Runs (${runs.length})`}>
-          {runs.length === 0 && (
-            <p className="text-sm text-slate-500">Aún no has lanzado ninguna suite.</p>
+          {loading && runs.length === 0 && (
+            <p className="py-2 text-sm text-slate-500">Cargando historial…</p>
+          )}
+          {!loading && runs.length === 0 && (
+            <Empty
+              icon={Inbox}
+              title="Aún no has lanzado ninguna suite"
+              body="Configura un motor y un modelo en Benchmark y los resultados aparecerán aquí para compararlos."
+              action={
+                onNavigate && (
+                  <Button onClick={() => onNavigate("benchmark")}>Ir a Benchmark</Button>
+                )
+              }
+            />
           )}
           <ul className="divide-y divide-slate-800">
             {runs.map((r) => {
@@ -117,8 +148,9 @@ export default function HistoryView() {
                   </Badge>
                   <button
                     onClick={() => remove(r.id)}
-                    className="text-slate-500 hover:text-rose-300"
+                    className="rounded text-slate-500 transition hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                     title="Eliminar"
+                    aria-label="Eliminar run"
                   >
                     <Trash2 size={14} />
                   </button>

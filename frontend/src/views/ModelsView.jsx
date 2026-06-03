@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play, Filter, Sparkles } from "lucide-react";
-import { api } from "../api";
+import { api, humanizeError } from "../api";
 import {
   PageHeader,
   Card,
@@ -13,6 +13,7 @@ import {
   compatTone,
   compatLabel,
 } from "../components/ui.jsx";
+import { useToast } from "../components/toast.jsx";
 
 const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
 const KV_OPTS = ["f16", "q8_0", "q4_0"];
@@ -35,6 +36,7 @@ export default function ModelsView({ onNavigate }) {
   const [filterMode, setFilterMode] = useState("compat"); // all | compat | full_gpu
   const [familyFilter, setFamilyFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const toast = useToast();
 
   const refreshLocal = async () => {
     setLocalLoading(true);
@@ -43,6 +45,8 @@ export default function ModelsView({ onNavigate }) {
       setLocalModels(m);
       setSearchDirs(d);
       setExtraInput((d.extra || []).join("\n"));
+    } catch (e) {
+      toast.error(humanizeError(e, "No se pudieron escanear los modelos locales"));
     } finally {
       setLocalLoading(false);
     }
@@ -50,8 +54,13 @@ export default function ModelsView({ onNavigate }) {
 
   const saveDirs = async () => {
     const dirs = extraInput.split("\n").map((s) => s.trim()).filter(Boolean);
-    await api.saveSearchDirs(dirs);
-    await refreshLocal();
+    try {
+      await api.saveSearchDirs(dirs);
+      await refreshLocal();
+      toast.success("Carpetas de búsqueda guardadas");
+    } catch (e) {
+      toast.error(humanizeError(e, "No se pudieron guardar las carpetas"));
+    }
   };
 
   useEffect(() => {
@@ -96,7 +105,7 @@ export default function ModelsView({ onNavigate }) {
       const techniques = res.techniques || [];
       setOptimal({ modelId, config: cfg, techniques });
     } catch (e) {
-      setOptimizeError(`No se pudo optimizar ${modelId}: ${e.message}`);
+      setOptimizeError(`No se pudo optimizar ${modelId}: ${humanizeError(e)}`);
     } finally {
       setOptimizing(null);
     }

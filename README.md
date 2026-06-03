@@ -60,6 +60,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Modo sweep**: lanza el mismo modelo con N cuantizaciones distintas en cola
 - **Comparación**: selecciona varias runs del historial, ve métricas y gráficos lado a lado
 - **SSE en vivo**: progreso de descargas (con %), TTFT, tok/s actual, log estilo terminal
+- **Descargas resilientes**: GGUFs de decenas de GB con reintentos automáticos (backoff exponencial) y **reanudación** desde el parcial vía cabecera Range si la red se corta
 - **Stop en cualquier momento**: cancela bootstrap, descarga o ejecución
 - **Persistencia**: SQLite con todos los runs (engine, modelo, quant, flags, métricas por prompt, output bruto)
 
@@ -375,12 +376,10 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 ## Pendientes / siguientes pasos
 
-- Adaptadores reales para `ollama`, `vllm`, `sglang`, `tgi` (M2 sólo cubrió `llamacpp`)
 - KV-cache exacta para el cálculo de compat usando `n_kv_heads`/`head_dim` de la metadata (la cuenta de **parámetros** ya se lee de la metadata GGUF; el contexto máximo sigue siendo heurístico)
 - API keys persistidas vía `keyring` del SO (el LLM-judge por API ya acepta key por request)
-- Tests unitarios en `compat.py` y `optimizer.py`
+- Más cobertura de tests (ya hay 31 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `security`)
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
-- Adapter de Ollama nativo (Ollama tiene installer Windows propio)
 - Soporte de modelos MoE multi-parte para auto-descarga (split GGUF, manejo de varios shards)
 - Soporte multimodal real (los modelos de visión se benchmarkean como texto; falta descargar el `mmproj` y prompts con imagen)
 

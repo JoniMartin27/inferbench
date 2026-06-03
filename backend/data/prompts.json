@@ -34,5 +34,15 @@
     "prompt": "Recomiéndame 3 libros de ciencia ficción modernos y dime brevemente de qué van.",
     "target_tokens": 128,
     "reference": ""
+  },
+  {
+    "id": "vision",
+    "name": "Visión (imagen)",
+    "type": "vision",
+    "system": "Eres un asistente que describe imágenes con precisión y brevedad.",
+    "prompt": "¿Qué figura geométrica y de qué color aparece en la imagen? Responde en una sola frase.",
+    "target_tokens": 64,
+    "reference": "Un círculo rojo sobre un fondo blanco.",
+    "image": "vision_test.png"
   }
 ]

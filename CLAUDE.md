@@ -26,7 +26,7 @@ API keys de cloud (OpenAI/Anthropic/etc.) van por `keyring` (ya es dependencia).
 - `ruff` + `black`, línea 100 (configurado en `pyproject.toml`).
 - Type hints en funciones públicas. Pydantic models para entradas/salidas de la API (no dicts sueltos).
 - `loguru` para logging, nunca `print()`.
-- Pytest + pytest-asyncio instalados. Hay **31 tests** en `backend/tests/` (cubren `compat`, `optimizer`, `quality`, `gguf_reader` y `security`); corre `pytest` antes de tocar `core/`. Al añadir features amplía la cobertura de `core/compat.py` y `core/optimizer.py`.
+- Pytest + pytest-asyncio instalados. Hay **42 tests** en `backend/tests/` (cubren `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal` y `security`); corre `pytest` antes de tocar `core/`. Al añadir features amplía la cobertura de `core/compat.py` y `core/optimizer.py`.
 
 ### Frontend (`frontend/`)
 - JSX, no TypeScript (decisión deliberada del MVP — no migres sin hablarlo).
@@ -108,6 +108,7 @@ Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/inst
 - **KV-cache exacta** (`core/compat.py::kv_per_token_mb_f16`): `2·n_layer·n_head_kv·head_dim·2B`, captura GQA/MQA. El catálogo trae `n_head_kv`/`head_dim` (poblados por `scripts/enrich_arch.py` leyendo el header GGUF vía Range). Si faltan dims, cae a la heurística `0.5·(params/7)^0.7`. NO reintroduzcas la heurística en `optimizer.py`: usa `compat.kv_per_token_mb_f16`.
 - **`detect_hardware()` cacheado** (`lru_cache`) — no lo "des-cachees"; el listado de compat depende de que sea instantáneo.
 - **Evaluación de calidad** en 3 modos (`core/benchmark.py`): scorer offline basado en referencia (default, sin GPU/API), LLM-judge `self` y `api`. El default DEBE seguir funcionando en cualquier ordenador.
+- **Visión multimodal real** (`llamacpp` nativo): los modelos con tag `vision` declaran su `mmproj` en `hf_gguf.mmproj`; `model_manager.ensure_mmproj` lo descarga, el bootstrap arranca llama-server con `--mmproj` y el prompt `vision` manda `data/vision_test.png` por la API OpenAI-vision. El gating de `run()` omite prompts con imagen en modelos no-visión. NO mandes imágenes sin mmproj cargado.
 
 ## Pendientes documentados
-La sección "Pendientes / siguientes pasos" del README es la fuente — incluye API keys vía `keyring`, flags extra de tuning de llama.cpp (`cache-reuse`, `--prio-batch`), soporte MoE multi-parte para auto-descarga, y soporte multimodal real (mmproj).
+La sección "Pendientes / siguientes pasos" del README es la fuente — incluye API keys vía `keyring`, flags extra de tuning de llama.cpp (`cache-reuse`, `--prio-batch`), soporte MoE multi-parte para auto-descarga, y extender la visión a motores Docker / API (hoy corre en `llamacpp` nativo).

@@ -39,6 +39,11 @@ class LlamaCppEngine(Engine):
         if model_path:
             cmd += ["-m", model_path]
 
+        # Projector multimodal (visión): habilita entrada de imágenes en /v1/chat/completions
+        mmproj = opts.get("mmproj")
+        if mmproj:
+            cmd += ["--mmproj", str(mmproj)]
+
         ctx = opts.get("contextLen") or opts.get("context_len")
         if ctx:
             cmd += ["-c", str(int(ctx))]

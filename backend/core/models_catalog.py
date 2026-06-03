@@ -13,6 +13,7 @@ DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "models.json"
 class HfGguf(BaseModel):
     repo: str
     file_template: str  # debe contener {quant}, ej. "Llama-3.2-3B-Instruct-{quant}.gguf"
+    mmproj: str | None = None  # filename del projector multimodal en el mismo repo (visión)
 
 
 class Model(BaseModel):
@@ -33,6 +34,11 @@ class Model(BaseModel):
     n_head: int | None = None      # cabezas de atención (query)
     n_head_kv: int | None = None   # cabezas de KV (GQA/MQA); fija el tamaño de KV-cache
     head_dim: int | None = None    # dimensión por cabeza (para KV-cache exacta)
+
+    @property
+    def is_vision(self) -> bool:
+        """Modelo multimodal de visión (necesita un mmproj para procesar imágenes)."""
+        return "vision" in self.tags
 
 
 @lru_cache(maxsize=1)

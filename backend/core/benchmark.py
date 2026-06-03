@@ -43,6 +43,53 @@ class Prompt(BaseModel):
     prompt: str
     target_tokens: int = 256
     reference: str = ""
+    image: str | None = None  # filename (relativo a data/) de una imagen → prompt multimodal
+
+
+def _image_data_url(image: str) -> str:
+    """Convierte una imagen del directorio data/ en un data URL base64 para la API de visión."""
+    import base64
+    import mimetypes
+
+    path = image if Path(image).is_absolute() else str(PROMPTS_FILE.parent / image)
+    mime = mimetypes.guess_type(path)[0] or "image/png"
+    b64 = base64.b64encode(Path(path).read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _find_local_mmproj(folder: Path) -> Path | None:
+    """Busca un GGUF de tipo mmproj (projector de visión) en la misma carpeta."""
+    try:
+        for f in sorted(folder.glob("*.gguf")):
+            if "mmproj" in f.name.lower():
+                return f
+    except OSError:
+        pass
+    return None
+
+
+def _build_chat_body(model_id_for_engine: str, prompt: Prompt, sampling: dict[str, Any]) -> dict:
+    """Construye el body de /v1/chat/completions. Si el prompt lleva imagen, el content
+    del usuario es un array texto+imagen (formato OpenAI vision, que llama-server acepta
+    arrancado con --mmproj). Extraído para poder testearlo sin red."""
+    if prompt.image:
+        user_content: Any = [
+            {"type": "text", "text": prompt.prompt},
+            {"type": "image_url", "image_url": {"url": _image_data_url(prompt.image)}},
+        ]
+    else:
+        user_content = prompt.prompt
+    messages = [
+        {"role": "system", "content": prompt.system} if prompt.system else None,
+        {"role": "user", "content": user_content},
+    ]
+    return {
+        "model": model_id_for_engine,
+        "messages": [m for m in messages if m],
+        "max_tokens": prompt.target_tokens,
+        "stream": True,
+        **sampling,
+    }
 
 
 @lru_cache(maxsize=1)
@@ -330,17 +377,7 @@ async def _stream_openai_chat(
     headers: dict[str, str],
 ) -> AsyncIterator[tuple[str, Any]]:
     url = f"{base_url.rstrip('/')}/v1/chat/completions"
-    body = {
-        "model": model_id_for_engine,
-        "messages": [
-            {"role": "system", "content": prompt.system} if prompt.system else None,
-            {"role": "user", "content": prompt.prompt},
-        ],
-        "max_tokens": prompt.target_tokens,
-        "stream": True,
-        **sampling,
-    }
-    body["messages"] = [m for m in body["messages"] if m]
+    body = _build_chat_body(model_id_for_engine, prompt, sampling)
 
     first = True
     async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
@@ -425,6 +462,19 @@ class BenchmarkRunner:
     async def run(self) -> None:
         try:
             prompts = [p for p in (get_prompt(pid) for pid in self.req.prompts) if p]
+            # Gating de visión: un prompt con imagen necesita un modelo multimodal (con
+            # mmproj) en local. Para APIs lo dejamos pasar (gpt-4o etc. son multimodales).
+            model_obj = get_model(self.req.model)
+            supports_vision = self.is_api or bool(model_obj and model_obj.is_vision)
+            kept: list[Prompt] = []
+            for p in prompts:
+                if p.image and not supports_vision:
+                    await self.emit({"type": "log", "level": "warn",
+                                     "text": f"Prompt '{p.id}' (imagen) omitido: "
+                                             f"{self.req.model} no es un modelo de visión"})
+                    continue
+                kept.append(p)
+            prompts = kept
             await self.emit({"type": "start", "run_id": self.run_id, "total": len(prompts)})
 
             if self.req.auto and not self.is_api:
@@ -640,8 +690,12 @@ class BenchmarkRunner:
                 raise RuntimeError(f"Ruta local no existe: {local}")
             gguf_path = local
             await self.emit({"type": "log", "level": "success", "text": f"Modelo local: {local.name}"})
-            # Saltamos directamente al paso 3
-            await self._start_engine_with_path(model, gguf_path, binary)
+            # Visión: busca un mmproj hermano en la misma carpeta (no se descarga para locales)
+            mmproj_local = _find_local_mmproj(local.parent)
+            if model.is_vision and not mmproj_local:
+                await self.emit({"type": "log", "level": "warn",
+                                 "text": "Modelo de visión sin mmproj en la carpeta; correrá como texto"})
+            await self._start_engine_with_path(model, gguf_path, binary, mmproj_local)
             return
         # Opción B: descarga desde HF
         if not model.hf_gguf:
@@ -678,17 +732,55 @@ class BenchmarkRunner:
         gguf_path = model_manager.gguf_path(model, self.req.quant)
         await self.emit({"type": "log", "level": "success", "text": f"Modelo: {gguf_path.name}"})
 
-        await self._start_engine_with_path(model, gguf_path, binary)
+        # Visión: descarga el projector multimodal (mmproj) junto al modelo
+        mmproj_path = await self._ensure_mmproj(model)
 
-    async def _start_engine_with_path(self, model, gguf_path, binary):
-        """Arranca llama-server con el GGUF dado (ruta local) si no está ya corriendo."""
-        # 3. Motor: reusar si está corriendo CON el mismo modelo+quant; si no, reiniciar
+        await self._start_engine_with_path(model, gguf_path, binary, mmproj_path)
+
+    async def _ensure_mmproj(self, model):
+        """Descarga el mmproj (projector de visión) si el modelo lo necesita. Ruta o None.
+
+        Falla suave: si la descarga del mmproj falla, se loguea y el modelo corre como
+        texto (sin visión) en vez de abortar todo el benchmark.
+        """
+        if not (model and model.hf_gguf and model.hf_gguf.mmproj):
+            return None
+        if model_manager.mmproj_installed(model):
+            return model_manager.mmproj_path(model)
+        await self.emit({"type": "log", "level": "info",
+                         "text": "Descargando projector de visión (mmproj)…"})
+
+        async def mm_progress(evt):
+            await self.emit({"type": "model.download", **evt})
+
+        try:
+            path = await model_manager.ensure_mmproj(
+                model, progress=mm_progress, cancel_event=self.cancelled
+            )
+            if path:
+                await self.emit({"type": "log", "level": "success",
+                                 "text": f"mmproj listo: {path.name} (visión habilitada)"})
+            return path
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            await self.emit({"type": "log", "level": "warn",
+                             "text": f"mmproj falló ({e}); el modelo correrá como texto"})
+            return None
+
+    async def _start_engine_with_path(self, model, gguf_path, binary, mmproj_path=None):
+        """Arranca llama-server con el GGUF dado (ruta local) si no está ya corriendo.
+
+        `mmproj_path` (opcional): projector de visión → arranca con --mmproj.
+        """
+        # 3. Motor: reusar si está corriendo CON el mismo modelo+quant+mmproj; si no, reiniciar
         st = native_runtime.status("llamacpp")
         loaded = native_runtime.get_loaded("llamacpp")
         same_model = (
             loaded is not None
             and loaded.get("model") == self.req.model
             and loaded.get("quant") == self.req.quant
+            and loaded.get("mmproj", False) == bool(mmproj_path)
         )
         if st.state == "running" and not same_model:
             await self.emit({
@@ -733,6 +825,8 @@ class BenchmarkRunner:
                 "--batch-size", "2048",
                 "--ubatch-size", "512",
             ]
+            if mmproj_path:
+                args += ["--mmproj", str(mmproj_path)]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
             if optimal.flags.get("flashAttn"):
@@ -750,7 +844,8 @@ class BenchmarkRunner:
             native_runtime.start("llamacpp", exe=binary, args=args, port=8080)
             native_runtime.set_loaded(
                 "llamacpp",
-                {"model": model.id, "quant": self.req.quant, "ctx": ctx, "kv": kv},
+                {"model": model.id, "quant": self.req.quant, "ctx": ctx, "kv": kv,
+                 "mmproj": bool(mmproj_path)},
             )
             self._owns_engine = True
 

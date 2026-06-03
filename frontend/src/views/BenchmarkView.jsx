@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Square } from "lucide-react";
+import { Play, Square, Image as ImageIcon } from "lucide-react";
 import { api, humanizeError } from "../api";
 import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
@@ -9,6 +9,7 @@ const ALL_PROMPTS = [
   { id: "code", label: "Código" },
   { id: "summary", label: "Resumen" },
   { id: "chat", label: "Chat" },
+  { id: "vision", label: "Visión", vision: true },
 ];
 
 const QUANTS = [
@@ -134,7 +135,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
       cancelled = true;
     };
   }, [model, engine, localModel]);
-  const [prompts, setPrompts] = useState(ALL_PROMPTS.map((p) => p.id));
+  const [prompts, setPrompts] = useState(ALL_PROMPTS.filter((p) => !p.vision).map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [judgeMode, setJudgeMode] = useState("heuristic"); // heuristic | self | api
@@ -203,6 +204,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const engineIsApi = selectedEngine?.meta.type === "api";
   const selectedModel = models.find((m) => m.id === model);
   const modelHasGguf = !!selectedModel?.hf_gguf;
+  const isVisionModel = !!selectedModel?.tags?.includes("vision");
   const apiNeedsKey = engineIsApi && !apiKey;
   // Determinar si el motor está listo para arrancar
   const engineNativeReady = selectedEngine?.runtimes?.some(
@@ -321,6 +323,12 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
 
   const togglePrompt = (id) =>
     setPrompts((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  // El prompt de visión solo aplica a modelos multimodales: deselecciónalo al cambiar
+  // a un modelo sin visión para no enviarlo (el backend igual lo gatea, esto evita ruido).
+  useEffect(() => {
+    if (!isVisionModel) setPrompts((p) => p.filter((id) => id !== "vision"));
+  }, [isVisionModel]);
 
   return (
     <>
@@ -488,23 +496,31 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                 />
               </Field>
             )}
-            <Field label="Prompts">
+            <Field
+              label="Prompts"
+              hint={isVisionModel ? "Modelo de visión: el prompt de imagen está disponible" : undefined}
+            >
               <div className="flex flex-wrap gap-2">
-                {ALL_PROMPTS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => togglePrompt(p.id)}
-                    disabled={!!running}
-                    className={`rounded-md border px-3 py-1 text-xs ${
-                      prompts.includes(p.id)
-                        ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
-                        : "border-slate-700 text-slate-400"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+                {ALL_PROMPTS.map((p) => {
+                  const blocked = p.vision && !isVisionModel;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => togglePrompt(p.id)}
+                      disabled={!!running || blocked}
+                      title={blocked ? "Solo modelos de visión (necesitan mmproj)" : undefined}
+                      className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        prompts.includes(p.id)
+                          ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
+                          : "border-slate-700 text-slate-400"
+                      }`}
+                    >
+                      {p.vision && <ImageIcon size={11} />}
+                      {p.label}
+                    </button>
+                  );
+                })}
               </div>
             </Field>
             <JudgeField

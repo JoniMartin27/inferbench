@@ -134,66 +134,47 @@ def gguf_installed(model: Model, quant: str) -> bool:
     return _model_file(model, quant).exists()
 
 
-async def ensure_gguf(
-    model: Model,
-    quant: str,
+async def _download_resilient(
+    url: str,
+    target: Path,
     progress: ProgressCb = None,
     cancel_event: asyncio.Event | None = None,
+    *,
+    label: str,
+    progress_meta: dict | None = None,
+    not_found_msg: str | None = None,
 ) -> Path:
-    """Descarga el GGUF si no existe localmente. Devuelve la ruta absoluta.
+    """Descarga `url` → `target` con reintentos+backoff y reanudación vía Range.
 
-    Resiliencia: reintenta hasta `_MAX_DL_RETRIES` veces con backoff exponencial y
-    reanuda desde el `.part` parcial vía cabecera Range si el servidor lo soporta.
-    Si se pasa `cancel_event` y se setea durante la descarga, se aborta con
-    asyncio.CancelledError y el `.part` se conserva (permite reanudar). Si se agotan
-    los reintentos, el `.part` se elimina para no dejar basura en disco.
+    Núcleo compartido por `ensure_gguf` y `ensure_mmproj`. Idempotente (si `target`
+    existe, no hace nada). Conserva el `.part` al cancelar (permite reanudar) y lo
+    elimina al agotar reintentos. `progress_meta` se mezcla en los eventos (p.ej. el
+    id del modelo); `not_found_msg` personaliza el error de 401/403/404.
     """
-    if not model.hf_gguf:
-        raise RuntimeError(
-            f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo"
-        )
-
-    target = _model_file(model, quant)
     if target.exists():
         return target
-
     target.parent.mkdir(parents=True, exist_ok=True)
-    repo = model.hf_gguf.repo
-    filename = target.name
-    url = f"https://huggingface.co/{repo}/resolve/main/{filename}"
-
-    logger.info(f"Descargando GGUF: {url}")
-    if progress:
-        await progress({"phase": "model.lookup", "model": model.id, "quant": quant, "url": url})
-
     tmp = target.with_suffix(target.suffix + ".part")
+    meta = progress_meta or {}
+    filename = target.name
+
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(None, connect=30.0), follow_redirects=True
     ) as client:
-        # HEAD para tamaño y validar 200
+        # HEAD para tamaño y validar 200. 401/403/404 = archivo inexistente en HF
+        # (errores permanentes → no se reintentan).
         head = await client.head(url)
-        # HF devuelve 401/403 (no 404) para archivos inexistentes en repos públicos.
-        # 404 también puede ocurrir si el repo entero no existe. Son errores
-        # permanentes → no se reintentan.
         if head.status_code in (401, 403, 404):
             raise RuntimeError(
-                f"Cuantización {quant} no disponible para {model.id} en {repo}. "
-                f"Bartowski no publica {quant} para este modelo. "
-                f"Prueba con Q4_K_M o usa Modelos → Locales para apuntar a un GGUF tuyo."
+                not_found_msg or f"{label} no disponible (HTTP {head.status_code}) en {url}"
             )
         head.raise_for_status()
         total = int(head.headers.get("content-length", 0))
         accept_ranges = head.headers.get("accept-ranges", "").lower() == "bytes"
 
         if progress:
-            await progress({
-                "phase": "model.download",
-                "model": model.id,
-                "name": filename,
-                "size": total,
-                "downloaded": 0,
-                "pct": 0,
-            })
+            await progress({"phase": "model.download", "name": filename,
+                            "size": total, "downloaded": 0, "pct": 0, **meta})
 
         last_err: Exception | None = None
         for attempt in range(_MAX_DL_RETRIES):
@@ -223,13 +204,9 @@ async def ensure_gguf(
                             if progress and total:
                                 pct = round(downloaded / total * 100, 1)
                                 if pct - last_pct >= 0.5:
-                                    await progress({
-                                        "phase": "model.download",
-                                        "model": model.id,
-                                        "downloaded": downloaded,
-                                        "size": total,
-                                        "pct": pct,
-                                    })
+                                    await progress({"phase": "model.download",
+                                                    "downloaded": downloaded, "size": total,
+                                                    "pct": pct, **meta})
                                     last_pct = pct
                 # Validar que la descarga está completa antes del rename atómico.
                 if total and tmp.stat().st_size < total:
@@ -238,7 +215,7 @@ async def ensure_gguf(
                     )
                 tmp.rename(target)
                 if progress:
-                    await progress({"phase": "model.ready", "path": str(target)})
+                    await progress({"phase": "model.ready", "path": str(target), **meta})
                 return target
             except asyncio.CancelledError:
                 raise  # cancelación del usuario: conservar .part para reanudar
@@ -246,9 +223,7 @@ async def ensure_gguf(
                 code = e.response.status_code
                 if code < 500 and code != 429:  # 4xx (salvo 429) son permanentes
                     tmp.unlink(missing_ok=True)
-                    raise RuntimeError(
-                        f"Descarga de {filename} falló con HTTP {code}"
-                    ) from e
+                    raise RuntimeError(f"Descarga de {filename} falló con HTTP {code}") from e
                 last_err = e
             except httpx.TransportError as e:
                 last_err = e
@@ -260,17 +235,87 @@ async def ensure_gguf(
                     f"{last_err}. Reintento en {delay:.0f}s"
                 )
                 if progress:
-                    await progress({
-                        "phase": "model.retry",
-                        "model": model.id,
-                        "attempt": attempt + 1,
-                        "max": _MAX_DL_RETRIES,
-                        "delay": delay,
-                    })
+                    await progress({"phase": "model.retry", "attempt": attempt + 1,
+                                    "max": _MAX_DL_RETRIES, "delay": delay, **meta})
                 await asyncio.sleep(delay)
 
         # Agotados los reintentos: limpiar el .part parcial y abortar con error claro.
         tmp.unlink(missing_ok=True)
         raise RuntimeError(
-            f"No se pudo descargar {filename} tras {_MAX_DL_RETRIES} intentos: {last_err}"
+            f"No se pudo descargar {label} tras {_MAX_DL_RETRIES} intentos: {last_err}"
         )
+
+
+async def ensure_gguf(
+    model: Model,
+    quant: str,
+    progress: ProgressCb = None,
+    cancel_event: asyncio.Event | None = None,
+) -> Path:
+    """Descarga el GGUF si no existe localmente. Devuelve la ruta absoluta.
+
+    Resiliente: reintentos con backoff y reanudación vía Range (ver `_download_resilient`).
+    """
+    if not model.hf_gguf:
+        raise RuntimeError(
+            f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo"
+        )
+    target = _model_file(model, quant)
+    if target.exists():
+        return target
+    repo = model.hf_gguf.repo
+    url = f"https://huggingface.co/{repo}/resolve/main/{target.name}"
+    logger.info(f"Descargando GGUF: {url}")
+    if progress:
+        await progress({"phase": "model.lookup", "model": model.id, "quant": quant, "url": url})
+    not_found = (
+        f"Cuantización {quant} no disponible para {model.id} en {repo}. "
+        f"Bartowski no publica {quant} para este modelo. "
+        f"Prueba con Q4_K_M o usa Modelos → Locales para apuntar a un GGUF tuyo."
+    )
+    return await _download_resilient(
+        url, target, progress, cancel_event,
+        label=f"GGUF {quant} de {model.id}",
+        progress_meta={"model": model.id},
+        not_found_msg=not_found,
+    )
+
+
+def mmproj_path(model: Model) -> Path | None:
+    """Ruta local del projector multimodal (mmproj), o None si el modelo no es de visión."""
+    if not (model.hf_gguf and model.hf_gguf.mmproj):
+        return None
+    return MODELS_ROOT / model.hf_gguf.repo.replace("/", "__") / model.hf_gguf.mmproj
+
+
+def mmproj_installed(model: Model) -> bool:
+    p = mmproj_path(model)
+    return bool(p and p.exists())
+
+
+async def ensure_mmproj(
+    model: Model,
+    progress: ProgressCb = None,
+    cancel_event: asyncio.Event | None = None,
+) -> Path | None:
+    """Descarga el mmproj (projector de visión) del mismo repo GGUF. None si no aplica.
+
+    El mmproj es un GGUF aparte (encoder de imagen) que llama-server carga con
+    `--mmproj` para habilitar entrada multimodal. Vive junto al modelo en el repo.
+    """
+    target = mmproj_path(model)
+    if target is None:
+        return None
+    if target.exists():
+        return target
+    repo = model.hf_gguf.repo
+    fn = model.hf_gguf.mmproj
+    url = f"https://huggingface.co/{repo}/resolve/main/{fn}"
+    logger.info(f"Descargando mmproj: {url}")
+    if progress:
+        await progress({"phase": "model.lookup", "model": model.id, "mmproj": fn, "url": url})
+    return await _download_resilient(
+        url, target, progress, cancel_event,
+        label=f"mmproj de {model.id}",
+        progress_meta={"model": model.id, "kind": "mmproj"},
+    )

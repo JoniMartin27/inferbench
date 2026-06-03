@@ -54,6 +54,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Detección automática de hardware**: CPU, RAM, GPU (NVIDIA via NVML, AMD via rocm-smi, Apple Silicon via system_profiler). Cacheada para que el listado de compatibilidad sea instantáneo (~4 ms para 124 modelos)
 - **Catálogo de 124+ modelos** con auto-descarga GGUF desde HF, todos verificados contra HuggingFace (incluye visión, código, reasoning y MoE). Ver [Catálogo](#catálogo-de-modelos-con-auto-descarga)
 - **Escaneo de GGUFs locales**: detecta modelos de LM Studio, Ollama, HF cache, etc., con cuenta de parámetros real leída de la metadata GGUF (independiente del quant)
+- **Visión real (multimodal)**: para modelos de visión (Qwen2-VL, Qwen2.5-VL, MiniCPM-V) descarga el `mmproj`, arranca llama-server con `--mmproj` y benchmarkea un prompt con **imagen real** vía la API de visión OpenAI-compatible
 - **Optimizador**: dado tu hardware + modelo + motor, calcula la mejor cuantización, KV-cache, contexto máximo, MoE offload, flags
 - **Compresión de KV-cache explicada**: 5 presets (Calidad→Extremo) con qué hace / en qué afecta / qué permite, + tabla de los **modelos más potentes que caben con cada compresión** para tu hardware
 - **Evaluación de calidad en 3 modos**: scorer offline basado en referencia (sin GPU/API, corre en cualquier PC), LLM-judge con el motor local, o LLM-judge por API externa. Ver [Calidad](#evaluación-de-calidad)
@@ -282,7 +283,7 @@ inferbench/
 
 ## Suite de prompts
 
-`backend/data/prompts.json` define 4 prompts representativos:
+`backend/data/prompts.json` define 5 prompts representativos:
 
 | ID | Tipo | Tokens objetivo |
 |----|------|-----------------|
@@ -290,6 +291,9 @@ inferbench/
 | `code` | generación de código | 512 |
 | `summary` | resumen | 384 |
 | `chat` | conversación corta | 128 |
+| `vision` | descripción de imagen (multimodal) | 64 |
+
+> El prompt `vision` solo se ejecuta en **modelos de visión** (con `mmproj`); para el resto se omite automáticamente. Envía una imagen real (`data/vision_test.png`) por la API de visión OpenAI-compatible.
 
 Métricas medidas por prompt:
 - **TTFT** (ms): tiempo al primer token
@@ -372,16 +376,17 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | **Bonus** | **Compresión KV explicada** + tabla de modelos más potentes por compresión | ✅ |
 | **Bonus** | **Calidad offline basada en referencia** + **LLM-judge** (local / API) | ✅ |
 | **Bonus** | **KV-cache exacta** desde metadata (`n_head_kv`/`head_dim`, capta GQA/MQA) en 123/124 modelos del catálogo | ✅ |
+| **Bonus** | **Visión real (multimodal)**: descarga `mmproj`, `--mmproj` en llama-server y prompt con imagen real | ✅ |
 
 ---
 
 ## Pendientes / siguientes pasos
 
 - API keys persistidas vía `keyring` del SO (el LLM-judge por API ya acepta key por request)
-- Más cobertura de tests (ya hay 31 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `security`)
+- Más cobertura de tests (ya hay 42 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`)
+- Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
 - Soporte de modelos MoE multi-parte para auto-descarga (split GGUF, manejo de varios shards)
-- Soporte multimodal real (los modelos de visión se benchmarkean como texto; falta descargar el `mmproj` y prompts con imagen)
 
 ---
 

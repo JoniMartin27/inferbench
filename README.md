@@ -283,18 +283,18 @@ inferbench/
 
 ## Suite de prompts
 
-`backend/data/prompts.json` define 6 prompts representativos:
+`backend/data/prompts.json` define 6 prompts representativos. **Cada uno tiene un scorer verificable** (no F1 de tokens): la calidad mide corrección real.
 
-| ID | Tipo | Tokens objetivo |
-|----|------|-----------------|
-| `reasoning` | razonamiento lógico | 256 |
-| `code` | generación de código | 512 |
-| `summary` | resumen | 384 |
-| `chat` | conversación corta | 128 |
-| `vision-scene` | visión: 3 figuras de 3 colores (forma+color+conteo) | 96 |
-| `vision-count` | visión: contar objetos | 48 |
+| ID | Tarea | Cómo se puntúa | Tokens |
+|----|-------|----------------|--------|
+| `reasoning` | reparto de alquiler (mates multi-paso) | checklist: aparecen 250 / 500 / 750 | 256 |
+| `code` | `merge_intervals` (solo stdlib) | **ejecuta** el código contra 5 casos → % que pasan | 512 |
+| `summary` | resumir manteniendo hechos clave | checklist: privacidad / sesgos / energía / regulación / código / traducción | 384 |
+| `chat` | planetas en orden desde el Sol | checklist: los 8 planetas (ES/EN) | 128 |
+| `vision-scene` | describir 3 figuras de 3 colores | checklist: forma×3 + color×3 + conteo | 96 |
+| `vision-count` | contar objetos | checklist: nº + forma + color | 48 |
 
-> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Envían imágenes reales con ground-truth conocido (`data/vision_scene.png`, `data/vision_count.png`, generadas por `scripts/make_vision_test.py`) por la API de visión OpenAI-compatible, y se puntúan con un **checklist de atributos** (ver abajo) en vez de F1 de tokens.
+> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). El prompt `code` **ejecuta** la salida del modelo en un subproceso aislado (`python -I`, cwd temporal, timeout); desactívalo con `INFERBENCH_NO_CODE_EXEC=1`.
 
 Métricas medidas por prompt:
 - **TTFT** (ms): tiempo al primer token
@@ -313,7 +313,8 @@ La nota de calidad (0-100) tiene varios modos (TTFT y tok/s siempre son medidas 
 | Modo | Cómo funciona | Cuándo usarlo |
 |------|---------------|---------------|
 | **Referencia (offline)** · *default* | Compara la respuesta con la de referencia: F1 de tokens *recall-weighted* + recall exacto de números + stemming por prefijo + penalización de texto degenerado. Python puro, **sin GPU/modelo/red** | Funciona en **cualquier ordenador**. Bueno en tareas con respuesta esperada (razonamiento, código, resumen); aproximado en tareas abiertas (chat) |
-| **Checklist de atributos** · *visión y hechos* | El prompt define grupos de sinónimos (el ground-truth: formas, colores, conteo…); la nota es la fracción de atributos que aparecen en la respuesta. Robusto a acentos y bilingüe (ES/EN). Sin red | **Visión** (mide si el modelo *vio* bien la imagen, no el solapamiento de tokens) y cualquier tarea con hechos verificables. Es el scorer de los prompts `vision-*` |
+| **Checklist de atributos** · *visión y hechos* | El prompt define grupos de sinónimos (el ground-truth: formas, colores, conteo…); la nota es la fracción de atributos que aparecen en la respuesta. Casa por límite de palabra + prefijo (acepta morfología, pero "500" no cuenta dentro de "1500"). Robusto a acentos y bilingüe (ES/EN). Sin red | **Visión** (mide si el modelo *vio* bien la imagen) y cualquier tarea con hechos verificables (`reasoning`, `summary`, `chat`, `vision-*`) |
+| **Ejecución de código** · *tareas de código* | **Ejecuta** el código generado contra casos de prueba reales (estilo HumanEval) en un subproceso aislado (`python -I`, cwd temporal, timeout). La nota es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual | Tareas de código (`code`). Desactivable con `INFERBENCH_NO_CODE_EXEC=1` |
 | **LLM-judge (motor local)** | El propio motor puntúa sus respuestas (rúbrica 0-100) | Fiable solo con modelos capaces (**≥7-8B**); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo) |
 | **LLM-judge (API externa)** | Un modelo cloud OpenAI-compatible (p.ej. `gpt-4o-mini`) juzga | Lo **más fiable e imparcial**; requiere API key |
 

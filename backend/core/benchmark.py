@@ -15,7 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import sys
+import tempfile
 import time
 import uuid
 from functools import lru_cache
@@ -48,6 +51,9 @@ class Prompt(BaseModel):
     # fracción de grupos que aparecen en la respuesta. Útil para visión (ground-truth de la
     # imagen) y para cualquier tarea con hechos comprobables. Tiene prioridad sobre reference.
     keywords: list[list[str]] | None = None
+    # Casos de prueba (aserciones Python) que se ejecutan contra el código del modelo. La
+    # calidad es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual.
+    code_tests: list[str] | None = None
 
 
 def _image_data_url(image: str) -> str:
@@ -291,12 +297,78 @@ def _q_norm(s: str) -> str:
 def _quality_keywords(output: str, groups: list[list[str]]) -> float:
     """Calidad 0-100 por checklist: fracción de grupos de sinónimos cuyo término aparece
     en la respuesta. Cada grupo es un atributo verificable (p.ej. un color o una forma de
-    la imagen); basta con que el modelo mencione UNA de sus variantes. Robusto a acentos."""
+    la imagen); basta con que el modelo mencione UNA de sus variantes.
+
+    Casa por límite de palabra + prefijo (`\\bterm`): así "código" casa "códigos"/"codifica"
+    (morfología) pero "500" NO casa dentro de "1500" (no inventa aciertos). Sin acentos, ES/EN.
+    """
     if not groups:
         return 0.0
     low = _q_norm(output)
-    hits = sum(1 for group in groups if any(_q_norm(term) in low for term in group))
+    hits = sum(
+        1
+        for group in groups
+        if any(re.search(r"\b" + re.escape(_q_norm(term)), low) for term in group)
+    )
     return round(hits / len(groups) * 100, 1)
+
+
+def _extract_code(output: str) -> str:
+    """Extrae el/los bloque(s) de código del output del modelo (fences markdown ```)."""
+    blocks = re.findall(r"```(?:python|py)?\s*\n(.*?)```", output, re.DOTALL | re.IGNORECASE)
+    if blocks:
+        return "\n\n".join(b.strip() for b in blocks)
+    return output  # sin fences: probar el texto crudo (la prosa dará SyntaxError → 0)
+
+
+async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) -> float:
+    """Calidad 0-100 EJECUTANDO el código del modelo contra casos de prueba reales.
+
+    Extrae el código y lo corre en un subproceso aislado (`python -I`, cwd temporal,
+    con timeout) junto a cada aserción de `tests`; devuelve el % de casos que pasan.
+    Mide si el código FUNCIONA, no el solapamiento de tokens. Fallo de sintaxis, nombre
+    incorrecto o timeout → 0. Sin números inventados.
+
+    Ejecutar salida del modelo es deliberado (como HumanEval) y está acotado a un
+    subproceso aislado + temp dir + timeout. Para desactivarlo: env INFERBENCH_NO_CODE_EXEC=1.
+    """
+    code = _extract_code(output)
+    if not code.strip() or not tests:
+        return 0.0
+    runner = (
+        code + "\n\n__tests = " + repr(list(tests)) + "\n"
+        "__p = 0\n"
+        "for __t in __tests:\n"
+        "    try:\n"
+        "        exec(__t, globals()); __p += 1\n"
+        "    except Exception:\n"
+        "        pass\n"
+        "print('__RESULT__', __p, len(__tests))\n"
+    )
+    proc = None
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-I", "-c", runner, cwd=td,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        if proc:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+        return 0.0
+    except Exception:
+        return 0.0
+    for line in reversed(out.decode("utf-8", "replace").splitlines()):
+        if line.startswith("__RESULT__"):
+            parts = line.split()
+            if len(parts) == 3 and parts[2].isdigit() and int(parts[2]) > 0:
+                return round(int(parts[1]) / int(parts[2]) * 100, 1)
+    return 0.0
 
 
 def _quality_heuristic(output: str, ref: str) -> float:
@@ -945,7 +1017,11 @@ class BenchmarkRunner:
         tps = token_count / gen_time if gen_time > 0 else 0.0
         output = "".join(text_chunks)
 
-        if prompt.keywords:
+        if prompt.code_tests and not os.environ.get("INFERBENCH_NO_CODE_EXEC"):
+            # Ejecuta el código del modelo contra casos reales: mide si FUNCIONA.
+            quality = await _quality_code(output, prompt.code_tests)
+            method = "code-exec"
+        elif prompt.keywords:
             # Checklist de atributos (p.ej. ground-truth de una imagen): mide corrección
             # de verdad, no solo solapamiento de tokens con una frase de referencia.
             quality = _quality_keywords(output, prompt.keywords)
@@ -954,8 +1030,9 @@ class BenchmarkRunner:
             quality = _quality_heuristic(output, prompt.reference)
             method = "heuristic"
         judge_mode = (self.req.judge or {}).get("mode", "heuristic")
-        # El LLM-judge no ve la imagen → no sustituye al checklist en prompts de visión.
-        if not prompt.keywords and judge_mode in ("self", "api") and output.strip() and not error:
+        verifiable = bool(prompt.keywords or prompt.code_tests)
+        # El LLM-judge solo aplica a prompts SIN scorer verificable (no a checklist/código).
+        if not verifiable and judge_mode in ("self", "api") and output.strip() and not error:
             j_url, j_model, j_headers = self._resolve_judge(headers, model_for_engine)
             if j_url and j_model:
                 await self.emit({"type": "phase", "phase": "judging"})

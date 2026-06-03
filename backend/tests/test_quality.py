@@ -1,5 +1,14 @@
-"""Tests del scorer de calidad offline y el parseo del LLM-judge (core/benchmark.py)."""
-from core.benchmark import _parse_judge_score, _quality_heuristic
+"""Tests de los scorers de calidad (heurístico, checklist, ejecución de código) y el
+parseo del LLM-judge (core/benchmark.py)."""
+import asyncio
+
+from core.benchmark import (
+    _parse_judge_score,
+    _quality_code,
+    _quality_heuristic,
+    _quality_keywords,
+    load_prompts,
+)
 
 _REF_NUM = "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€."
 
@@ -40,6 +49,55 @@ def test_stemming_matches_inflections():
     ref = "retos de energía y regulación de la inteligencia"
     out = "hay retos de consumo energético y de regulación sobre la inteligencia artificial"
     assert _quality_heuristic(out, ref) >= 50
+
+
+_GOOD_CODE = """```python
+def merge_intervals(intervals):
+    iv = sorted(intervals)
+    out = []
+    for s, e in iv:
+        if out and s <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], e))
+        else:
+            out.append((s, e))
+    return out
+```"""
+
+_CODE_TESTS = [
+    "assert [tuple(i) for i in merge_intervals([(1,3),(2,6),(8,10)])] == [(1,6),(8,10)]",
+    "assert list(merge_intervals([])) == []",
+]
+
+
+def test_code_scorer_all_pass_is_100():
+    # El código del modelo se EJECUTA contra casos reales; si pasan todos → 100.
+    assert asyncio.run(_quality_code(_GOOD_CODE, _CODE_TESTS)) == 100.0
+
+
+def test_code_scorer_partial():
+    half = "```python\ndef merge_intervals(x):\n    return x  # no fusiona\n```"
+    score = asyncio.run(_quality_code(half, _CODE_TESTS))
+    assert 0 < score < 100  # pasa el caso vacío, falla el de fusión
+
+
+def test_code_scorer_no_code_or_wrong_name_is_zero():
+    assert asyncio.run(_quality_code("no hay bloque de código aquí", _CODE_TESTS)) == 0.0
+    bad = "```python\ndef otra(x):\n    return x\n```"
+    assert asyncio.run(_quality_code(bad, _CODE_TESTS)) == 0.0
+
+
+def test_keywords_number_boundary_no_false_positive():
+    # "500" NO debe casar dentro de "1500" (el total) → nada de aciertos inventados.
+    groups = [["250"], ["500"], ["750"]]
+    assert _quality_keywords("El alquiler total es 1500€ para los tres.", groups) == 0.0
+    assert _quality_keywords("Bea 250, Ana 500, Carlos 750, total 1500.", groups) == 100.0
+
+
+def test_every_prompt_has_a_verifiable_scorer():
+    # Política: ningún prompt se evalúa por F1 de tokens a secas — todos llevan checklist
+    # (keywords) o ejecución de código (code_tests).
+    for p in load_prompts():
+        assert p.keywords or p.code_tests, f"{p.id} no tiene scorer verificable"
 
 
 def test_parse_judge_score():

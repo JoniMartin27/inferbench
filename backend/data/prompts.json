@@ -6,16 +6,24 @@
     "system": "Eres un asistente que razona paso a paso. Sé conciso pero riguroso.",
     "prompt": "Tres amigos comparten un alquiler de 1500€. Ana paga el doble que Bea, y Carlos paga el triple que Bea. ¿Cuánto paga cada uno? Explica el razonamiento.",
     "target_tokens": 256,
-    "reference": "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€."
+    "reference": "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€.",
+    "keywords": [["250"], ["500"], ["750"]]
   },
   {
     "id": "code",
     "name": "Generación de código",
     "type": "code",
-    "system": "Eres un asistente experto en programación. Devuelve código Python limpio con docstrings.",
-    "prompt": "Implementa una función `merge_intervals(intervals: list[tuple[int,int]]) -> list[tuple[int,int]]` que fusione intervalos solapados. Incluye 3 ejemplos de uso.",
+    "system": "Eres un asistente experto en programación. Usa SOLO la librería estándar de Python (sin dependencias externas) y devuelve el código dentro de un bloque ```python.",
+    "prompt": "Implementa una función `merge_intervals(intervals)` que reciba una lista de tuplas (inicio, fin) y devuelva la lista de intervalos solapados fusionados, ordenados por inicio. Usa solo la librería estándar. Ejemplo: merge_intervals([(1,3),(2,6),(8,10)]) -> [(1,6),(8,10)].",
     "target_tokens": 512,
-    "reference": "def merge_intervals(intervals): intervals.sort(); result=[]; ..."
+    "reference": "Ordenar por inicio y fusionar mientras el inicio actual <= fin del anterior.",
+    "code_tests": [
+      "assert [tuple(i) for i in merge_intervals([(1,3),(2,6),(8,10),(15,18)])] == [(1,6),(8,10),(15,18)]",
+      "assert list(merge_intervals([])) == []",
+      "assert [tuple(i) for i in merge_intervals([(1,4),(4,5)])] == [(1,5)]",
+      "assert [tuple(i) for i in merge_intervals([(1,10),(2,3),(4,5)])] == [(1,10)]",
+      "assert [tuple(i) for i in merge_intervals([(5,6),(1,2)])] == [(1,2),(5,6)]"
+    ]
   },
   {
     "id": "summary",
@@ -24,16 +32,34 @@
     "system": "Eres un asistente que resume textos manteniendo todos los datos clave.",
     "prompt": "Resume en 5 puntos: La inteligencia artificial generativa ha transformado la industria del software en los últimos años. Los grandes modelos de lenguaje, entrenados con cantidades masivas de datos, son capaces de generar código, traducir entre idiomas, redactar documentos y razonar sobre problemas complejos. Sin embargo, plantean retos sobre privacidad, sesgos en los datos de entrenamiento, consumo energético en los centros de datos, y la necesidad de regulación. Empresas y gobiernos de todo el mundo trabajan en frameworks éticos para su despliegue responsable.",
     "target_tokens": 384,
-    "reference": "IA generativa transforma software; LLMs generan código y razonan; retos: privacidad, sesgos, energía, regulación."
+    "reference": "LLMs generan código, traducen y razonan; retos: privacidad, sesgos, consumo energético y regulación.",
+    "keywords": [
+      ["privacidad", "privacy"],
+      ["sesgo", "bias"],
+      ["energ", "energy"],
+      ["regula", "regulation"],
+      ["codigo", "code"],
+      ["traduc", "translat"]
+    ]
   },
   {
     "id": "chat",
-    "name": "Chat corto",
+    "name": "Conocimiento (planetas)",
     "type": "chat",
-    "system": "Eres un asistente amable y conciso.",
-    "prompt": "Recomiéndame 3 libros de ciencia ficción modernos y dime brevemente de qué van.",
+    "system": "Eres un asistente conciso y preciso.",
+    "prompt": "Lista los ocho planetas del sistema solar en orden desde el Sol, separados por comas.",
     "target_tokens": 128,
-    "reference": ""
+    "reference": "Mercurio, Venus, Tierra, Marte, Júpiter, Saturno, Urano, Neptuno.",
+    "keywords": [
+      ["mercurio", "mercury"],
+      ["venus"],
+      ["tierra", "earth"],
+      ["marte", "mars"],
+      ["jupiter"],
+      ["saturno", "saturn"],
+      ["urano", "uranus"],
+      ["neptuno", "neptune"]
+    ]
   },
   {
     "id": "vision-scene",

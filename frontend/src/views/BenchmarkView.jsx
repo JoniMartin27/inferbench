@@ -8,7 +8,7 @@ const ALL_PROMPTS = [
   { id: "reasoning", label: "Razonamiento" },
   { id: "code", label: "Código" },
   { id: "summary", label: "Resumen" },
-  { id: "chat", label: "Chat" },
+  { id: "chat", label: "Conocimiento" },
   { id: "vision-scene", label: "Visión: escena", vision: true },
   { id: "vision-count", label: "Visión: conteo", vision: true },
 ];

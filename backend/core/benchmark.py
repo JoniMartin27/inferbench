@@ -30,10 +30,10 @@ import psutil
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from . import binary_manager, docker_mgr, model_manager, native_runtime, ollama_manager
+from . import binary_manager, compat, docker_mgr, model_manager, native_runtime, ollama_manager
 from .hardware import detect_hardware
 from .models_catalog import get_model
-from .optimizer import get_optimal_config
+from .optimizer import get_optimal_config, plan_llamacpp_run
 
 PROMPTS_FILE = Path(__file__).resolve().parent.parent / "data" / "prompts.json"
 
@@ -146,31 +146,6 @@ class BenchmarkRequest(BaseModel):
     # Evaluación de calidad. mode: "heuristic" (default) | "self" (el motor local se
     # autoevalúa) | "api" (juez OpenAI-compatible externo). Para "api": base_url, model, api_key.
     judge: dict[str, Any] = Field(default_factory=dict)
-
-
-def _extra_engine_args_static(opts: dict[str, Any]) -> list[str]:
-    """Construye flags llama-server adicionales desde un dict de overrides."""
-    extra: list[str] = []
-    if opts.get("noMmap") is True:
-        extra += ["--no-mmap"]
-    if opts.get("mlock") is True:
-        extra += ["--mlock"]
-    if "flashAttn" in opts:
-        v = opts["flashAttn"]
-        extra += ["-fa", "on" if v else "off"]
-    if "threads" in opts:
-        extra += ["-t", str(int(opts["threads"]))]
-    if "batchSize" in opts:
-        extra += ["--batch-size", str(int(opts["batchSize"]))]
-    if "ubatchSize" in opts:
-        extra += ["--ubatch-size", str(int(opts["ubatchSize"]))]
-    if "cacheReuse" in opts:
-        extra += ["--cache-reuse", str(int(opts["cacheReuse"]))]
-    if opts.get("nkvo") is True:
-        extra += ["--no-kv-offload"]
-    if opts.get("swaFull") is True:
-        extra += ["--swa-full"]
-    return extra
 
 
 class ResultPayload(BaseModel):
@@ -541,9 +516,6 @@ class BenchmarkRunner:
     def cancel(self) -> None:
         self.cancelled.set()
 
-    def _extra_engine_args(self, opts: dict[str, Any]) -> list[str]:
-        return _extra_engine_args_static(opts)
-
     async def emit(self, evt: dict[str, Any]) -> None:
         # Nunca bloquear al productor: si la cola está llena (consumidor SSE lento
         # o desconectado), descartamos el evento más viejo. Así el log en vivo
@@ -737,7 +709,13 @@ class BenchmarkRunner:
                 engine_opts={
                     "hf_model_id": hf_id,
                     "contextLen": self.req.engine_opts.get("contextLen") or 4096,
-                    "quant": self.req.quant if self.req.quant.lower() != "q4_k_m" else None,
+                    # Los quants GGUF (Q8_0/Q4_K_M…) NO son métodos válidos de vLLM/SGLang/TGI.
+                    # Solo se pasa si es un método que el motor entiende; si no, fp16 sin cuantizar.
+                    "quant": (
+                        self.req.quant
+                        if self.req.quant.lower() in {"awq", "gptq", "fp8", "bitsandbytes", "eetq"}
+                        else None
+                    ),
                     **user_opts,
                 },
             )
@@ -897,51 +875,75 @@ class BenchmarkRunner:
                 "text": f"Reusando motor con {loaded['model']}/{loaded['quant']}",
             })
         else:
-            # Calcular config óptima a partir de hardware + modelo
+            # Config base del optimizer (para flags/MoE heurísticos)…
             optimal = get_optimal_config("llamacpp", model.id, self.hw)
-            ctx = optimal.context_len if optimal.feasible else 4096
-            kv = optimal.kv_cache or "f16"
+            snap = compat.HardwareSnapshot(vram_gb=self.hw.primary_vram_gb, ram_gb=self.hw.ram_gb)
+            req_opts = self.req.engine_opts or {}
+
+            # …pero ctx/ngl se calculan para el quant REAL y la KV efectiva que se corren
+            # (no para el quant que el optimizer habría elegido). K y V pueden venir de un
+            # preset de compresión del usuario (kvCacheK/kvCacheV) y nkvo = KV en RAM.
+            kv_default = optimal.kv_cache or "f16"
+            kv_k = req_opts.get("kvCacheK") or req_opts.get("kvCache") or kv_default
+            kv_v = req_opts.get("kvCacheV") or req_opts.get("kvCache") or kv_default
+            kv_in_ram = bool(req_opts.get("nkvo"))
             moe = optimal.moe_offload
 
-            n_threads = max(2, (psutil.cpu_count(logical=False) or 4))
-            ngl = optimal.flags.get("ngl", 99) if optimal.feasible else 99
-            # Permitir overrides de KV K/V independientes desde engine_opts
-            req_opts = self.req.engine_opts or {}
-            kv_k = req_opts.get("kvCacheK") or req_opts.get("kvCache") or kv
-            kv_v = req_opts.get("kvCacheV") or req_opts.get("kvCache") or kv
+            ctx, ngl, ngl_mode = plan_llamacpp_run(
+                model, snap, quant=self.req.quant, kv_k=kv_k, kv_v=kv_v,
+                kv_in_ram=kv_in_ram, moe_offload=moe,
+            )
+            if req_opts.get("contextLen"):  # el contexto manual del usuario manda
+                ctx = max(256, int(req_opts["contextLen"]))
+
+            # Flags efectivas: base del optimizer, sobreescritas por engine_opts (sin duplicar).
+            # KV cuantizada (≠ f16) REQUIERE flash attention en llama.cpp → forzar -fa on.
+            kv_quantized = (kv_k != "f16") or (kv_v != "f16")
+            fa = bool(req_opts.get("flashAttn", optimal.flags.get("flashAttn", True))) or kv_quantized
+            mlock = bool(req_opts.get("mlock", optimal.flags.get("mlock", False)))
+            no_mmap = bool(req_opts.get("noMmap", optimal.flags.get("noMmap", False)))
+            cache_reuse = req_opts.get("cacheReuse", optimal.flags.get("cacheReuse"))
+            n_threads = int(req_opts.get("threads", max(2, psutil.cpu_count(logical=False) or 4)))
+            batch = int(req_opts.get("batchSize", 2048))
+            ubatch = int(req_opts.get("ubatchSize", 512))
+
+            await self.emit({
+                "type": "log", "level": "info",
+                "text": (f"Plan: quant={self.req.quant} ctx={ctx} ngl={ngl} ({ngl_mode}) "
+                         f"KV={kv_k}/{kv_v}{' en RAM' if kv_in_ram else ''} "
+                         f"fa={'on' if fa else 'off'}"),
+            })
+
             args = [
-                "--host", "0.0.0.0",
-                "--port", "8080",
-                "-m", str(gguf_path),
-                "--alias", model.id,
-                "-c", str(ctx),
-                "-ngl", str(ngl),
+                "--host", "0.0.0.0", "--port", "8080",
+                "-m", str(gguf_path), "--alias", model.id,
+                "-c", str(ctx), "-ngl", str(ngl),
                 "-ctk", kv_k, "-ctv", kv_v,
                 "-t", str(n_threads),
-                "--batch-size", "2048",
-                "--ubatch-size", "512",
+                "--batch-size", str(batch), "--ubatch-size", str(ubatch),
+                "-fa", "on" if fa else "off",
             ]
             if mmproj_path:
                 args += ["--mmproj", str(mmproj_path)]
             if moe:
                 args += ["--n-cpu-moe", str(moe)]
-            if optimal.flags.get("flashAttn"):
-                args += ["-fa", "on"]
-            if optimal.flags.get("mlock"):
+            if mlock:
                 args += ["--mlock"]
-            if optimal.flags.get("noMmap"):
+            if no_mmap:
                 args += ["--no-mmap"]
-            if optimal.flags.get("cacheReuse"):
-                args += ["--cache-reuse", str(int(optimal.flags["cacheReuse"]))]
-            if self.req.engine_opts:
-                args += self._extra_engine_args(self.req.engine_opts)
+            if cache_reuse:
+                args += ["--cache-reuse", str(int(cache_reuse))]
+            if kv_in_ram:
+                args += ["--no-kv-offload"]
+            if req_opts.get("swaFull"):
+                args += ["--swa-full"]
 
             await self.emit({"type": "engine.start", "binary": str(binary), "args": args})
             native_runtime.start("llamacpp", exe=binary, args=args, port=8080)
             native_runtime.set_loaded(
                 "llamacpp",
-                {"model": model.id, "quant": self.req.quant, "ctx": ctx, "kv": kv,
-                 "mmproj": bool(mmproj_path)},
+                {"model": model.id, "quant": self.req.quant, "ctx": ctx,
+                 "kv": f"{kv_k}/{kv_v}", "mmproj": bool(mmproj_path)},
             )
             self._owns_engine = True
 
@@ -1016,6 +1018,12 @@ class BenchmarkRunner:
         gen_time = elapsed_total - (ttft_ms or 0) / 1000.0
         tps = token_count / gen_time if gen_time > 0 else 0.0
         output = "".join(text_chunks)
+
+        # Surfacing honesto: si el modelo no generó NADA y no hubo error/cancelación, suele
+        # ser una KV demasiado agresiva (q4_0) que rompe la generación. No es un 0 silencioso.
+        if not output.strip() and not error and not self.cancelled.is_set():
+            error = "el modelo no generó tokens (¿KV demasiado comprimida para este modelo?)"
+            await self.emit({"type": "log", "level": "warn", "text": f"{prompt.id}: {error}"})
 
         if prompt.code_tests and not os.environ.get("INFERBENCH_NO_CODE_EXEC"):
             # Ejecuta el código del modelo contra casos reales: mide si FUNCIONA.

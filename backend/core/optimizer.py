@@ -373,6 +373,55 @@ def compute_optimal_ngl(
     return ngl, "partial"
 
 
+def plan_llamacpp_run(
+    model: Model,
+    hw: compat.HardwareSnapshot,
+    *,
+    quant: str,
+    kv_k: str = "f16",
+    kv_v: str = "f16",
+    kv_in_ram: bool = False,
+    moe_offload: int | None = None,
+) -> tuple[int, int, str]:
+    """Plan de arranque para los parámetros EXACTOS que se van a correr.
+
+    Devuelve (context_len, ngl, ngl_mode) calculados para el `quant` real y la KV
+    efectiva (K y V pueden diferir → factor medio), incluyendo `--no-kv-offload`
+    (`kv_in_ram`: la KV va a RAM, así que la limita la RAM y libera VRAM). Corrige el
+    bug de dimensionar el contexto/ngl para el quant que el optimizer *habría* elegido
+    en vez del que el usuario ejecuta (causaba OOM y desaprovechaba la compresión).
+    """
+    model_size = compat.get_model_size_gb(model, quant)
+    kv_factor = (compat.KV_FACTOR.get(kv_k, 1.0) + compat.KV_FACTOR.get(kv_v, 1.0)) / 2.0
+    kv_per_tok_gb = compat.kv_per_token_mb_f16(model) * kv_factor / 1024.0
+    overhead = 0.6
+
+    # VRAM que ocupan los pesos en GPU (con MoE offload solo va shared+gating+atención)
+    if model.is_moe and moe_offload and moe_offload > 0:
+        weights_vram = (model.active_b / model.params_b) * model_size + 1.2
+    else:
+        weights_vram = model_size
+
+    if kv_in_ram:
+        # --no-kv-offload: la KV vive en RAM → el contexto lo limita la RAM, no la VRAM.
+        avail_for_kv = hw.ram_gb * 0.6
+    elif weights_vram <= hw.vram_gb:
+        avail_for_kv = hw.vram_gb - weights_vram - overhead
+    else:
+        # Los pesos no caben enteros: offload parcial; la KV comparte lo que quede.
+        avail_for_kv = max(0.0, (hw.vram_gb + hw.ram_gb * 0.7) - model_size - overhead - 0.2)
+
+    if avail_for_kv <= 0.3 or kv_per_tok_gb <= 0:
+        max_ctx = 2048
+    else:
+        max_ctx = max(2048, min((int(avail_for_kv / kv_per_tok_gb) // 1024) * 1024, model.max_ctx))
+
+    # ngl para ESTE quant. Con KV en RAM, la KV no cuenta en VRAM (ctx=0 para el cálculo).
+    ngl_ctx = 0 if kv_in_ram else max_ctx
+    ngl, mode = compute_optimal_ngl(model, hw, quant, kv_k, ngl_ctx, moe_offload=moe_offload)
+    return max_ctx, ngl, mode
+
+
 def benefits_summary(cfg: "OptimalConfig", model: Model, hw: compat.HardwareSnapshot) -> list[str]:
     """Lista de las técnicas de optimización aplicadas con su beneficio cuantificado."""
     out: list[str] = []

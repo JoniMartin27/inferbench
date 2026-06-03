@@ -107,14 +107,14 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 Por defecto, basadas en `core/optimizer.py`:
 
 - **Cuantización óptima**: itera de mayor a menor calidad (Q8 → Q2) hasta que cabe
-- **Contexto máximo automático** según VRAM disponible y KV-cache, con **KV-cache exacta** calculada de la arquitectura real (`n_layer`·`n_head_kv`·`head_dim`) — captura GQA/MQA, que la heurística antigua ignoraba
-- **KV-cache compresión** (`-ctk -ctv`): f16 / q8_0 / q4_0
+- **Plan por run** (`optimizer.plan_llamacpp_run`): el **contexto máximo** y `ngl` se calculan para el **quant que de verdad se ejecuta** y la **KV efectiva elegida** (no para el quant que el optimizer habría elegido) — antes podía dar OOM al correr un quant distinto, o desaprovechar la compresión
+- **Contexto máximo automático** con **KV-cache exacta** de la arquitectura real (`n_layer`·`n_head_kv`·`head_dim`) — captura GQA/MQA
+- **KV-cache compresión** (`-ctk -ctv`): f16 / q8_0 / q4_0 (+ K/V independientes y presets). La **KV cuantizada fuerza `-fa on`** (llama.cpp lo exige). ⚠️ q4_0 en K es agresivo y puede degradar/romper la generación en modelos pequeños; **q8_0 es el punto dulce**
+- **KV en RAM** (`--no-kv-offload`, preset *Extremo*): libera VRAM y el contexto pasa a limitarlo la RAM
 - **MoE offload** (`--n-cpu-moe N`) para modelos MoE en GPUs pequeñas
-- **Flash Attention** (`-fa on`)
-- **mlock** + **--no-mmap** cuando el modelo cabe entero en VRAM
-- **Threads** = núcleos físicos
-- **batch-size 2048** + **ubatch-size 512**
-- Override total via `engine_opts` en el request
+- **Flash Attention** (`-fa on`), **mlock** + **--no-mmap** cuando el modelo cabe entero en VRAM
+- **Threads** = núcleos físicos · **batch-size 2048** + **ubatch-size 512**
+- Override total via `engine_opts` (sin duplicar flags: el optimizer pone la base, tus overrides mandan)
 
 ---
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Cpu,
@@ -12,13 +12,17 @@ import {
 import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
 import { ToastProvider } from "./components/toast.jsx";
-import GuideView from "./views/GuideView.jsx";
-import Dashboard from "./views/Dashboard.jsx";
-import EnginesView from "./views/EnginesView.jsx";
-import ModelsView from "./views/ModelsView.jsx";
-import BenchmarkView from "./views/BenchmarkView.jsx";
-import HistoryView from "./views/HistoryView.jsx";
-import SettingsView from "./views/SettingsView.jsx";
+import { Spinner } from "./components/ui.jsx";
+
+// Vistas cargadas bajo demanda (code-splitting): el chunk pesado de recharts (gráficos de
+// Historial/Benchmark) ya no entra en el bundle inicial → arranque más rápido de la app.
+const GuideView = lazy(() => import("./views/GuideView.jsx"));
+const Dashboard = lazy(() => import("./views/Dashboard.jsx"));
+const EnginesView = lazy(() => import("./views/EnginesView.jsx"));
+const ModelsView = lazy(() => import("./views/ModelsView.jsx"));
+const BenchmarkView = lazy(() => import("./views/BenchmarkView.jsx"));
+const HistoryView = lazy(() => import("./views/HistoryView.jsx"));
+const SettingsView = lazy(() => import("./views/SettingsView.jsx"));
 
 const NAV_GROUPS = [
   {
@@ -202,12 +206,20 @@ export default function App() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-          <Current
-            dockerDown={dockerDown}
-            onNavigate={navigate}
-            navPayload={navPayload}
-            benchmark={benchmark}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-slate-500">
+                <Spinner className="text-indigo-400" />
+              </div>
+            }
+          >
+            <Current
+              dockerDown={dockerDown}
+              onNavigate={navigate}
+              navPayload={navPayload}
+              benchmark={benchmark}
+            />
+          </Suspense>
         </main>
       </div>
     </div>

@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -381,25 +382,25 @@ async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) ->
         "        pass\n"
         "print('__RESULT__', __p, len(__tests))\n"
     )
-    proc = None
-    try:
+    def _run() -> str:
+        # subprocess.run en un HILO (vía asyncio.to_thread): no usa la maquinaria de
+        # subprocesos del event loop, que falla en el SelectorEventLoop de Windows. Así el
+        # scorer es robusto en cualquier loop. No bloquea el loop principal (corre en thread).
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-I", "-c", runner, cwd=td,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        if proc:
             try:
-                proc.kill()
-                await proc.wait()
-            except Exception:
-                pass
-        return 0.0
+                r = subprocess.run(
+                    [sys.executable, "-I", "-c", runner], cwd=td,
+                    capture_output=True, text=True, timeout=timeout,
+                )
+                return r.stdout
+            except (subprocess.SubprocessError, OSError):
+                return ""
+
+    try:
+        out = await asyncio.to_thread(_run)
     except Exception:
         return 0.0
-    for line in reversed(out.decode("utf-8", "replace").splitlines()):
+    for line in reversed(out.splitlines()):
         if line.startswith("__RESULT__"):
             parts = line.split()
             if len(parts) == 3 and parts[2].isdigit() and int(parts[2]) > 0:

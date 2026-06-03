@@ -15,8 +15,7 @@
 </p>
 
 <p align="center">
-  <!-- Graba este GIF y déjalo en assets/demo.gif (ver assets/README.md). Es la pieza clave de conversión. -->
-  <img src="assets/demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
+  <img src="assets/inferbench-demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
 </p>
 
 ---
@@ -31,6 +30,22 @@ Eliges modelo + cuantizaciones → InferBench:
   ④ ejecuta la suite de prompts midiendo TTFT, tok/s, VRAM, calidad
   ⑤ guarda los resultados y te deja compararlos lado a lado
 ```
+
+## Ejemplo real
+
+RTX 3070 · 8 GB VRAM · 32 GB RAM — corriendo **SmolLM2-360M Q8_0** con llama.cpp nativo:
+
+| Métrica | Resultado |
+|---|---|
+| TTFT | 588 ms |
+| Throughput | 272 tok/s |
+| VRAM pico | 2.47 GB |
+| Calidad (offline scorer) | 75 / 100 |
+| Contexto automático | 8 192 tokens |
+
+*Números sacados del runner de producción — sin datos inventados.*
+
+---
 
 ## Descargar
 

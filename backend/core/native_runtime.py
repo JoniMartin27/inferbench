@@ -6,7 +6,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import IO, Optional
 
 from loguru import logger
 from pydantic import BaseModel

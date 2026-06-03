@@ -19,6 +19,12 @@ FastAPI es async. Las descargas (binarios GitHub, GGUF de HF), spawn de subproce
 ### Secretos
 API keys de cloud (OpenAI/Anthropic/etc.) van por `keyring` (ya es dependencia). No las metas a SQLite ni a archivos de config en plano.
 
+### No satures la GPU del display (load-bearing)
+vLLM/SGLang/TGI pre-asignan `fracción · VRAM_total`. En un equipo de UNA GPU que también pinta la pantalla, pedir demasiado **ahoga al compositor → cortes de vídeo y cuelgues** (pasó de verdad). Por eso:
+- `hardware.safe_gpu_fraction()` calcula el tope desde la VRAM **libre** menos una **reserva de display** (`gpu_display_reserve_gb`, por defecto `max(2GB, 25%)`, ajustable con env `INFERBENCH_GPU_RESERVE_GB`).
+- **Cada motor Docker aplica este tope SIEMPRE** en su `build_command`/`build_environment` (vLLM `--gpu-memory-utilization`, SGLang `--mem-fraction-static`, TGI `CUDA_MEMORY_FRACTION`), con `min(lo_pedido, lo_seguro)`. NO dejes que usen su default (~0.9). NO quites el cap.
+- `base._start_docker` tiene un **guard**: si no cabe nada de forma segura, lanza error claro en vez de arrancar. Nunca lo bypasees arrancando contenedores GPU a mano sin pasar por el motor.
+
 ## Convenciones
 
 ### Python (`backend/`)

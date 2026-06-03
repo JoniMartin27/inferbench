@@ -215,35 +215,6 @@ def _get_vram_used_gb() -> float:
         return 0.0
 
 
-def _get_vram_free_total_gb() -> tuple[float, float]:
-    """(libre, total) de la GPU 0 en GiB. (0, 0) si no hay NVIDIA/pynvml."""
-    try:
-        import pynvml  # type: ignore
-        pynvml.nvmlInit()
-        try:
-            h = pynvml.nvmlDeviceGetHandleByIndex(0)
-            mem = pynvml.nvmlDeviceGetMemoryInfo(h)
-            return round(mem.free / (1024**3), 2), round(mem.total / (1024**3), 2)
-        finally:
-            pynvml.nvmlShutdown()
-    except Exception:
-        return 0.0, 0.0
-
-
-def _gpu_mem_fraction(headroom_gb: float = 0.6) -> float | None:
-    """Fracción de VRAM total que cabe en la memoria LIBRE actual, con margen.
-
-    vLLM/SGLang pre-asignan `fraccion * total` y fallan si excede la memoria
-    libre (típico en GPUs no vacías). Calculamos la fracción desde lo realmente
-    libre en vez de asumir la GPU vacía. None si no hay GPU NVIDIA detectable.
-    """
-    free, total = _get_vram_free_total_gb()
-    if total <= 0 or free <= 0:
-        return None
-    frac = (free - headroom_gb) / total
-    return round(max(0.30, min(0.92, frac)), 2)
-
-
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
 # Basado en la respuesta de referencia: F1 de tokens recall-weighted + recall exacto de
 # números (crítico en mates/razonamiento) + penalización de texto degenerado. Es la opción
@@ -798,23 +769,13 @@ class BenchmarkRunner:
 
             from engines.base import StartRequest as EngineStartRequest
 
-            # Fracción de VRAM segura calculada desde la memoria LIBRE actual.
-            # vLLM/SGLang pre-asignan `fraccion * total` y se niegan a arrancar
-            # si la GPU no está vacía (p.ej. 8GB con ~1GB en uso). Tratamos esta
-            # fracción como TECHO: incluso si el usuario o el optimizador piden
-            # más, lo acotamos a lo que de verdad cabe (evita falsos positivos).
-            frac = _gpu_mem_fraction()
+            # La fracción de VRAM la fija y ACOTA cada motor en su build_command/
+            # build_environment vía hardware.safe_gpu_fraction() (reserva margen para el
+            # display → no satura la pantalla). Aquí solo pasamos lo que el usuario pidiera
+            # explícitamente; el motor lo capa a lo seguro. El guard de _start_docker rechaza
+            # el arranque si no cabe nada de forma segura.
             user_opts = dict(self.req.engine_opts)
             extra_env: dict[str, str] = {}
-            if frac is not None:
-                if self.req.engine == "vllm":
-                    user_opts["gpuMemUtil"] = min(user_opts.get("gpuMemUtil", frac), frac)
-                elif self.req.engine == "sglang":
-                    user_opts["memFraction"] = min(user_opts.get("memFraction", frac), frac)
-                elif self.req.engine == "tgi":
-                    cur = user_opts.pop("gpuMemUtil", None)  # TGI lo toma por env, no flag
-                    env_frac = min(cur, frac) if isinstance(cur, (int, float)) else frac
-                    extra_env["CUDA_MEMORY_FRACTION"] = str(env_frac)
 
             ereq = EngineStartRequest(
                 runtime="docker",

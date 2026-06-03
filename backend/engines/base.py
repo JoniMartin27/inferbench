@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Literal
 
 from pydantic import BaseModel, Field
 
-from core import docker_mgr, native_runtime
+from core import docker_mgr, hardware, native_runtime
 
 EngineType = Literal["local", "api"]
 RuntimeKind = Literal["native", "docker"]
@@ -118,6 +118,18 @@ class Engine(ABC):
         port = req.port or self.meta.default_port
         if port is None:
             raise ValueError(f"Motor {self.meta.id} requiere puerto")
+        # GUARD de seguridad: no arrancar si no queda VRAM suficiente tras reservar el
+        # margen del display → evita saturar la GPU y congelar la pantalla. Surfacea error.
+        if req.gpu:
+            safe = hardware.safe_gpu_fraction()
+            if safe < 0.15:
+                free, total = hardware.gpu_memory_gb()
+                raise RuntimeError(
+                    f"VRAM insuficiente para arrancar {self.meta.id} sin saturar la pantalla "
+                    f"(libre {free:.1f} de {total:.1f} GB; se reserva margen para el display). "
+                    f"Cierra apps que usen la GPU, elige un modelo más pequeño/cuantizado, o "
+                    f"baja INFERBENCH_GPU_RESERVE_GB si esta GPU no pinta tu monitor."
+                )
         ports = {f"{self.meta.default_port}/tcp": port}
         st = docker_mgr.start(
             self.meta.id,

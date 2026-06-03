@@ -1,6 +1,7 @@
 """Detección de hardware: CPU, RAM, GPU (NVIDIA / AMD / Apple / CPU-only)."""
 from __future__ import annotations
 
+import os
 import platform
 import re
 import shutil
@@ -199,3 +200,55 @@ def detect_hardware() -> HardwareInfo:
         gpus=gpus,
         primary_vram_gb=primary_vram,
     )
+
+
+# ---- Seguridad de VRAM para motores Docker (vLLM/SGLang/TGI) ----
+# vLLM/SGLang pre-asignan `fraccion * VRAM_total`. En un equipo de una sola GPU que TAMBIÉN
+# pinta la pantalla, pedir demasiado ahoga al compositor → cortes de vídeo y cuelgues. Por
+# eso reservamos SIEMPRE un margen para el display y acotamos la fracción a lo realmente libre.
+
+
+def gpu_memory_gb() -> tuple[float, float]:
+    """(libre, total) de la GPU 0 en GiB, en vivo. (0, 0) si no hay NVIDIA/pynvml."""
+    try:
+        import pynvml  # type: ignore
+
+        pynvml.nvmlInit()
+        try:
+            mem = pynvml.nvmlDeviceGetMemoryInfo(pynvml.nvmlDeviceGetHandleByIndex(0))
+            return round(mem.free / (1024**3), 2), round(mem.total / (1024**3), 2)
+        finally:
+            pynvml.nvmlShutdown()
+    except Exception:
+        return 0.0, 0.0
+
+
+def gpu_display_reserve_gb(total_gb: float) -> float:
+    """VRAM a reservar SIEMPRE para el display/escritorio (evita cortes de vídeo).
+
+    Configurable con env `INFERBENCH_GPU_RESERVE_GB`. Por defecto generoso (2 GB o el 25%
+    del total) porque en un solo-GPU la tarjeta pinta la pantalla; quien tenga una GPU
+    dedicada solo a inferencia puede bajarlo (incluso a 0)."""
+    env = os.environ.get("INFERBENCH_GPU_RESERVE_GB")
+    if env is not None:
+        try:
+            return max(0.0, float(env))
+        except ValueError:
+            pass
+    return round(max(2.0, total_gb * 0.25), 1)
+
+
+def safe_gpu_fraction() -> float:
+    """Fracción MÁXIMA de VRAM total que un motor Docker puede pedir sin saturar la pantalla.
+
+    Calculada desde la VRAM LIBRE actual menos la reserva de display. Devuelve 0.0 si no
+    cabe nada de forma segura (la GPU está demasiado ocupada o es demasiado pequeña) → en
+    ese caso NO se debe arrancar el motor. Sin GPU NVIDIA detectable, devuelve 0.85 (no
+    aplica el tope; el motor fallará por su cuenta si no hay GPU)."""
+    free, total = gpu_memory_gb()
+    if total <= 0:
+        return 0.85
+    usable = min(free, total) - gpu_display_reserve_gb(total)
+    if usable <= 0.5:
+        return 0.0
+    return round(max(0.1, min(0.85, usable / total)), 2)

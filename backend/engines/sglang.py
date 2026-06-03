@@ -1,6 +1,8 @@
 """Adaptador para SGLang (Docker only, requiere GPU NVIDIA)."""
 from __future__ import annotations
 
+from core.hardware import safe_gpu_fraction
+
 from .base import Engine, EngineMeta, StartRequest
 
 
@@ -37,8 +39,11 @@ class SglangEngine(Engine):
         if quant and quant.lower() not in ("none", "f16", "fp16"):
             cmd += ["--quantization", quant.lower()]
 
-        if opts.get("memFraction"):
-            cmd += ["--mem-fraction-static", str(opts["memFraction"])]
+        # Tope de VRAM SIEMPRE aplicado (default de SGLang ~0.88) para no ahogar el display.
+        safe = safe_gpu_fraction()
+        req_frac = opts.get("memFraction")
+        frac = min(float(req_frac), safe) if req_frac else safe
+        cmd += ["--mem-fraction-static", str(round(max(0.1, frac), 2))]
 
         if opts.get("chunkedPrefill"):
             cmd += ["--chunked-prefill-size", str(int(opts["chunkedPrefill"]))]

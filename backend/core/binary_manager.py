@@ -28,6 +28,21 @@ def _is_trusted_dl_host(url: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in _TRUSTED_DL_HOSTS)
 
 
+def _safe_extractall(zf: zipfile.ZipFile, dest: Path) -> None:
+    """Extrae un zip rechazando nombres con path traversal (zip-slip).
+
+    `zipfile.extractall` no valida rutas: un zip malicioso puede escribir fuera de
+    `dest` usando `../../`. Iteramos los miembros y verificamos que cada ruta resuelta
+    esté dentro de `dest` antes de extraer.
+    """
+    dest_resolved = dest.resolve()
+    for member in zf.namelist():
+        target = (dest / member).resolve()
+        if not str(target).startswith(str(dest_resolved) + os.sep) and target != dest_resolved:
+            raise RuntimeError(f"Path traversal detectado en zip: {member!r}")
+        zf.extract(member, dest)
+
+
 EXCLUDE_TERMS_NEED = ["vulkan", "hip", "sycl", "kompute"]  # NUNCA queremos estos
 
 BIN_ROOT = (
@@ -187,7 +202,7 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     if progress:
         await progress({"phase": "extract", "label": label, "name": name})
     with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(dest_dir)
+        _safe_extractall(zf, dest_dir)
     zip_path.unlink()
 
 

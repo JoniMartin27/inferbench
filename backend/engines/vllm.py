@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from core.hardware import safe_gpu_fraction
+from core.hardware import capped_gpu_fraction
 
 from .base import Engine, EngineMeta, StartRequest
 
@@ -46,13 +46,8 @@ class VllmEngine(Engine):
         if kv and kv != "auto":
             cmd += ["--kv-cache-dtype", kv]
 
-        # Tope de VRAM SIEMPRE aplicado: nunca dejamos que vLLM agarre tanto que ahogue el
-        # display (su default es 0.9). Usamos min(lo pedido, lo seguro). El guard de
-        # _start_docker ya habrá rechazado el arranque si no cabe nada de forma segura.
-        safe = safe_gpu_fraction()
-        req_util = opts.get("gpuMemUtil")
-        util = min(float(req_util), safe) if req_util else safe
-        cmd += ["--gpu-memory-utilization", str(round(max(0.1, util), 2))]
+        # Tope de VRAM SIEMPRE aplicado (default de vLLM 0.9) para no ahogar el display.
+        cmd += ["--gpu-memory-utilization", str(capped_gpu_fraction(opts.get("gpuMemUtil")))]
 
         if opts.get("enforceEager"):
             cmd += ["--enforce-eager"]  # sin CUDA graphs → ahorra VRAM (clave en GPUs chicas)

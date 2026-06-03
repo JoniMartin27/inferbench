@@ -208,19 +208,53 @@ def detect_hardware() -> HardwareInfo:
 # eso reservamos SIEMPRE un margen para el display y acotamos la fracción a lo realmente libre.
 
 
-def gpu_memory_gb() -> tuple[float, float]:
-    """(libre, total) de la GPU 0 en GiB, en vivo. (0, 0) si no hay NVIDIA/pynvml."""
+# NVML se inicializa UNA vez y se cachea el handle. Antes cada lectura de VRAM hacía
+# nvmlInit()+nvmlShutdown() — caro y, en el bucle de generación (cada 8 tokens), añadía
+# overhead que hasta sesgaba la medición de tok/s. Ahora init perezoso + handle reutilizado.
+_nvml: dict = {"handle": None, "dead": False}
+
+
+def _nvml_handle():
+    """Handle de la GPU 0 con NVML inicializado una sola vez. None si no hay NVIDIA/pynvml."""
+    if _nvml["handle"] is not None:
+        return _nvml["handle"]
+    if _nvml["dead"]:
+        return None
     try:
         import pynvml  # type: ignore
 
-        pynvml.nvmlInit()
-        try:
-            mem = pynvml.nvmlDeviceGetMemoryInfo(pynvml.nvmlDeviceGetHandleByIndex(0))
-            return round(mem.free / (1024**3), 2), round(mem.total / (1024**3), 2)
-        finally:
-            pynvml.nvmlShutdown()
+        pynvml.nvmlInit()  # idempotente (refcount); no hacemos shutdown — el proceso lo limpia
+        _nvml["handle"] = pynvml.nvmlDeviceGetHandleByIndex(0)
+        return _nvml["handle"]
     except Exception:
+        _nvml["dead"] = True  # no reintentar en cada llamada
+        return None
+
+
+def _nvml_mem():
+    h = _nvml_handle()
+    if h is None:
+        return None
+    try:
+        import pynvml  # type: ignore
+
+        return pynvml.nvmlDeviceGetMemoryInfo(h)
+    except Exception:
+        return None
+
+
+def gpu_memory_gb() -> tuple[float, float]:
+    """(libre, total) de la GPU 0 en GiB, en vivo. (0, 0) si no hay NVIDIA/pynvml."""
+    mem = _nvml_mem()
+    if mem is None:
         return 0.0, 0.0
+    return round(mem.free / (1024**3), 2), round(mem.total / (1024**3), 2)
+
+
+def gpu_used_gb() -> float:
+    """VRAM usada de la GPU 0 en GiB (para el pico durante un benchmark). 0 si no hay NVIDIA."""
+    mem = _nvml_mem()
+    return round(mem.used / (1024**3), 2) if mem is not None else 0.0
 
 
 def gpu_display_reserve_gb(total_gb: float) -> float:
@@ -252,3 +286,16 @@ def safe_gpu_fraction() -> float:
     if usable <= 0.5:
         return 0.0
     return round(max(0.1, min(0.85, usable / total)), 2)
+
+
+def capped_gpu_fraction(requested: float | str | None = None) -> float:
+    """Fracción de VRAM a pasar a un motor Docker: la pedida ACOTADA al tope seguro
+    (`min`), nunca por debajo de 0.1. Punto único de la lógica de capado (la usan
+    vLLM/SGLang/TGI) para que la invariante de seguridad esté en un solo sitio."""
+    safe = safe_gpu_fraction()
+    if requested is not None and requested != "":
+        try:
+            return round(max(0.1, min(float(requested), safe)), 2)
+        except (TypeError, ValueError):
+            pass
+    return round(max(0.1, safe), 2)

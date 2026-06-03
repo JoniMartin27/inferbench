@@ -17,14 +17,23 @@ from db import BenchmarkResult, BenchmarkRun, get_session
 
 router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
 
-# Estado en memoria de runs activas
+# Estado en memoria de runs activas. Cap explícito: si un cliente postea runs sin
+# conectarse al stream SSE, los runners quedan huérfanos. Purgamos los más viejos
+# cuando se supera el límite para evitar fuga de memoria.
 _RUNNERS: dict[str, BenchmarkRunner] = {}
+_MAX_RUNNERS = 100
+
+
+def _prune_runners() -> None:
+    while len(_RUNNERS) > _MAX_RUNNERS:
+        _RUNNERS.pop(next(iter(_RUNNERS)), None)
 
 
 @router.post("/run")
 async def start_run(req: BenchmarkRequest) -> dict[str, str]:
     runner = BenchmarkRunner(req)
     _RUNNERS[runner.run_id] = runner
+    _prune_runners()
 
     # Persistir registro de la run
     with get_session() as s:
@@ -34,7 +43,7 @@ async def start_run(req: BenchmarkRequest) -> dict[str, str]:
                 ts=int(time.time()),
                 engine=req.engine,
                 hw_json=detect_hardware().model_dump_json(),
-                opts_json=req.model_dump_json(),
+                opts_json=req.model_dump_json(exclude={"api_key"}),
                 notes=req.notes,
                 status="running",
             )
@@ -74,6 +83,7 @@ class SweepRequest(BaseModel):
 
 
 _SWEEPS: dict[str, dict] = {}  # sweep_id → state
+_MAX_SWEEPS = 50
 
 
 @router.post("/sweep")
@@ -84,6 +94,11 @@ async def start_sweep(req: SweepRequest) -> dict:
     state = {"id": sweep_id, "queue": list(req.quants), "runs": [], "current": None,
              "cancelled": False, "completed": False}
     _SWEEPS[sweep_id] = state
+    # Purgar sweeps completados más viejos si se supera el cap
+    if len(_SWEEPS) > _MAX_SWEEPS:
+        done = [k for k, v in _SWEEPS.items() if v.get("completed") or v.get("cancelled")]
+        for k in done[:len(_SWEEPS) - _MAX_SWEEPS]:
+            _SWEEPS.pop(k, None)
 
     async def runner_loop():
         for quant in req.quants:
@@ -98,7 +113,7 @@ async def start_sweep(req: SweepRequest) -> dict:
                 s.add(BenchmarkRun(
                     id=runner.run_id, ts=int(time.time()), engine=sub_req.engine,
                     hw_json=detect_hardware().model_dump_json(),
-                    opts_json=sub_req.model_dump_json(),
+                    opts_json=sub_req.model_dump_json(exclude={"api_key"}),
                     notes=f"[sweep {sweep_id}] {sub_req.notes}".strip(),
                     status="running",
                 ))
@@ -150,7 +165,11 @@ async def stream_run(run_id: str) -> EventSourceResponse:
     async def event_gen() -> AsyncIterator[dict[str, Any]]:
         try:
             while True:
-                evt = await runner.queue.get()
+                try:
+                    evt = await asyncio.wait_for(runner.queue.get(), timeout=600.0)
+                except asyncio.TimeoutError:
+                    yield {"event": "error", "data": json.dumps({"error": "stream timeout"})}
+                    return
                 if evt.get("type") == "_eof":
                     yield {"event": "done", "data": json.dumps({"run_id": run_id})}
                     return

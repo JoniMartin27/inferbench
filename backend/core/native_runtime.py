@@ -23,6 +23,7 @@ class ProcessStatus(BaseModel):
 
 _PROCS: dict[str, subprocess.Popen] = {}
 _LOG_FILES: dict[str, Path] = {}
+_LOG_FDS: dict[str, "IO"] = {}  # file handles abiertos — cerrados en stop() para evitar fugas
 _LOADED: dict[str, dict] = {}  # engine_id → {model, quant, ...} actualmente servido
 
 
@@ -77,7 +78,7 @@ def start(
     creationflags = 0
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-    logger.info(f"native start [{engine_id}]: {exe} {' '.join(args)}")
+    logger.info(f"native start [{engine_id}]: {exe} {' '.join(str(a) for a in args)}")
     try:
         proc = subprocess.Popen(
             [str(exe), *args],
@@ -90,6 +91,7 @@ def start(
     except Exception:
         log_fd.close()
         raise
+    _LOG_FDS[engine_id] = log_fd
     _PROCS[engine_id] = proc
     st = status(engine_id)
     st.image = str(exe)
@@ -101,6 +103,13 @@ def start(
 def stop(engine_id: str) -> ProcessStatus:
     proc = _PROCS.pop(engine_id, None)
     _LOADED.pop(engine_id, None)
+    # Cerrar el descriptor del log para no acumular handles en reinicios repetidos
+    fd = _LOG_FDS.pop(engine_id, None)
+    if fd is not None:
+        try:
+            fd.close()
+        except Exception:
+            pass
     if proc and proc.poll() is None:
         try:
             if sys.platform == "win32":

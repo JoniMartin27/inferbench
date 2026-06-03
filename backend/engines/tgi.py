@@ -1,7 +1,7 @@
 """Adaptador para HuggingFace TGI (text-generation-inference)."""
 from __future__ import annotations
 
-from core.hardware import safe_gpu_fraction
+from core.hardware import capped_gpu_fraction
 
 from .base import Engine, EngineMeta, StartRequest
 
@@ -51,11 +51,5 @@ class TgiEngine(Engine):
     def build_environment(self, req: StartRequest) -> dict[str, str]:
         # TGI reserva VRAM vía CUDA_MEMORY_FRACTION (no flag). Tope SIEMPRE seguro.
         env = super().build_environment(req)
-        safe = safe_gpu_fraction()
-        cur = env.get("CUDA_MEMORY_FRACTION")
-        try:
-            frac = min(float(cur), safe) if cur else safe
-        except ValueError:
-            frac = safe
-        env["CUDA_MEMORY_FRACTION"] = str(round(max(0.1, frac), 2))
+        env["CUDA_MEMORY_FRACTION"] = str(capped_gpu_fraction(env.get("CUDA_MEMORY_FRACTION")))
         return env

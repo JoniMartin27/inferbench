@@ -28,7 +28,7 @@ from typing import Any, AsyncIterator
 import httpx
 import psutil
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import (
     binary_manager,
@@ -39,7 +39,7 @@ from . import (
     ollama_manager,
     secrets,
 )
-from .hardware import detect_hardware
+from .hardware import detect_hardware, gpu_used_gb
 from .models_catalog import get_model
 from .optimizer import get_optimal_config, plan_llamacpp_run
 
@@ -144,6 +144,32 @@ def get_prompt(prompt_id: str) -> Prompt | None:
     return None
 
 
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_ALLOWED_CLOUD_HOSTS = {
+    "api.openai.com", "api.anthropic.com", "openrouter.ai",
+    "integrate.api.nvidia.com",
+}
+
+
+def _validate_base_url(url: str | None) -> None:
+    """Rechaza base_url que apunte a hosts distintos de loopback o APIs cloud conocidas.
+
+    Previene SSRF: un atacante con acceso local podría redirigir las peticiones (con el
+    api_key en Authorization) a servicios de metadatos cloud (169.254.169.254) o a la
+    red interna.
+    """
+    if url is None:
+        return
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if host in _LOOPBACK_HOSTS or host in _ALLOWED_CLOUD_HOSTS:
+        return
+    raise ValueError(
+        f"base_url host '{host}' no permitido. "
+        "Usa loopback (localhost/127.0.0.1) o una API cloud conocida."
+    )
+
+
 DEFAULT_BASE_URLS: dict[str, str] = {
     "llamacpp": "http://localhost:8080",
     "vllm": "http://localhost:8000",
@@ -186,6 +212,46 @@ class BenchmarkRequest(BaseModel):
     # autoevalúa) | "api" (juez OpenAI-compatible externo). Para "api": base_url, model, api_key.
     judge: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("base_url")
+    @classmethod
+    def _check_base_url(cls, v):
+        _validate_base_url(v)
+        return v
+
+    @field_validator("local_path")
+    @classmethod
+    def _check_local_path(cls, v):
+        if v is not None and not v.lower().endswith(".gguf"):
+            raise ValueError("local_path debe apuntar a un fichero .gguf")
+        return v
+
+    @field_validator("engine_opts")
+    @classmethod
+    def _check_engine_opts(cls, v):
+        _KV_VALID = {"f16", "q8_0", "q4_0", "q4_1", "q5_0", "q5_1", "iq4_nl"}
+        for key in ("kvCacheK", "kvCacheV", "kvCache"):
+            val = v.get(key)
+            if val is not None and val not in _KV_VALID:
+                raise ValueError(f"engine_opts.{key}={val!r} inválido. Valores permitidos: {_KV_VALID}")
+        _INT_BOUNDS = {
+            "contextLen": (256, 131_072),
+            "threads":    (1, 512),
+            "batchSize":  (64, 32_768),
+            "ubatchSize": (64, 8_192),
+            "moeOffload": (0, 1_000),
+            "cacheReuse": (0, 131_072),
+        }
+        for key, (lo, hi) in _INT_BOUNDS.items():
+            val = v.get(key)
+            if val is not None:
+                try:
+                    ival = int(val)
+                except (TypeError, ValueError):
+                    raise ValueError(f"engine_opts.{key} debe ser entero")
+                if not (lo <= ival <= hi):
+                    raise ValueError(f"engine_opts.{key}={ival} fuera de rango [{lo}, {hi}]")
+        return v
+
 
 class ResultPayload(BaseModel):
     model_id: str
@@ -199,20 +265,6 @@ class ResultPayload(BaseModel):
     ctx_used: int
     raw_output: str
     error: str = ""
-
-
-def _get_vram_used_gb() -> float:
-    try:
-        import pynvml  # type: ignore
-        pynvml.nvmlInit()
-        try:
-            h = pynvml.nvmlDeviceGetHandleByIndex(0)
-            mem = pynvml.nvmlDeviceGetMemoryInfo(h)
-            return round(mem.used / (1024**3), 2)
-        finally:
-            pynvml.nvmlShutdown()
-    except Exception:
-        return 0.0
 
 
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
@@ -309,14 +361,13 @@ def _extract_code(output: str) -> str:
 async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) -> float:
     """Calidad 0-100 EJECUTANDO el código del modelo contra casos de prueba reales.
 
-    Extrae el código y lo corre en un subproceso aislado (`python -I`, cwd temporal,
-    con timeout) junto a cada aserción de `tests`; devuelve el % de casos que pasan.
-    Mide si el código FUNCIONA, no el solapamiento de tokens. Fallo de sintaxis, nombre
-    incorrecto o timeout → 0. Sin números inventados.
-
-    Ejecutar salida del modelo es deliberado (como HumanEval) y está acotado a un
-    subproceso aislado + temp dir + timeout. Para desactivarlo: env INFERBENCH_NO_CODE_EXEC=1.
+    DESACTIVADO POR DEFECTO. Ejecutar output de un LLM en el host es peligroso aunque use
+    `python -I`: el proceso tiene acceso completo al sistema de ficheros y la red. Solo se
+    activa si INFERBENCH_CODE_EXEC=1 está presente en el entorno (opt-in explícito).
+    Devuelve 0.0 sin ejecutar si la variable no está definida.
     """
+    if not os.environ.get("INFERBENCH_CODE_EXEC"):
+        return 0.0
     code = _extract_code(output)
     if not code.strip() or not tests:
         return 0.0
@@ -1050,7 +1101,7 @@ class BenchmarkRunner:
         text_chunks: list[str] = []
         token_count = 0
         ram_peak = psutil.virtual_memory().used / (1024**3)
-        vram_peak = _get_vram_used_gb()
+        vram_peak = gpu_used_gb()
         error = ""
 
         # Anthropic tiene API propia (no OpenAI-compatible); el resto van por /v1/chat/completions
@@ -1081,7 +1132,7 @@ class BenchmarkRunner:
                             "tps_current": round(tps_now, 2),
                         })
                         ram_peak = max(ram_peak, psutil.virtual_memory().used / (1024**3))
-                        vram_peak = max(vram_peak, _get_vram_used_gb())
+                        vram_peak = max(vram_peak, gpu_used_gb())
                 elif kind == "done":
                     break
         except Exception as e:

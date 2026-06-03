@@ -69,18 +69,28 @@ _CODE_TESTS = [
 ]
 
 
-def test_code_scorer_all_pass_is_100():
-    # El código del modelo se EJECUTA contra casos reales; si pasan todos → 100.
+def test_code_scorer_all_pass_is_100(monkeypatch):
+    # La ejecución de código es opt-in: requiere INFERBENCH_CODE_EXEC=1.
+    monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
     assert asyncio.run(_quality_code(_GOOD_CODE, _CODE_TESTS)) == 100.0
 
 
-def test_code_scorer_partial():
+def test_code_scorer_partial(monkeypatch):
+    monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
     half = "```python\ndef merge_intervals(x):\n    return x  # no fusiona\n```"
     score = asyncio.run(_quality_code(half, _CODE_TESTS))
     assert 0 < score < 100  # pasa el caso vacío, falla el de fusión
 
 
-def test_code_scorer_no_code_or_wrong_name_is_zero():
+def test_code_scorer_disabled_by_default():
+    # Sin INFERBENCH_CODE_EXEC, el scorer devuelve 0.0 sin ejecutar nada.
+    import os
+    os.environ.pop("INFERBENCH_CODE_EXEC", None)
+    assert asyncio.run(_quality_code(_GOOD_CODE, _CODE_TESTS)) == 0.0
+
+
+def test_code_scorer_no_code_or_wrong_name_is_zero(monkeypatch):
+    monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
     assert asyncio.run(_quality_code("no hay bloque de código aquí", _CODE_TESTS)) == 0.0
     bad = "```python\ndef otra(x):\n    return x\n```"
     assert asyncio.run(_quality_code(bad, _CODE_TESTS)) == 0.0

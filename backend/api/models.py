@@ -64,8 +64,8 @@ async def compat_all(
     engine: str = Query(..., description="ID de motor"),
     quant: str = Query("Q4_K_M"),
     kv_cache: str = Query("f16"),
-    context_len: int = Query(4096),
-    moe_offload: int | None = Query(None),
+    context_len: int = Query(4096, ge=1, le=131_072),
+    moe_offload: int | None = Query(None, ge=0, le=1_000),
 ) -> list[CompatRow]:
     try:
         eng = registry.get_engine(engine)

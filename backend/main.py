@@ -40,7 +40,7 @@ def _hostname(host_header: str) -> str:
 @app.middleware("http")
 async def _block_dns_rebinding(request: Request, call_next):
     host = request.headers.get("host")
-    if host and _hostname(host) not in _ALLOWED_HOSTS:
+    if not host or _hostname(host) not in _ALLOWED_HOSTS:
         return JSONResponse(
             status_code=403,
             content={"detail": "Host no permitido. La API de InferBench solo acepta loopback."},

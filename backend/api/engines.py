@@ -5,7 +5,7 @@ import asyncio
 import json
 from typing import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -182,7 +182,7 @@ async def install_engine(engine_id: str) -> EventSourceResponse:
 
 
 @router.get("/{engine_id}/logs")
-async def engine_logs(engine_id: str, tail: int = 200) -> dict:
+async def engine_logs(engine_id: str, tail: int = Query(200, ge=1, le=5_000)) -> dict:
     try:
         registry.get_engine(engine_id)  # valida que el motor existe
     except KeyError:

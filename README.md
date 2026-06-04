@@ -314,7 +314,7 @@ inferbench/
 | `vision-scene` | describir 3 figuras de 3 colores | checklist: forma×3 + color×3 + conteo | 96 |
 | `vision-count` | contar objetos | checklist: nº + forma + color | 48 |
 
-> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). El prompt `code` **ejecuta** la salida del modelo en un subproceso aislado (`python -I`, cwd temporal, timeout); desactívalo con `INFERBENCH_NO_CODE_EXEC=1`.
+> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). El prompt `code` **ejecuta** la salida del modelo en un subproceso aislado con sandbox (`python -I`, cwd temporal, timeout, límites de recursos, sin red, sin syscalls destructivas). Activado por defecto; desactívalo con `INFERBENCH_CODE_EXEC=0` (entonces el prompt de código se omite, no se puntúa 0).
 
 ### Rigor estadístico (no una sola muestra)
 
@@ -340,7 +340,7 @@ La nota de calidad (0-100) tiene varios modos (TTFT y tok/s siempre son medidas 
 |------|---------------|---------------|
 | **Referencia (offline)** · *default* | Compara la respuesta con la de referencia: F1 de tokens *recall-weighted* + recall exacto de números + stemming por prefijo + penalización de texto degenerado. Python puro, **sin GPU/modelo/red** | Funciona en **cualquier ordenador**. Bueno en tareas con respuesta esperada (razonamiento, código, resumen); aproximado en tareas abiertas (chat) |
 | **Checklist de atributos** · *visión y hechos* | El prompt define grupos de sinónimos (el ground-truth: formas, colores, conteo…); la nota es la fracción de atributos que aparecen en la respuesta. Casa por límite de palabra + prefijo (acepta morfología, pero "500" no cuenta dentro de "1500"). Robusto a acentos y bilingüe (ES/EN). Sin red | **Visión** (mide si el modelo *vio* bien la imagen) y cualquier tarea con hechos verificables (`reasoning`, `summary`, `chat`, `vision-*`) |
-| **Ejecución de código** · *tareas de código* | **Ejecuta** el código generado contra casos de prueba reales (estilo HumanEval) en un subproceso aislado (`python -I`, cwd temporal, timeout). La nota es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual | Tareas de código (`code`). Desactivable con `INFERBENCH_NO_CODE_EXEC=1` |
+| **Ejecución de código** · *tareas de código* | **Ejecuta** el código generado contra casos de prueba reales (estilo HumanEval) en un subproceso aislado con sandbox (`python -I`, cwd temporal, timeout, rlimits, sin red, sin syscalls destructivas). La nota es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual | Tareas de código (`code`). Activado por defecto; `INFERBENCH_CODE_EXEC=0` lo desactiva (omite el prompt, no puntúa 0) |
 | **LLM-judge (motor local)** | El propio motor puntúa sus respuestas (rúbrica 0-100) | Fiable solo con modelos capaces (**≥7-8B**); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo) |
 | **LLM-judge (API externa)** | Un modelo cloud OpenAI-compatible (p.ej. `gpt-4o-mini`) juzga | Lo **más fiable e imparcial**; requiere API key |
 

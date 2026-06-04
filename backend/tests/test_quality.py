@@ -69,31 +69,70 @@ _CODE_TESTS = [
 ]
 
 
-def test_code_scorer_all_pass_is_100(monkeypatch):
-    # La ejecución de código es opt-in: requiere INFERBENCH_CODE_EXEC=1.
-    monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
+def test_code_scorer_all_pass_is_100():
+    # _quality_code ejecuta SIEMPRE (en sandbox); el gating de si correr o no es del llamador.
     assert asyncio.run(_quality_code(_GOOD_CODE, _CODE_TESTS)) == 100.0
 
 
-def test_code_scorer_partial(monkeypatch):
-    monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
+def test_code_scorer_partial():
     half = "```python\ndef merge_intervals(x):\n    return x  # no fusiona\n```"
     score = asyncio.run(_quality_code(half, _CODE_TESTS))
     assert 0 < score < 100  # pasa el caso vacío, falla el de fusión
 
 
-def test_code_scorer_disabled_by_default():
-    # Sin INFERBENCH_CODE_EXEC, el scorer devuelve 0.0 sin ejecutar nada.
-    import os
-    os.environ.pop("INFERBENCH_CODE_EXEC", None)
-    assert asyncio.run(_quality_code(_GOOD_CODE, _CODE_TESTS)) == 0.0
+def test_code_exec_enabled_default_on_and_explicit_off(monkeypatch):
+    from core.benchmark import code_exec_enabled
 
-
-def test_code_scorer_no_code_or_wrong_name_is_zero(monkeypatch):
+    monkeypatch.delenv("INFERBENCH_CODE_EXEC", raising=False)
+    assert code_exec_enabled() is True  # ON por defecto
+    for off in ("0", "false", "no", "off"):
+        monkeypatch.setenv("INFERBENCH_CODE_EXEC", off)
+        assert code_exec_enabled() is False
     monkeypatch.setenv("INFERBENCH_CODE_EXEC", "1")
+    assert code_exec_enabled() is True
+
+
+def test_code_scorer_no_code_or_wrong_name_is_zero():
     assert asyncio.run(_quality_code("no hay bloque de código aquí", _CODE_TESTS)) == 0.0
     bad = "```python\ndef otra(x):\n    return x\n```"
     assert asyncio.run(_quality_code(bad, _CODE_TESTS)) == 0.0
+
+
+def test_sandbox_blocks_dangerous_code_but_scores_valid_logic():
+    # El sandbox bloquea import de subprocess/os.system/red, pero el código algorítmico
+    # legítimo sigue puntuando. Aquí: código correcto que ADEMÁS intenta algo peligroso
+    # en import-time; el intento se traga (try/except) y la lógica se evalúa igual.
+    sneaky = (
+        "```python\n"
+        "try:\n"
+        "    import subprocess  # bloqueado por el sandbox\n"
+        "    subprocess.run(['echo','pwned'])\n"
+        "except Exception:\n"
+        "    pass\n"
+        "def merge_intervals(intervals):\n"
+        "    iv = sorted(intervals)\n"
+        "    out = []\n"
+        "    for s, e in iv:\n"
+        "        if out and s <= out[-1][1]:\n"
+        "            out[-1] = (out[-1][0], max(out[-1][1], e))\n"
+        "        else:\n"
+        "            out.append((s, e))\n"
+        "    return out\n"
+        "```"
+    )
+    assert asyncio.run(_quality_code(sneaky, _CODE_TESTS)) == 100.0
+
+    # Y si el código DEPENDE de un módulo bloqueado para su lógica, falla limpio (no crashea
+    # el scorer): el import lanza ImportError → el test no pasa → score 0.
+    needs_blocked = (
+        "```python\n"
+        "import socket\n"
+        "def merge_intervals(intervals):\n"
+        "    socket.socket()  # ImportError antes de llegar aquí\n"
+        "    return intervals\n"
+        "```"
+    )
+    assert asyncio.run(_quality_code(needs_blocked, _CODE_TESTS)) == 0.0
 
 
 def test_keywords_number_boundary_no_false_positive():

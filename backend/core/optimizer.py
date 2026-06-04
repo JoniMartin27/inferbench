@@ -420,7 +420,9 @@ def plan_llamacpp_run(
         avail_for_kv = max(0.0, (hw.vram_gb + hw.ram_gb * 0.7) - model_size - overhead - 0.2)
 
     if avail_for_kv <= 0.3 or kv_per_tok_gb <= 0:
-        max_ctx = 2048
+        # Acotar a max_ctx: este valor va directo al -c de arranque; un modelo con
+        # ventana < 2048 fallaría al arrancar.
+        max_ctx = min(2048, model.max_ctx)
     else:
         max_ctx = max(2048, min((int(avail_for_kv / kv_per_tok_gb) // 1024) * 1024, model.max_ctx))
 

@@ -23,6 +23,21 @@ router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
 _RUNNERS: dict[str, BenchmarkRunner] = {}
 _MAX_RUNNERS = 100
 
+# Un solo motor/puerto físico por engine_id (un llama-server en :8080, un contenedor
+# inferbench-<engine>, etc.). Si dos runs del MISMO motor corren a la vez se pisan el
+# arranque y las métricas se atribuyen al modelo equivocado (rompe la regla "no datos
+# inventados"). Serializamos por engine_id con un lock; runs de motores DISTINTOS sí van
+# en paralelo. Los sweeps ya eran secuenciales, así que el lock no los bloquea entre sí.
+_ENGINE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _engine_lock(engine: str) -> asyncio.Lock:
+    lock = _ENGINE_LOCKS.get(engine)
+    if lock is None:
+        lock = asyncio.Lock()
+        _ENGINE_LOCKS[engine] = lock
+    return lock
+
 
 def _prune_runners() -> None:
     while len(_RUNNERS) > _MAX_RUNNERS:
@@ -55,9 +70,16 @@ async def start_run(req: BenchmarkRequest) -> dict[str, str]:
 
 
 async def _run_and_persist(runner: BenchmarkRunner) -> None:
-    started = time.time()
-    await runner.run()
-    ended = time.time()
+    lock = _engine_lock(runner.req.engine)
+    if lock.locked():
+        runner.queue.put_nowait(
+            {"type": "log", "level": "info",
+             "text": f"Motor {runner.req.engine} ocupado por otra run; esperando turno…"}
+        )
+    async with lock:
+        started = time.time()
+        await runner.run()
+        ended = time.time()
     with get_session() as s:
         run = s.get(BenchmarkRun, runner.run_id)
         if run:

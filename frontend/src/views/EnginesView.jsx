@@ -9,7 +9,7 @@ export default function EnginesView({ dockerDown }) {
   const [error, setError] = useState(null);
   const [forms, setForms] = useState({});
   const [installing, setInstalling] = useState({}); // id → progress
-  const installAbortRef = useRef(null);
+  const installAbortRef = useRef({}); // id → AbortController (uno por motor)
 
   const refresh = () => api.listEngines().then(setEngines).catch((e) => setError(e.message));
   useEffect(() => {
@@ -19,7 +19,7 @@ export default function EnginesView({ dockerDown }) {
     // (si no, el fetch del stream seguiría vivo mutando estado de un componente muerto).
     return () => {
       clearInterval(id);
-      installAbortRef.current?.abort();
+      Object.values(installAbortRef.current).forEach((c) => c?.abort?.());
     };
   }, []);
 
@@ -36,12 +36,16 @@ export default function EnginesView({ dockerDown }) {
       if (wanted === "native" && rt && !rt.ready) {
         setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
         const ctrl = new AbortController();
-        installAbortRef.current = ctrl;
-        await installEngine(
-          id,
-          (evt) => setInstalling((s) => ({ ...s, [id]: evt })),
-          ctrl.signal
-        );
+        installAbortRef.current[id] = ctrl;
+        try {
+          await installEngine(
+            id,
+            (evt) => setInstalling((s) => ({ ...s, [id]: evt })),
+            ctrl.signal
+          );
+        } finally {
+          delete installAbortRef.current[id];
+        }
         setInstalling((s) => ({ ...s, [id]: null }));
         await refresh();
       }
@@ -83,7 +87,7 @@ export default function EnginesView({ dockerDown }) {
     setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
     setError(null);
     const ctrl = new AbortController();
-    installAbortRef.current = ctrl;
+    installAbortRef.current[id] = ctrl;
     try {
       await installEngine(
         id,
@@ -94,6 +98,7 @@ export default function EnginesView({ dockerDown }) {
     } catch (e) {
       if (e.name !== "AbortError") setError(e.message); // abort = vista desmontada, no error
     } finally {
+      delete installAbortRef.current[id];
       setTimeout(() => setInstalling((s) => ({ ...s, [id]: null })), 1500);
     }
   };

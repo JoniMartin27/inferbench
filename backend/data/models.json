@@ -14,8 +14,8 @@
       "tiny"
     ],
     "hf_gguf": {
-      "repo": "bartowski/TinyLlama-1.1B-Chat-v1.0-GGUF",
-      "file_template": "TinyLlama-1.1B-Chat-v1.0-{quant}.gguf"
+      "repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+      "file_template": "tinyllama-1.1b-chat-v1.0.{quant}.gguf"
     },
     "ollama_tag": "tinyllama:1.1b",
     "hf_repo": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -458,8 +458,8 @@
       "tiny"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-0.6B-GGUF",
-      "file_template": "Qwen3-0.6B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-0.6B-GGUF",
+      "file_template": "Qwen_Qwen3-0.6B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:0.6b",
     "hf_repo": "Qwen/Qwen3-0.6B",
@@ -483,8 +483,8 @@
       "small"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-1.7B-GGUF",
-      "file_template": "Qwen3-1.7B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-1.7B-GGUF",
+      "file_template": "Qwen_Qwen3-1.7B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:1.7b",
     "hf_repo": "Qwen/Qwen3-1.7B",
@@ -507,8 +507,8 @@
       "chat"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-4B-GGUF",
-      "file_template": "Qwen3-4B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-4B-GGUF",
+      "file_template": "Qwen_Qwen3-4B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:4b",
     "hf_repo": "Qwen/Qwen3-4B",
@@ -532,8 +532,8 @@
       "popular"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-8B-GGUF",
-      "file_template": "Qwen3-8B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-8B-GGUF",
+      "file_template": "Qwen_Qwen3-8B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:8b",
     "hf_repo": "Qwen/Qwen3-8B",
@@ -556,8 +556,8 @@
       "chat"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-14B-GGUF",
-      "file_template": "Qwen3-14B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-14B-GGUF",
+      "file_template": "Qwen_Qwen3-14B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:14b",
     "hf_repo": "Qwen/Qwen3-14B",
@@ -581,8 +581,8 @@
       "large"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-32B-GGUF",
-      "file_template": "Qwen3-32B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-32B-GGUF",
+      "file_template": "Qwen_Qwen3-32B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:32b",
     "hf_repo": "Qwen/Qwen3-32B",
@@ -607,8 +607,8 @@
       "popular"
     ],
     "hf_gguf": {
-      "repo": "bartowski/Qwen3-30B-A3B-GGUF",
-      "file_template": "Qwen3-30B-A3B-{quant}.gguf"
+      "repo": "bartowski/Qwen_Qwen3-30B-A3B-GGUF",
+      "file_template": "Qwen_Qwen3-30B-A3B-{quant}.gguf"
     },
     "ollama_tag": "qwen3:30b-a3b",
     "hf_repo": "Qwen/Qwen3-30B-A3B",
@@ -1132,7 +1132,7 @@
       "small"
     ],
     "hf_gguf": {
-      "repo": "bartowski/starcoder2-3b-GGUF",
+      "repo": "second-state/StarCoder2-3B-GGUF",
       "file_template": "starcoder2-3b-{quant}.gguf"
     },
     "ollama_tag": "starcoder2:3b",
@@ -1156,7 +1156,7 @@
       "code"
     ],
     "hf_gguf": {
-      "repo": "bartowski/starcoder2-15b-GGUF",
+      "repo": "second-state/StarCoder2-15B-GGUF",
       "file_template": "starcoder2-15b-{quant}.gguf"
     },
     "ollama_tag": "starcoder2:15b",

@@ -176,6 +176,45 @@ async def _fetch_shard_files(repo: str, base: str) -> list[str]:
     return _filter_shards([s.get("rfilename", "") for s in data.get("siblings", [])], base)
 
 
+def _quants_from_filenames(file_template: str, filenames: list[str]) -> list[str]:
+    """Deriva las cuantizaciones de una lista de nombres de fichero que casan el
+    `file_template` (con {quant}). Ordenadas por calidad descendente. Pura (sin red)."""
+    if "{quant}" not in file_template:
+        return []
+    pat = re.compile(
+        "^" + re.escape(file_template).replace(re.escape("{quant}"), r"([A-Za-z0-9_.]+)") + "$"
+    )
+    found: set[str] = set()
+    for f in filenames:
+        name = (f or "").rsplit("/", 1)[-1]
+        m = pat.match(name)
+        if m:
+            found.add(m.group(1))
+    # Orden aproximado por calidad descendente (Q8 mejor que Q4 mejor que IQ2…).
+    order = {"Q8_0": 0, "Q6_K": 1, "Q5_K_M": 2, "Q5_K_S": 3, "Q4_K_M": 4, "Q4_K_S": 5,
+             "IQ4_XS": 6, "Q3_K_M": 7, "IQ3_M": 8, "Q2_K": 9, "IQ2_M": 10, "IQ2_XS": 11,
+             "IQ2_XXS": 12, "IQ1_M": 13, "IQ1_S": 14}
+    return sorted(found, key=lambda q: order.get(q, 99))
+
+
+async def available_quants(model: Model) -> list[str]:
+    """Cuantizaciones realmente publicadas en el repo HF del modelo, derivadas de los
+    ficheros que casan su `file_template`. Devuelve [] si no hay repo o falla la red
+    (best-effort: solo se usa para enriquecer mensajes de error, nunca en el happy path)."""
+    if not model.hf_gguf or "{quant}" not in model.hf_gguf.file_template:
+        return []
+    url = f"https://huggingface.co/api/models/{model.hf_gguf.repo}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0), follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "inferbench"})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return []
+    names = [s.get("rfilename") or "" for s in data.get("siblings", [])]
+    return _quants_from_filenames(model.hf_gguf.file_template, names)
+
+
 def gguf_path(model: Model, quant: str) -> Path:
     if model.hf_gguf and model.hf_gguf.multipart:
         s1 = _cached_shard1(model, quant)
@@ -358,17 +397,26 @@ async def ensure_gguf(
     logger.info(f"Descargando GGUF: {url}")
     if progress:
         await progress({"phase": "model.lookup", "model": model.id, "quant": quant, "url": url})
-    not_found = (
-        f"Cuantización {quant} no disponible para {model.id} en {repo}. "
-        f"Bartowski no publica {quant} para este modelo. "
-        f"Prueba con Q4_K_M o usa Modelos → Locales para apuntar a un GGUF tuyo."
-    )
-    return await _download_resilient(
-        url, target, progress, cancel_event,
-        label=f"GGUF {quant} de {model.id}",
-        progress_meta={"model": model.id},
-        not_found_msg=not_found,
-    )
+    not_found = f"Cuantización {quant} no disponible para {model.id} en {repo}."
+    try:
+        return await _download_resilient(
+            url, target, progress, cancel_event,
+            label=f"GGUF {quant} de {model.id}",
+            progress_meta={"model": model.id},
+            not_found_msg=not_found,
+        )
+    except RuntimeError as e:
+        # Solo el caso "no existe ese quant" (no errores de red/disco): enriquece el
+        # mensaje listando las cuantizaciones REALES del repo en vez de adivinar.
+        if not_found not in str(e):
+            raise
+        quants = await available_quants(model)
+        if quants:
+            alts = ", ".join(q for q in quants if q != quant) or "ninguna distinta"
+            hint = f" Cuantizaciones disponibles en el repo: {alts}."
+        else:
+            hint = " Usa Modelos → Locales para apuntar a un GGUF tuyo."
+        raise RuntimeError(not_found + hint) from e
 
 
 def mmproj_path(model: Model) -> Path | None:

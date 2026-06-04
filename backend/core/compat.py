@@ -264,7 +264,9 @@ def compute_max_context(
         avail = (hw.vram_gb + hw.ram_gb * 0.7) - model_size - 0.8
 
     if avail <= 0.3:
-        return 2048
+        # Acotar a max_ctx: modelos pequeños (embeddings, 512–2048) fallarían al
+        # arrancar con -c 2048 si su ventana es menor.
+        return min(2048, model.max_ctx)
     max_tok = int(avail / kv_per_tok) if kv_per_tok > 0 else model.max_ctx
     rounded = (max_tok // 1024) * 1024
     return max(2048, min(rounded, model.max_ctx))

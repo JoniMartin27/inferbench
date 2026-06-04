@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,12 @@ from .models_catalog import get_model
 from .optimizer import _estimate_moe_offload, get_optimal_config, plan_llamacpp_run
 
 PROMPTS_FILE = Path(__file__).resolve().parent.parent / "data" / "prompts.json"
+
+# Rigor del benchmark: por cada prompt se descarta 1 pasada de warmup (llena cachés/JIT del
+# motor) y se MIDEN N pasadas reales; las métricas reportadas son la mediana de esas N, con
+# su desviación estándar. Una sola muestra era ruido (sobre todo TTFT). Ajustable por env.
+MEASURE_ITERS = max(1, int(os.environ.get("INFERBENCH_BENCH_ITERS", "3")))
+WARMUP_ENABLED = os.environ.get("INFERBENCH_BENCH_NO_WARMUP") not in ("1", "true", "True")
 
 
 class Prompt(BaseModel):
@@ -272,8 +279,8 @@ class BenchmarkRequest(BaseModel):
 class ResultPayload(BaseModel):
     model_id: str
     prompt_id: str
-    tps: float
-    ttft_ms: int
+    tps: float                 # decode tok/s — MEDIANA de n_samples (no una sola muestra)
+    ttft_ms: int               # TTFT ms — MEDIANA de n_samples
     vram_gb: float
     ram_gb: float
     quality: float
@@ -281,6 +288,10 @@ class ResultPayload(BaseModel):
     ctx_used: int
     raw_output: str
     error: str = ""
+    prefill_tps: float = 0.0   # tok/s de prefill (procesamiento de prompt), mediana
+    tps_std: float = 0.0       # desviación estándar del decode tok/s entre muestras
+    ttft_std: float = 0.0      # desviación estándar del TTFT (ms) entre muestras
+    n_samples: int = 1         # nº de muestras medidas (warmup excluido)
 
 
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
@@ -554,6 +565,12 @@ async def _stream_openai_chat(
                             first = False
                         else:
                             yield ("token", content)
+                    # llama-server adjunta su medición INTERNA exacta en el chunk final
+                    # (predicted_per_second/prompt_per_second). Es mucho más precisa que
+                    # cronometrar desde el cliente (sin jitter de HTTP por token).
+                    tmg = chunk.get("timings")
+                    if tmg:
+                        yield ("timings", tmg)
     yield ("done", None)
 
 
@@ -1105,31 +1122,23 @@ class BenchmarkRunner:
             await _wait_engine_ready(self.base_url, timeout=120.0)
             await self.emit({"type": "engine.ready", "base_url": self.base_url})
 
-    async def _run_one(self, prompt: Prompt, headers: dict[str, str]) -> None:
-        await self.emit({
-            "type": "phase",
-            "model": self.req.model,
-            "prompt": prompt.id,
-            "phase": "load",
-        })
-        await self.emit({"type": "phase", "phase": "warmup"})
+    async def _one_pass(
+        self, prompt: Prompt, headers: dict[str, str], model_for_engine: str, *, measure: bool
+    ) -> dict[str, Any]:
+        """Una sola generación completa. Devuelve métricas crudas de ESA pasada.
 
-        if not self.base_url:
-            err = f"No base_url para motor {self.req.engine}"
-            await self.emit({"type": "log", "level": "error", "text": err})
-            self._record_error(prompt, err)
-            return
-
-        # Para motores OpenAI-compatible locales el `model` que pasamos en el body suele
-        # ignorarse (sirve cualquier valor). Para APIs cloud, usamos el model_id directamente.
-        model_for_engine = self.req.model
-
+        Usa los timings INTERNOS del motor (llama-server) cuando los expone — exactos, sin
+        jitter de HTTP — y cae a la medición desde el cliente si no (APIs cloud, ollama…).
+        `measure=False` es un warmup: no emite progreso y su resultado se descarta.
+        """
         t0 = time.perf_counter()
         ttft_ms: int | None = None
         text_chunks: list[str] = []
         token_count = 0
         ram_peak = psutil.virtual_memory().used / (1024**3)
         vram_peak = gpu_used_gb()
+        server_decode_tps: float | None = None
+        server_prefill_tps: float | None = None
         error = ""
 
         # Anthropic tiene API propia (no OpenAI-compatible); el resto van por /v1/chat/completions
@@ -1143,42 +1152,119 @@ class BenchmarkRunner:
                 now = time.perf_counter()
                 if kind == "first_token":
                     ttft_ms = int((now - t0) * 1000)
-                    await self.emit({"type": "phase", "phase": "ttft", "ttft_ms": ttft_ms})
-                    await self.emit({"type": "phase", "phase": "generate"})
+                    if measure:
+                        await self.emit({"type": "phase", "phase": "ttft", "ttft_ms": ttft_ms})
+                        await self.emit({"type": "phase", "phase": "generate"})
                     text_chunks.append(data)
                     token_count += 1
                 elif kind == "token":
                     text_chunks.append(data)
                     token_count += 1
                     if token_count % 8 == 0:
-                        elapsed = now - t0 - (ttft_ms or 0) / 1000.0
-                        # tok/s de generación: tokens TRAS el primero / tiempo TRAS el primero
-                        # (el 1er token ya está contado, pero su tiempo es el TTFT, excluido aquí)
-                        tps_now = (token_count - 1) / elapsed if elapsed > 0 and token_count > 1 else 0.0
-                        await self.emit({
-                            "type": "tokens",
-                            "current": token_count,
-                            "target": prompt.target_tokens,
-                            "tps_current": round(tps_now, 2),
-                        })
                         ram_peak = max(ram_peak, psutil.virtual_memory().used / (1024**3))
                         vram_peak = max(vram_peak, gpu_used_gb())
+                        if measure:
+                            elapsed = now - t0 - (ttft_ms or 0) / 1000.0
+                            tps_now = (token_count - 1) / elapsed if elapsed > 0 and token_count > 1 else 0.0
+                            await self.emit({
+                                "type": "tokens",
+                                "current": token_count,
+                                "target": prompt.target_tokens,
+                                "tps_current": round(tps_now, 2),
+                            })
+                elif kind == "timings":
+                    # Medición interna del motor: predicted = decode, prompt = prefill.
+                    if isinstance(data, dict):
+                        server_decode_tps = data.get("predicted_per_second")
+                        server_prefill_tps = data.get("prompt_per_second")
                 elif kind == "done":
                     break
         except Exception as e:
             error = str(e)
-            await self.emit({"type": "log", "level": "error", "text": f"{prompt.id}: {error}"})
-
-        if self.cancelled.is_set() and not error:
-            error = "cancelado"
+            if measure:
+                await self.emit({"type": "log", "level": "error", "text": f"{prompt.id}: {error}"})
 
         elapsed_total = time.perf_counter() - t0
         gen_time = elapsed_total - (ttft_ms or 0) / 1000.0
-        # tok/s de generación = tokens generados TRAS el primero / tiempo TRAS el primero.
-        # token_count incluye el 1er token, cuyo tiempo es el TTFT (ya excluido de gen_time);
-        # contarlo en el numerador inflaba el tok/s en respuestas cortas (la métrica estrella).
-        tps = (token_count - 1) / gen_time if gen_time > 0 and token_count > 1 else 0.0
-        output = "".join(text_chunks)
+        # Decode tok/s preferido: el del motor (exacto). Fallback: cliente (tokens TRAS el
+        # primero / tiempo TRAS el primero — el 1er token cuenta como TTFT, ya excluido).
+        client_tps = (token_count - 1) / gen_time if gen_time > 0 and token_count > 1 else 0.0
+        decode_tps = server_decode_tps if server_decode_tps else client_tps
+        return {
+            "ttft_ms": ttft_ms,
+            "decode_tps": decode_tps,
+            "prefill_tps": server_prefill_tps,  # None si el motor no lo expone
+            "output": "".join(text_chunks),
+            "token_count": token_count,
+            "ram_peak": ram_peak,
+            "vram_peak": vram_peak,
+            "error": error,
+        }
+
+    async def _run_one(self, prompt: Prompt, headers: dict[str, str]) -> None:
+        await self.emit({
+            "type": "phase",
+            "model": self.req.model,
+            "prompt": prompt.id,
+            "phase": "load",
+        })
+
+        if not self.base_url:
+            err = f"No base_url para motor {self.req.engine}"
+            await self.emit({"type": "log", "level": "error", "text": err})
+            self._record_error(prompt, err)
+            return
+
+        # Para motores OpenAI-compatible locales el `model` que pasamos en el body suele
+        # ignorarse (sirve cualquier valor). Para APIs cloud, usamos el model_id directamente.
+        model_for_engine = self.req.model
+
+        # Warmup descartado (llena cachés/JIT del motor). Solo local: en APIs cloud costaría
+        # tokens de verdad sin aportar — la latencia cloud no tiene caché frío local.
+        if WARMUP_ENABLED and not self.is_api and not self.cancelled.is_set():
+            await self.emit({"type": "phase", "phase": "warmup"})
+            await self._one_pass(prompt, headers, model_for_engine, measure=False)
+
+        # N pasadas medidas → mediana + desviación. Si una falla, paramos (no insistir).
+        samples: list[dict[str, Any]] = []
+        last: dict[str, Any] | None = None
+        for i in range(MEASURE_ITERS):
+            if self.cancelled.is_set():
+                break
+            if MEASURE_ITERS > 1:
+                await self.emit({"type": "phase", "phase": "sample", "iter": i + 1,
+                                 "iters": MEASURE_ITERS})
+            res = await self._one_pass(prompt, headers, model_for_engine, measure=True)
+            last = res
+            if res["error"]:
+                break
+            samples.append(res)
+
+        # Agregación de las muestras válidas.
+        if samples:
+            decode = [s["decode_tps"] for s in samples]
+            ttfts = [s["ttft_ms"] for s in samples if s["ttft_ms"] is not None]
+            prefills = [s["prefill_tps"] for s in samples if s["prefill_tps"]]
+            tps = statistics.median(decode)
+            tps_std = statistics.stdev(decode) if len(decode) > 1 else 0.0
+            ttft_ms = int(statistics.median(ttfts)) if ttfts else 0
+            ttft_std = statistics.stdev(ttfts) if len(ttfts) > 1 else 0.0
+            prefill_tps = statistics.median(prefills) if prefills else 0.0
+            vram_peak = max(s["vram_peak"] for s in samples)
+            ram_peak = max(s["ram_peak"] for s in samples)
+            token_count = samples[0]["token_count"]
+            output = samples[0]["output"]  # calidad se evalúa sobre una sola respuesta
+            n_samples = len(samples)
+            error = ""
+        else:
+            # Ninguna muestra válida: propagar el error/cancelación con métricas a cero.
+            tps = tps_std = ttft_std = prefill_tps = vram_peak = ram_peak = 0.0
+            ttft_ms = token_count = 0
+            n_samples = 0
+            output = (last or {}).get("output", "")
+            error = (last or {}).get("error", "")
+            if self.cancelled.is_set() and not error:
+                error = "cancelado"
 
         # Surfacing honesto: si el modelo no generó NADA y no hubo error/cancelación, suele
         # ser una KV demasiado agresiva (q4_0) que rompe la generación. No es un 0 silencioso.
@@ -1229,6 +1315,10 @@ class BenchmarkRunner:
             ctx_used=token_count,
             raw_output=output[:4000],
             error=error,
+            prefill_tps=round(prefill_tps, 2),
+            tps_std=round(tps_std, 2),
+            ttft_std=round(ttft_std, 2),
+            n_samples=n_samples,
         )
         self.results.append(result)
         await self.emit({"type": "result", "result": result.model_dump()})

@@ -660,7 +660,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                   <tr className="border-b border-slate-800">
                     <th className="py-2 pr-3">Prompt</th>
                     <th className="py-2 pr-3">TTFT</th>
-                    <th className="py-2 pr-3">tok/s</th>
+                    <th className="py-2 pr-3">decode tok/s</th>
+                    <th className="py-2 pr-3">prefill tok/s</th>
                     <th className="py-2 pr-3">VRAM peak</th>
                     <th className="py-2 pr-3">RAM peak</th>
                     <th className="py-2 pr-3">Calidad</th>
@@ -672,8 +673,18 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                   {results.map((r, i) => (
                     <tr key={i} className="border-b border-slate-900">
                       <td className="py-2 pr-3 font-medium">{r.prompt_id}</td>
-                      <td className="py-2 pr-3 tabular-nums">{r.ttft_ms} ms</td>
-                      <td className="py-2 pr-3 tabular-nums">{r.tps}</td>
+                      <td className="py-2 pr-3 tabular-nums">
+                        {r.ttft_ms} ms
+                        {r.ttft_std ? <span className="text-slate-500"> ±{r.ttft_std}</span> : null}
+                        {r.n_samples > 1 ? (
+                          <span className="ml-1 text-[10px] text-slate-600">n={r.n_samples}</span>
+                        ) : null}
+                      </td>
+                      <td className="py-2 pr-3 tabular-nums">
+                        {r.tps}
+                        {r.tps_std ? <span className="text-slate-500"> ±{r.tps_std}</span> : null}
+                      </td>
+                      <td className="py-2 pr-3 tabular-nums">{r.prefill_tps || "—"}</td>
                       <td className="py-2 pr-3 tabular-nums">{r.vram_gb} GB</td>
                       <td className="py-2 pr-3 tabular-nums">{r.ram_gb} GB</td>
                       <td className="py-2 pr-3 tabular-nums">{r.quality}</td>

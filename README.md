@@ -316,13 +316,19 @@ inferbench/
 
 > Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). El prompt `code` **ejecuta** la salida del modelo en un subproceso aislado (`python -I`, cwd temporal, timeout); desactívalo con `INFERBENCH_NO_CODE_EXEC=1`.
 
-Métricas medidas por prompt:
-- **TTFT** (ms): tiempo al primer token
-- **tok/s**: tokens por segundo en la fase de generación
+### Rigor estadístico (no una sola muestra)
+
+Cada prompt se mide **N veces** (3 por defecto, configurable con `INFERBENCH_BENCH_ITERS`) **tras descartar una pasada de warmup** que llena los cachés/JIT del motor. Las cifras reportadas son la **mediana** de esas N muestras, con su **desviación estándar** — una sola medida (sobre todo de TTFT) era ruido. En llama.cpp el tok/s sale de los **timings internos del motor** (`predicted_per_second` / `prompt_per_second`), no de cronometrar desde el cliente: sin jitter de HTTP por token. Desactiva el warmup con `INFERBENCH_BENCH_NO_WARMUP=1`.
+
+Métricas medidas por prompt (mediana de N muestras):
+- **TTFT** (ms): tiempo al primer token — con su desviación (`ttft_std`)
+- **decode tok/s**: tokens por segundo en la fase de generación — con su desviación (`tps_std`)
+- **prefill tok/s**: velocidad de procesamiento del prompt (medición separada del decode)
 - **VRAM peak** (GB): pico durante el run, vía `pynvml`
 - **RAM peak** (GB): pico vía `psutil`
 - **Calidad** (0-100): ver [Evaluación de calidad](#evaluación-de-calidad)
 - **Coste**: solo APIs cloud (calculado de tokens × precio)
+- **n_samples**: nº de muestras válidas que respaldan las cifras
 
 ---
 
@@ -405,7 +411,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 ## Pendientes / siguientes pasos
 
-- Más cobertura de tests (ya hay 85 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative`)
+- Más cobertura de tests (ya hay 90 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative`, `benchmark_rigor`)
 - Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
 

@@ -33,8 +33,14 @@ class TgiEngine(Engine):
         cmd += ["--port", str(req.port or self.meta.default_port), "--hostname", "0.0.0.0"]
 
         if opts.get("contextLen"):
-            cmd += ["--max-input-tokens", str(int(opts["contextLen"]))]
-            cmd += ["--max-total-tokens", str(int(opts["contextLen"]) + 512)]
+            # max-total-tokens = input + output, y debe caber en la ventana (contextLen).
+            # Antes input=contextLen + total=contextLen+512 dejaba la salida capada a 512
+            # y total fuera de ventana. Reservamos presupuesto de salida DENTRO de la
+            # ventana: input = contextLen − out_budget, total = contextLen.
+            ctx = int(opts["contextLen"])
+            out_budget = min(1024, max(256, ctx // 4))
+            cmd += ["--max-input-tokens", str(max(256, ctx - out_budget))]
+            cmd += ["--max-total-tokens", str(ctx)]
 
         quant = opts.get("quant") or opts.get("quantization")
         if quant and quant.lower() not in ("none", "f16", "fp16"):

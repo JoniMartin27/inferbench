@@ -220,7 +220,6 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const engineDockerReady = selectedEngine?.runtimes?.some(
     (r) => r.runtime === "docker" && r.ready
   );
-  const engineSomeReady = engineNativeReady || engineDockerReady;
   const canRun = engineIsApi
     ? !apiNeedsKey
     : engine === "llamacpp"

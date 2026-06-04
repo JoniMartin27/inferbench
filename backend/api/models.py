@@ -1,6 +1,8 @@
 """Endpoints /api/models."""
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -29,7 +31,10 @@ async def list_models() -> list[Model]:
 @router.get("/local", response_model=list[local_models.LocalModel])
 async def list_local_models(refresh: bool = False) -> list[local_models.LocalModel]:
     """Escanea carpetas conocidas + extras y devuelve todos los GGUFs locales."""
-    return local_models.discover(read_metadata=True)
+    # discover() hace rglob sobre ~20 carpetas y lee headers GGUF (hasta 16 MB c/u),
+    # todo I/O síncrono. Fuera del event loop para no congelar el backend (regla
+    # load-bearing del proyecto: no bloquear el loop).
+    return await asyncio.to_thread(local_models.discover, read_metadata=True)
 
 
 @router.get("/local/dirs")

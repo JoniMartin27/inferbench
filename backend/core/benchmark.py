@@ -620,7 +620,13 @@ async def _stream_anthropic_chat(
                             first = False
                         else:
                             yield ("token", text)
-                elif etype in ("message_stop", "error"):
+                elif etype == "error":
+                    # Error a mitad de stream (rate limit, overloaded…). NO tragarlo:
+                    # propagarlo para que el run se marque como error real, no como
+                    # salida vacía atribuida erróneamente al modelo/KV.
+                    msg = (evt.get("error") or {}).get("message") or "error desconocido"
+                    raise RuntimeError(f"Anthropic stream error: {msg}")
+                elif etype == "message_stop":
                     break
     yield ("done", None)
 

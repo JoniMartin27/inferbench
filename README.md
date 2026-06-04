@@ -9,7 +9,7 @@
   <img alt="Plataformas" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2b2b2b">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
   <a href="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml/badge.svg"></a>
-  <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white">
+  <img alt="Electron" src="https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white">
   <a href="https://github.com/JoniMartin27/inferbench/releases"><img alt="Releases" src="https://img.shields.io/github/v/release/JoniMartin27/inferbench?label=descargar"></a>
 </p>
@@ -67,7 +67,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Modo nativo (sin Docker)** para llama.cpp: descarga release pre-compilada de GitHub (auto-detecta CUDA, descarga también las DLLs del runtime)
 - **Modo Docker** disponible para cualquier motor que lo requiera
 - **Detección automática de hardware**: CPU, RAM, GPU (NVIDIA via NVML, AMD via rocm-smi, Apple Silicon via system_profiler). Cacheada para que el listado de compatibilidad sea instantáneo (~4 ms para 124 modelos)
-- **Catálogo de 124+ modelos** con auto-descarga GGUF desde HF, todos verificados contra HuggingFace (incluye visión, código, reasoning y MoE). Ver [Catálogo](#catálogo-de-modelos-con-auto-descarga)
+- **Catálogo de 124 modelos** con auto-descarga GGUF desde HF, todos verificados contra HuggingFace (incluye visión, código, reasoning y MoE). Ver [Catálogo](#catálogo-de-modelos-con-auto-descarga)
 - **Escaneo de GGUFs locales**: detecta modelos de LM Studio, Ollama, HF cache, etc., con cuenta de parámetros real leída de la metadata GGUF (independiente del quant)
 - **Visión real (multimodal)**: para modelos de visión (Qwen2-VL, Qwen2.5-VL, MiniCPM-V) descarga el `mmproj`, arranca llama-server con `--mmproj` y benchmarkea un prompt con **imagen real** vía la API de visión OpenAI-compatible. También en **APIs** (gpt-4o, claude) y motores **Docker** (vLLM sirve el modelo de visión) — aunque vLLM con un modelo de visión necesita bastante VRAM (un 2B no entra holgado en 8 GB; en local, llama.cpp es la ruta fiable a poca VRAM)
 - **Optimizador**: dado tu hardware + modelo + motor, calcula la mejor cuantización, KV-cache, contexto máximo, MoE offload, flags
@@ -88,8 +88,8 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 
 | Capa | Tecnología |
 |------|------------|
-| App de escritorio | Electron 33 |
-| Frontend | React 18 + Vite 5 + TailwindCSS + Recharts + lucide-react |
+| App de escritorio | Electron 42 |
+| Frontend | React 18 + Vite 8 + TailwindCSS + Recharts + lucide-react |
 | Backend | FastAPI (Python 3.11) + uvicorn + sse-starlette |
 | Persistencia | SQLite vía SQLModel |
 | GPU detection | psutil + pynvml + system_profiler / rocm-smi |
@@ -139,7 +139,7 @@ Por defecto, basadas en `core/optimizer.py`:
 
 ## Catálogo de modelos con auto-descarga
 
-`backend/data/models.json` lista **124+ modelos**. Los que tienen `hf_gguf` configurado se auto-descargan desde Hugging Face. Cubre, entre otros:
+`backend/data/models.json` lista **124 modelos**. Los que tienen `hf_gguf` configurado se auto-descargan desde Hugging Face. Cubre, entre otros:
 
 - **Llama** 3 / 3.1 / 3.2 / 3.3 (1B → 70B), Nemotron, Hermes, Tulu, Dolphin
 - **Qwen** 2.5 / 3 (0.5B → 72B), Coder, Math, **QwQ 32B** (reasoning), MoE 30B-A3B
@@ -394,7 +394,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | **Bonus** | **Auto-descarga GGUF desde HuggingFace** | ✅ |
 | **Bonus** | **Sweep multi-quant** + **comparación side-by-side** | ✅ |
 | **Bonus** | **Stop mid-run** | ✅ |
-| **Bonus** | **Catálogo de 124+ modelos** verificados contra HF + tooling de ampliación | ✅ |
+| **Bonus** | **Catálogo de 124 modelos** verificados contra HF + tooling de ampliación | ✅ |
 | **Bonus** | **Params reales** de GGUFs locales desde metadata (independiente del quant) | ✅ |
 | **Bonus** | **Compresión KV explicada** + tabla de modelos más potentes por compresión | ✅ |
 | **Bonus** | **Calidad offline basada en referencia** + **LLM-judge** (local / API) | ✅ |
@@ -405,7 +405,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 ## Pendientes / siguientes pasos
 
-- Más cobertura de tests (ya hay 42 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`)
+- Más cobertura de tests (ya hay 85 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative`)
 - Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
 

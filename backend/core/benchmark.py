@@ -385,21 +385,91 @@ def _extract_code(output: str) -> str:
     return output  # sin fences: probar el texto crudo (la prosa dará SyntaxError → 0)
 
 
+def code_exec_enabled() -> bool:
+    """¿Se evalúa el prompt de código ejecutándolo? ACTIVADO por defecto (con sandbox);
+    se desactiva explícitamente con INFERBENCH_CODE_EXEC ∈ {0,false,no,off}."""
+    return os.environ.get("INFERBENCH_CODE_EXEC", "1").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
+
+
+# Preámbulo de SANDBOX que se ejecuta ANTES del código del modelo en el subproceso aislado.
+# El código de un LLM puede alucinar llamadas destructivas (os.remove, shutil.rmtree) o de
+# red (exfiltración). Defensa en profundidad — además de `python -I` + cwd temporal + timeout:
+#   1. Límites de recursos (CPU, memoria, tamaño de fichero, sin fork) — POSIX; en Windows el
+#      módulo `resource` no existe y se cae al timeout + bloqueos de abajo.
+#   2. Red deshabilitada (socket neutralizado).
+#   3. Syscalls destructivas de `os` neutralizadas.
+#   4. Import de módulos peligrosos bloqueado (subprocess, ctypes, urllib, http, shutil…).
+#   5. `open()` restringido al árbol del cwd temporal.
+_SANDBOX_PREAMBLE = (
+    "import sys as _sys, os as _os, builtins as _bi\n"
+    "def _deny(*a, **k):\n"
+    "    raise PermissionError('operacion bloqueada en el sandbox de inferbench')\n"
+    "try:\n"
+    "    import resource as _rsrc\n"
+    "    _rsrc.setrlimit(_rsrc.RLIMIT_CPU, (8, 8))\n"
+    "    _m = 1024 * 1024 * 1024\n"
+    "    _rsrc.setrlimit(_rsrc.RLIMIT_AS, (_m, _m))\n"
+    "    _rsrc.setrlimit(_rsrc.RLIMIT_FSIZE, (8 * 1024 * 1024, 8 * 1024 * 1024))\n"
+    "    try:\n"
+    "        _rsrc.setrlimit(_rsrc.RLIMIT_NPROC, (0, 0))\n"
+    "    except Exception:\n"
+    "        pass\n"
+    "except Exception:\n"
+    "    pass\n"
+    "try:\n"
+    "    import socket as _sock\n"
+    "    _sock.socket = _deny\n"
+    "    _sock.create_connection = _deny\n"
+    "    _sock.create_server = _deny\n"
+    "except Exception:\n"
+    "    pass\n"
+    "for _n in ('system','popen','remove','unlink','rmdir','removedirs','rename','replace',\n"
+    "          'startfile','execv','execve','execvp','spawnv','spawnl','kill','chmod','chown',\n"
+    "          'truncate','link','symlink'):\n"
+    "    if hasattr(_os, _n):\n"
+    "        try:\n"
+    "            setattr(_os, _n, _deny)\n"
+    "        except Exception:\n"
+    "            pass\n"
+    "_BLOCK = {'subprocess','multiprocessing','ctypes','socket','urllib','http','httplib',\n"
+    "          'requests','ftplib','smtplib','telnetlib','ssl','webbrowser','shutil','pty',\n"
+    "          'pickle','marshal','importlib'}\n"
+    "_real_import = _bi.__import__\n"
+    "def _safe_import(name, *a, **k):\n"
+    "    if name.split('.')[0] in _BLOCK or name in _BLOCK:\n"
+    "        raise ImportError('modulo %r bloqueado en el sandbox' % name)\n"
+    "    return _real_import(name, *a, **k)\n"
+    "_bi.__import__ = _safe_import\n"
+    "_CWD = _os.path.realpath(_os.getcwd())\n"
+    "_real_open = _bi.open\n"
+    "def _safe_open(file, mode='r', *a, **k):\n"
+    "    try:\n"
+    "        _p = _os.path.realpath(file)\n"
+    "    except Exception:\n"
+    "        raise PermissionError('ruta invalida en el sandbox')\n"
+    "    if not _p.startswith(_CWD):\n"
+    "        raise PermissionError('acceso a fichero fuera del sandbox: %s' % file)\n"
+    "    return _real_open(file, mode, *a, **k)\n"
+    "_bi.open = _safe_open\n"
+)
+
+
 async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) -> float:
     """Calidad 0-100 EJECUTANDO el código del modelo contra casos de prueba reales.
 
-    DESACTIVADO POR DEFECTO. Ejecutar output de un LLM en el host es peligroso aunque use
-    `python -I`: el proceso tiene acceso completo al sistema de ficheros y la red. Solo se
-    activa si INFERBENCH_CODE_EXEC=1 está presente en el entorno (opt-in explícito).
-    Devuelve 0.0 sin ejecutar si la variable no está definida.
+    Corre en un subproceso aislado (`python -I`, cwd temporal, timeout) con un SANDBOX
+    (`_SANDBOX_PREAMBLE`: límites de recursos, sin red, sin syscalls destructivas, imports
+    peligrosos bloqueados, `open` restringido al cwd). Activado por defecto; el gating de
+    si se ejecuta o no lo decide el llamador vía `code_exec_enabled()`.
     """
-    if not os.environ.get("INFERBENCH_CODE_EXEC"):
-        return 0.0
     code = _extract_code(output)
     if not code.strip() or not tests:
         return 0.0
     runner = (
-        code + "\n\n__tests = " + repr(list(tests)) + "\n"
+        _SANDBOX_PREAMBLE
+        + "\n" + code + "\n\n__tests = " + repr(list(tests)) + "\n"
         "__p = 0\n"
         "for __t in __tests:\n"
         "    try:\n"
@@ -701,12 +771,23 @@ class BenchmarkRunner:
             # Gating de visión: un prompt con imagen necesita un modelo multimodal (con
             # mmproj) en local. Para APIs lo dejamos pasar (gpt-4o etc. son multimodales).
             can_vision = supports_vision(self.req.engine, get_model(self.req.model))
+            code_exec = code_exec_enabled()
             kept: list[Prompt] = []
             for p in prompts:
                 if p.image and not can_vision:
                     await self.emit({"type": "log", "level": "warn",
                                      "text": f"Prompt '{p.id}' (imagen) omitido: "
                                              f"{self.req.model} no es un modelo de visión"})
+                    continue
+                # Estado honesto: si la ejecución de código está desactivada, OMITIMOS el
+                # prompt de código en vez de puntuarlo 0 (un 0 falso se confundiría con un
+                # fallo del modelo). El default es ON (con sandbox); esto solo aplica si el
+                # usuario puso INFERBENCH_CODE_EXEC=0.
+                if p.code_tests and not code_exec:
+                    await self.emit({"type": "log", "level": "warn",
+                                     "text": f"Prompt '{p.id}' (código) omitido: ejecución de "
+                                             f"código desactivada (INFERBENCH_CODE_EXEC=0). No se "
+                                             f"puntúa como 0 para no confundirlo con un fallo."})
                     continue
                 kept.append(p)
             prompts = kept
@@ -1272,8 +1353,8 @@ class BenchmarkRunner:
             error = "el modelo no generó tokens (¿KV demasiado comprimida para este modelo?)"
             await self.emit({"type": "log", "level": "warn", "text": f"{prompt.id}: {error}"})
 
-        if prompt.code_tests and not os.environ.get("INFERBENCH_NO_CODE_EXEC"):
-            # Ejecuta el código del modelo contra casos reales: mide si FUNCIONA.
+        if prompt.code_tests and code_exec_enabled():
+            # Ejecuta el código del modelo contra casos reales (en sandbox): mide si FUNCIONA.
             quality = await _quality_code(output, prompt.code_tests)
             method = "code-exec"
         elif prompt.keywords:

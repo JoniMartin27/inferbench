@@ -3,9 +3,9 @@
     "id": "reasoning",
     "name": "Razonamiento lógico",
     "type": "reasoning",
-    "system": "Eres un asistente que razona paso a paso. Sé conciso pero riguroso.",
-    "prompt": "Tres amigos comparten un alquiler de 1500€. Ana paga el doble que Bea, y Carlos paga el triple que Bea. ¿Cuánto paga cada uno? Explica el razonamiento.",
-    "target_tokens": 256,
+    "system": "Eres un asistente que razona paso a paso. Sé conciso pero riguroso. Termina SIEMPRE con una línea de resultado final con la cantidad exacta en euros de cada persona, en el formato: 'Resultado: Ana paga X€, Bea paga Y€, Carlos paga Z€'.",
+    "prompt": "Tres amigos comparten un alquiler de 1500€. Ana paga el doble que Bea, y Carlos paga el triple que Bea. ¿Cuánto paga cada uno? Explica el razonamiento brevemente y da el resultado final.",
+    "target_tokens": 512,
     "reference": "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€.",
     "keywords": [["250"], ["500"], ["750"]]
   },

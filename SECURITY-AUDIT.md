@@ -16,7 +16,7 @@ de la cadena de suministro / API local, y ya están corregidos.
 
 | Sev | Fichero | Descripción | Estado |
 |-----|---------|-------------|--------|
-| MEDIUM | `core/binary_manager.py` | Descarga binarios de llama.cpp de GitHub releases con `follow_redirects=True` y luego los ejecuta. Un redirect malicioso podría apuntar fuera de GitHub. | ✅ **Remediado**: los redirects se validan contra una allowlist de hosts (`github.com`, `*.githubusercontent.com`) antes y después de seguir redirects. Verificación de checksum/firma queda en el roadmap. |
+| MEDIUM | `core/binary_manager.py` | Descarga binarios de llama.cpp de GitHub releases con `follow_redirects=True` y luego los ejecuta. Un redirect malicioso podría apuntar fuera de GitHub. | ✅ **Remediado**: los redirects se validan contra una allowlist de hosts (`github.com`, `*.githubusercontent.com`) antes y después de seguir redirects, **y** se verifica el SHA-256 del asset contra el `digest` que publica la API de GitHub (mismatch ⇒ borra y aborta; sin digest ⇒ registra el hash calculado). |
 | MEDIUM | `main.py` | La API local `:7777` (loopback) no tiene auth y puede descargar+ejecutar binarios. Vector CSRF / DNS-rebinding desde un sitio malicioso. | ✅ **Remediado**: middleware que valida la cabecera `Host` y solo acepta hosts loopback (`localhost`/`127.0.0.1`/`::1`), frenando DNS-rebinding. CORS sigue acotado a Vite + `app://.`. |
 
 ## Verificaciones OK (sin hallazgos)
@@ -33,6 +33,6 @@ de la cadena de suministro / API local, y ya están corregidos.
 
 ## Roadmap de hardening
 
-- Verificación de checksum/firma de los binarios descargados (hoy se valida el host).
+- ✅ ~~Verificación de checksum/firma de los binarios descargados~~ — hecho: SHA-256 contra el `digest` de la API de GitHub en `binary_manager._download_zip`.
 - Pin exacto de dependencias Python (hoy usan constraints `>=`).
 - Token local opcional para la API `:7777` (defensa adicional a la de `Host`).

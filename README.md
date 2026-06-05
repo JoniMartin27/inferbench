@@ -86,6 +86,87 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Observabilidad con lookspan** (opt-in): si defines `LOOKSPAN_ENDPOINT`, cada run de benchmark se exporta como un **trace** a [lookspan](https://github.com/JoniMartin27/lookspan) (span raíz + un `llm_call` por prompt con TTFT, tok/s, VRAM y calidad reales). Best-effort: un fallo de red nunca rompe el benchmark
 - **Stop en cualquier momento**: cancela bootstrap, descarga o ejecución
 - **Persistencia**: SQLite con todos los runs (engine, modelo, quant, flags, métricas por prompt, output bruto)
+- **Modo Serve / MCP**: sirve un modelo cuantizado **óptimo** de forma residente y exponlo a cualquier app por **MCP**. Ver [Serve / MCP](#serve--mcp)
+
+---
+
+## Serve / MCP
+
+Además de benchmarkear, InferBench puede **servir** un modelo cuantizado de forma
+**residente** y exponerlo a cualquier app por **MCP** (Model Context Protocol). Reusa la
+misma tubería del benchmark (detección de hardware → optimizador → descarga de GGUF →
+arranque del motor): InferBench actúa de **intermediario que orquesta los modelos**, elige la
+**cuantización óptima** para tu hardware, descarga el GGUF, arranca el motor y enruta la
+inferencia.
+
+```
+Eliges modelo (o "recomendar para mi hardware") → InferBench:
+  ① elige la cuantización óptima para tu GPU (o respeta la que indiques)
+  ② descarga el GGUF que falte desde Hugging Face
+  ③ arranca el motor de forma residente y expone su endpoint OpenAI
+  ④ lo publica como servidor MCP "inferbench" para Claude Desktop / Cursor / etc.
+```
+
+> **v1**: motor `llamacpp` (nativo, siempre disponible) y **un solo modelo servido a la vez**
+> (slot único). La API es agnóstica de motor; otros motores llegarán después.
+
+### Una sola app, dos modos
+
+InferBench es **una app unificada**, no dos. Desde **Ajustes → Modos / Features** activas o
+desactivas cada modo con un toggle:
+
+- **Benchmark** — Dashboard, Motores, Modelos, Benchmark, Historial.
+- **Serve / MCP** — la vista **Serve**.
+
+Ambos vienen **ON** por defecto. Al desactivar un modo, sus ítems desaparecen de la barra
+lateral (la preferencia se guarda en `localStorage`). **Nunca puedes desactivar los dos a la
+vez**: siempre queda al menos uno.
+
+### La vista Serve
+
+1. Elige un modelo del catálogo o pulsa **recomendar para mi hardware**; deja la cuantización
+   en **Auto (óptimo)** o fíjala a mano.
+2. Pulsa **Servir**: InferBench descarga (si hace falta) y arranca el motor, mostrando la
+   **fase** y el **progreso** hasta `ready`, y te da el **endpoint** OpenAI del modelo.
+3. Pruébalo en el **mini-chat** integrado.
+4. Abre **Conectar por MCP** para copiar el snippet de configuración listo para Claude
+   Desktop / Cursor, o la URL HTTP.
+5. **Parar** libera la VRAM.
+
+### Conectar Claude Desktop / Cursor
+
+InferBench expone un servidor MCP llamado **`inferbench`** con dos transportes:
+
+- **stdio** — el cliente lanza el sidecar del backend con el flag `--mcp`. Pega esto en la
+  config de Claude Desktop (`claude_desktop_config.json`) o de Cursor:
+
+  ```json
+  {
+    "mcpServers": {
+      "inferbench": {
+        "command": "C:\\ruta\\a\\inferbench-backend.exe",
+        "args": ["--mcp"]
+      }
+    }
+  }
+  ```
+
+  El panel **Conectar por MCP** de la vista Serve te da el snippet con la ruta real ya
+  rellenada.
+
+- **HTTP** — para clientes que hablan MCP sobre HTTP, apunta a:
+
+  ```
+  http://localhost:7777/mcp
+  ```
+
+> El transporte stdio **no** arranca su propio motor: hace de proxy al backend. Por eso **la
+> app InferBench debe estar abierta** para servir un modelo por MCP. Si no lo está, las tools
+> devuelven un error claro ("InferBench no está abierto…") en vez de fallar.
+
+**Tools MCP**: `list_models`, `recommend_models`, `get_hardware`, `serve_model`,
+`serve_status`, `chat`, `stop_model`. La guía completa (qué hace cada tool, snippets y
+troubleshooting) está en **[docs/MCP.md](docs/MCP.md)**.
 
 ---
 
@@ -220,7 +301,7 @@ Salida en `frontend/release/`:
 ┌──────────────────────────────────────────────────┐
 │  Electron app (React + Tailwind + Recharts)      │
 │   Dashboard · Motores · Modelos · Benchmark      │
-│   Historial (con comparación) · Ajustes          │
+│   Historial (con comparación) · Serve · Ajustes  │
 └──────────────────────┬───────────────────────────┘
                        │ HTTP REST + SSE
 ┌──────────────────────▼───────────────────────────┐
@@ -229,6 +310,7 @@ Salida en `frontend/release/`:
 │   /api/engines/*      · /api/models/*            │
 │   /api/benchmark/*    · /api/history/*           │
 │   /api/optimize       · /api/benchmark/sweep     │
+│   /api/serve/*        · /mcp  (servidor MCP)     │
 └────┬───────────────────────────────────┬─────────┘
      │                                   │
      │ subprocess.Popen                  │ Docker SDK
@@ -375,6 +457,11 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | POST | `/api/benchmark/sweep` | Lanza N runs con quants distintas |
 | GET | `/api/history` | Lista runs |
 | GET | `/api/history/compare/runs?ids=A,B,C` | Detalle multi-run para comparación |
+| POST | `/api/serve/load` | Empieza a servir un modelo residente (no bloquea: arranca en background) |
+| GET | `/api/serve/status` | Estado del slot servido (fase, modelo, quant, endpoint) |
+| POST | `/api/serve/chat` | Proxy de chat al modelo servido |
+| POST | `/api/serve/unload` | Para el motor servido y libera VRAM |
+| — | `/mcp` | Servidor MCP (HTTP streamable) para Claude Desktop / Cursor — ver [docs/MCP.md](docs/MCP.md) |
 
 ---
 
@@ -411,6 +498,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | **Bonus** | **Calidad offline basada en referencia** + **LLM-judge** (local / API) | ✅ |
 | **Bonus** | **KV-cache exacta** desde metadata (`n_head_kv`/`head_dim`, capta GQA/MQA) en 123/124 modelos del catálogo | ✅ |
 | **Bonus** | **Visión real (multimodal)**: descarga `mmproj`, `--mmproj` en llama-server y prompt con imagen real | ✅ |
+| **Bonus** | **Modo Serve / MCP**: sirve un modelo cuantizado óptimo de forma residente y lo expone por MCP (stdio + HTTP) a Claude Desktop / Cursor | ✅ |
 
 ---
 
@@ -425,6 +513,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 ## Documentación complementaria
 
 - [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — visión, arquitectura, schemas de optimización por motor, fórmulas de compatibilidad
+- [docs/MCP.md](docs/MCP.md) — modo Serve / MCP: tools del servidor MCP, transportes stdio/HTTP, config de Claude Desktop / Cursor y troubleshooting
 - [CLAUDE.md](CLAUDE.md) — convenciones de desarrollo y plan de hitos M1–M9
 
 ---

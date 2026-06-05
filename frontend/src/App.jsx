@@ -8,6 +8,7 @@ import {
   Settings,
   Compass,
   Activity,
+  Server,
 } from "lucide-react";
 import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
@@ -22,6 +23,7 @@ const Dashboard = lazy(() => import("./views/Dashboard.jsx"));
 const EnginesView = lazy(() => import("./views/EnginesView.jsx"));
 const ModelsView = lazy(() => import("./views/ModelsView.jsx"));
 const BenchmarkView = lazy(() => import("./views/BenchmarkView.jsx"));
+const ServeView = lazy(() => import("./views/ServeView.jsx"));
 const HistoryView = lazy(() => import("./views/HistoryView.jsx"));
 const SettingsView = lazy(() => import("./views/SettingsView.jsx"));
 
@@ -63,22 +65,41 @@ const NAV_GROUPS = [
   {
     labelKey: "app.nav.workflow",
     items: [
-      { id: "dashboard", labelKey: "app.nav.dashboard", icon: LayoutDashboard, View: Dashboard },
-      { id: "models", labelKey: "app.nav.models", icon: Boxes, View: ModelsView },
-      { id: "engines", labelKey: "app.nav.engines", icon: Cpu, View: EnginesView },
-      { id: "benchmark", labelKey: "app.nav.benchmark", icon: PlayCircle, View: BenchmarkView },
+      { id: "dashboard", labelKey: "app.nav.dashboard", icon: LayoutDashboard, View: Dashboard, mode: "benchmark" },
+      { id: "models", labelKey: "app.nav.models", icon: Boxes, View: ModelsView, mode: "benchmark" },
+      { id: "engines", labelKey: "app.nav.engines", icon: Cpu, View: EnginesView, mode: "benchmark" },
+      { id: "benchmark", labelKey: "app.nav.benchmark", icon: PlayCircle, View: BenchmarkView, mode: "benchmark" },
+      { id: "serve", labelKey: "app.nav.serve", icon: Server, View: ServeView, mode: "serve" },
     ],
   },
   {
     labelKey: "app.nav.data",
     items: [
-      { id: "history", labelKey: "app.nav.history", icon: HistoryIcon, View: HistoryView },
+      { id: "history", labelKey: "app.nav.history", icon: HistoryIcon, View: HistoryView, mode: "benchmark" },
       { id: "settings", labelKey: "app.nav.settings", icon: Settings, View: SettingsView },
     ],
   },
 ];
 
 const ALL_NAV = NAV_GROUPS.flatMap((g) => g.items);
+
+// Modos / Features unificados. Cada ítem de nav declara su `mode`; los que no lo tengan
+// (p.ej. settings) están SIEMPRE visibles. Persistido en localStorage por SettingsView.
+// Default: ambos modos ON. Invariante: nunca ambos OFF (se fuerza en getModes/SettingsView).
+const MODES_KEY = "inferbench:modes";
+
+export function getModes() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MODES_KEY) || "{}");
+    const benchmark = raw.benchmark !== false; // default ON
+    let serve = raw.serve !== false; // default ON
+    // Invariante: al menos un modo activo. Si ambos quedaron OFF, reactiva benchmark.
+    if (!benchmark && !serve) return { benchmark: true, serve: false };
+    return { benchmark, serve };
+  } catch {
+    return { benchmark: true, serve: true };
+  }
+}
 
 export default function App() {
   const t = useT();
@@ -88,8 +109,36 @@ export default function App() {
   const [navPayload, setNavPayload] = useState(null);
   const [health, setHealth] = useState({ status: "checking" });
   const [counts, setCounts] = useState({ history: 0, models: 0, engines: 0 });
+  const [modes, setModes] = useState(getModes);
   // Estado del benchmark a nivel App: sobrevive al cambio de pestaña
   const benchmark = useBenchmarkRun();
+
+  // Re-lee los modos cuando SettingsView los cambia (evento propio, misma pestaña) o
+  // cuando se editan en otra ventana (storage event).
+  useEffect(() => {
+    const sync = () => setModes(getModes());
+    window.addEventListener("inferbench:modes-changed", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("inferbench:modes-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  // Nav visible según los modos activos. Los ítems sin `mode` (settings) siempre se ven.
+  const navGroups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((it) => !it.mode || modes[it.mode]),
+  })).filter((g) => g.items.length > 0);
+  const visibleIds = navGroups.flatMap((g) => g.items.map((it) => it.id));
+
+  // Si la vista activa pertenece a un modo desactivado, salta a la primera visible.
+  useEffect(() => {
+    if (!visibleIds.includes(active)) {
+      setActive(visibleIds[0] || "settings");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modes]);
 
   useEffect(() => {
     localStorage.setItem("inferbench:lastView", active);
@@ -175,8 +224,8 @@ export default function App() {
           </div>
 
           <nav className="flex-1 overflow-y-auto p-2">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mb-3">
+            {navGroups.map((group) => (
+              <div key={group.labelKey} className="mb-3">
                 <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">
                   {t(group.labelKey)}
                 </div>

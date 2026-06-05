@@ -14,7 +14,8 @@ dependencies = [
   "sse-starlette>=2.1",
   "loguru>=0.7",
   "keyring>=25.5",
-  "sqlmodel>=0.0.22"
+  "sqlmodel>=0.0.22",
+  "mcp>=1.2"
 ]
 
 [project.optional-dependencies]

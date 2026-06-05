@@ -5,6 +5,7 @@ from .base import Engine, EngineMeta
 from .llamacpp import LlamaCppEngine
 from .ollama import OllamaEngine
 from .sglang import SglangEngine
+from .stablediffusion import StableDiffusionEngine
 from .tgi import TgiEngine
 from .vllm import VllmEngine
 
@@ -41,6 +42,8 @@ _register(OllamaEngine())
 _register(VllmEngine())
 _register(SglangEngine())
 _register(TgiEngine())
+# Generación de imagen (stable-diffusion.cpp): solo runtime nativo, sin quants de UI.
+_register(StableDiffusionEngine())
 
 
 # Cuantizaciones válidas por motor (fuente única: optimizer.ENGINE_QUANTS). Las publicamos

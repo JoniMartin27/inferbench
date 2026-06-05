@@ -7,6 +7,32 @@ Todos los cambios notables de InferBench. El formato sigue
 ## [Unreleased]
 
 ### Añadido
+- **Generación de imagen** (local): InferBench orquesta también **modelos de imagen** vía
+  **[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)**, reutilizando
+  **el mismo patrón** que con llama.cpp (binario CUDA precompilado de los releases de GitHub +
+  pesos GGUF/safetensors de HuggingFace + server HTTP residente). Vive **dentro del modo
+  Serve** y comparte el **slot único** (una GPU = un modelo a la vez, texto **o** imagen).
+- **Motor `stablediffusion`** (nativo, `sd-server` en el puerto `7861`): se registra como
+  motor local de **imagen**; el `ServeManager` discrimina por **modalidad** del modelo qué
+  binario/instalador/args usar.
+- **Catálogo con modalidad**: el schema `Model` gana el campo `modality`
+  (`"text"` por defecto, `"image"` para difusión) + campos de imagen (`default_steps`,
+  `default_size`) y soporte de **archivos auxiliares** (t5xxl/clip_l/vae para FLUX,
+  generalizando el patrón del `mmproj` de visión). Se añaden al catálogo un modelo single-file
+  garantizado (**SD-Turbo**, `sd-turbo`) como default y **FLUX.1-schnell Q4**
+  (`flux.1-schnell-q4`, multi-archivo) como showcase.
+- **Endpoint REST `POST /api/serve/generate`**: genera una imagen con el modelo de imagen
+  servido (proxy a la API AUTOMATIC1111-compatible `/sdapi/v1/txt2img`); devuelve el PNG como
+  data URL + seed, tamaño, steps y `elapsed_s`. **HTTP 409** si no hay un modelo de imagen en
+  fase `ready`.
+- **Tool MCP `generate_image`**: genera contra el modelo de imagen servido y **devuelve la
+  imagen** (como `ImageContent` del SDK MCP, para que Claude Desktop la **muestre**) + una
+  línea con seed y tiempo.
+- **GenerateCard** en la vista Serve: cuando el modelo servido es de imagen, en vez del
+  mini-chat aparece un panel de generación (prompt, negative prompt, steps, presets de tamaño,
+  seed con botón aleatorio, **preview** de la imagen y badge de tiempo). El selector de modelo
+  agrupa por modalidad y el panel MCP lista también `generate_image`. Documentado en
+  [docs/IMAGE.md](docs/IMAGE.md).
 - **Modo Serve / MCP**: además de benchmarkear, InferBench puede **servir** un modelo
   cuantizado de forma **residente** y exponerlo a cualquier app por **MCP** (Model Context
   Protocol). Reusa la tubería existente (hardware → optimizador → descarga GGUF → arranque del

@@ -340,3 +340,179 @@ def llamacpp_status() -> dict:
         "path": str(exe),
         "dir": str(_llamacpp_dir()),
     }
+
+
+# ---------------------------------------------------------------------------
+# stable-diffusion.cpp (generación de imagen)
+#
+# Mismo patrón que llama.cpp: zip de binarios precompilados de las releases de GitHub +
+# zip cudart aparte con las DLLs del runtime CUDA. La diferencia está en cómo se nombran
+# los assets: sd.cpp usa "sd-master-<hash>-bin-win-cuda12-x64.zip" para CUDA y
+# "sd-master-<hash>-bin-win-avx2-x64.zip" (avx/avx2/avx512/noavx) para CPU — NO hay un
+# asset "win-x64" liso como en llama.cpp.
+# ---------------------------------------------------------------------------
+
+SD_REPO = "leejet/stable-diffusion.cpp"
+# Builds alternativas que nunca queremos (aceleradores que no soportamos aquí).
+_SD_EXCLUDE_TERMS = ["vulkan", "rocm", "hip", "sycl", "kompute"]
+
+
+def _sd_server_exe_name() -> str:
+    return "sd-server.exe" if os.name == "nt" else "sd-server"
+
+
+def _stablediffusion_dir() -> Path:
+    return BIN_ROOT / "stablediffusion"
+
+
+def stablediffusion_binary_path() -> Path:
+    """Dónde estaría el binario `sd-server`, exista o no."""
+    return _stablediffusion_dir() / _sd_server_exe_name()
+
+
+def stablediffusion_installed() -> bool:
+    return stablediffusion_binary_path().exists()
+
+
+def stablediffusion_fully_installed() -> bool:
+    """True si el binario + (cudart si es build CUDA) están presentes."""
+    if not stablediffusion_binary_path().exists():
+        return False
+    terms = _stablediffusion_variant_terms()
+    if any("cuda" in t for t in terms) and not _has_cudart_dlls(_stablediffusion_dir()):
+        return False
+    return True
+
+
+def _stablediffusion_variant_terms() -> list[str]:
+    """Términos requeridos en el nombre del asset de sd.cpp para esta máquina.
+
+    Windows + NVIDIA → build CUDA12. Windows sin NVIDIA → build CPU AVX2 (lo más común en
+    x86-64 moderno). Linux/macOS quedan a la build estándar de su plataforma.
+    """
+    sysname = platform.system()
+    machine = platform.machine().lower()
+
+    if sysname == "Windows":
+        try:
+            from .hardware import detect_hardware
+
+            has_nvidia = any(g.vendor == "nvidia" for g in detect_hardware().gpus)
+        except Exception:
+            has_nvidia = False
+        if has_nvidia:
+            return ["win", "cuda12", "x64"]
+        return ["win", "avx2", "x64"]
+    if sysname == "Darwin":
+        return ["darwin", "arm64" if ("arm" in machine or machine == "aarch64") else "x64"]
+    if sysname == "Linux":
+        return ["linux", "x86_64" if ("x86" in machine or machine == "x86_64") else "x64"]
+    raise RuntimeError(f"OS no soportado para stable-diffusion.cpp: {sysname}")
+
+
+def _match_sd_asset(assets: list[dict], terms: list[str]) -> dict | None:
+    """Asset principal de sd.cpp: incluye todos los términos, excluye builds alternativas
+    y el paquete cudart-only (sin binarios). Si la build CUDA no aparece, cae a CPU AVX2.
+    """
+    excludes = _SD_EXCLUDE_TERMS + ["cudart"]
+    for a in assets:
+        n = a["name"].lower()
+        if not n.endswith(".zip") or any(ex in n for ex in excludes):
+            continue
+        if all(t in n for t in terms):
+            return a
+    # Fallback: si pedíamos CUDA y no hay, intenta la build CPU AVX2 en la misma máquina.
+    if any("cuda" in t for t in terms):
+        cpu_terms = ["win", "avx2", "x64"] if "win" in terms else [t for t in terms
+                                                                    if "cuda" not in t]
+        if cpu_terms != terms:
+            return _match_sd_asset(assets, cpu_terms)
+    return None
+
+
+async def install_stablediffusion(progress: ProgressCb = None,
+                                  cancel_event: asyncio.Event | None = None) -> Path:
+    """Descarga y extrae stable-diffusion.cpp si no existe. Devuelve ruta a `sd-server`.
+
+    Para builds CUDA descarga ADEMÁS el zip cudart con las DLLs del runtime CUDA (igual
+    que llama.cpp). Reutiliza `_download_zip` (SHA-256, anti zip-slip, progreso, reanudación).
+    """
+    target = _stablediffusion_dir()
+    exe = target / _sd_server_exe_name()
+    target.mkdir(parents=True, exist_ok=True)
+    terms = _stablediffusion_variant_terms()
+    is_cuda = any("cuda" in t for t in terms)
+
+    need_main = not exe.exists()
+    need_cudart = is_cuda and not _has_cudart_dlls(target)
+    if not need_main and not need_cudart:
+        return exe
+
+    logger.info(
+        f"Buscando stable-diffusion.cpp release: terms={terms} "
+        f"need_main={need_main} need_cudart={need_cudart}"
+    )
+    if progress:
+        await progress({"phase": "lookup", "message": "Buscando última release de sd.cpp…"})
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True) as client:
+        r = await client.get(
+            f"https://api.github.com/repos/{SD_REPO}/releases/latest",
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        r.raise_for_status()
+        release = r.json()
+        tag = release.get("tag_name", "?")
+        assets = release.get("assets", [])
+
+        main_asset = _match_sd_asset(assets, terms) if need_main else None
+        if need_main and not main_asset:
+            raise RuntimeError(
+                f"No se encontró asset de sd.cpp compatible en release {tag}. Términos: {terms}"
+            )
+
+        cudart_asset = None
+        if need_cudart:
+            ref_name = main_asset["name"] if main_asset else ""
+            cudart_asset = _match_cudart_asset(assets, ref_name)
+            if not cudart_asset:
+                logger.warning("No se encontró cudart de sd.cpp; CUDA podría no inicializarse")
+
+        if main_asset:
+            await _download_zip(client, main_asset, target, progress, "sd-main",
+                                cancel_event=cancel_event)
+        if cudart_asset:
+            await _download_zip(client, cudart_asset, target, progress, "sd-cudart",
+                                cancel_event=cancel_event)
+
+    # Localizar el binario del server (puede quedar anidado en bin/ tras extraer).
+    found = next(target.rglob(_sd_server_exe_name()), None)
+    if not found:
+        contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:30]
+        raise RuntimeError(
+            f"{_sd_server_exe_name()} no encontrado tras extraer sd.cpp. "
+            f"Contenido: {contents or '(vacío)'}"
+        )
+
+    # Aplanar: mover el binario y sus DLLs hermanas al directorio raíz del motor.
+    if found.parent != target:
+        for item in found.parent.iterdir():
+            dest = target / item.name
+            if dest.exists():
+                continue
+            item.rename(dest)
+        found = target / found.name
+
+    if progress:
+        await progress({"phase": "done", "path": str(exe)})
+    return exe
+
+
+def stablediffusion_status() -> dict:
+    """Estado del binario stable-diffusion.cpp."""
+    exe = stablediffusion_binary_path()
+    return {
+        "installed": exe.exists(),
+        "path": str(exe),
+        "dir": str(_stablediffusion_dir()),
+    }

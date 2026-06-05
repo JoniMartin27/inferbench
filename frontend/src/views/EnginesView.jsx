@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Play, Square, RefreshCw, Download } from "lucide-react";
 import { api, installEngine } from "../api";
 import { PageHeader, Card, Button, Badge, Field, Input, Spinner } from "../components/ui.jsx";
+import { useT } from "../i18n/index.jsx";
 
 export default function EnginesView({ dockerDown }) {
+  const t = useT();
   const [engines, setEngines] = useState([]);
   const [busy, setBusy] = useState({});
   const [error, setError] = useState(null);
@@ -116,21 +118,23 @@ export default function EnginesView({ dockerDown }) {
   return (
     <>
       <PageHeader
-        title="Motores"
-        subtitle="Pulsa Arrancar y la app instala lo que falte automáticamente"
+        title={t("engines.header.title")}
+        subtitle={t("engines.header.subtitle")}
         actions={
           <Button variant="ghost" onClick={refresh}>
-            <RefreshCw size={14} /> Refrescar
+            <RefreshCw size={14} /> {t("engines.header.refresh")}
           </Button>
         }
       />
       <div className="space-y-4 p-8">
         <div className="rounded border border-indigo-700/40 bg-indigo-950/20 p-4 text-sm text-indigo-100">
-          <p className="font-semibold">Instalación al primer click.</p>
+          <p className="font-semibold">{t("engines.banner.title")}</p>
           <p className="mt-1 opacity-80">
-            Pulsa <strong>Arrancar</strong> en cualquier motor: si falta el binario nativo (llama.cpp)
-            o la imagen Docker, se descargará automáticamente. Para benchmarks end-to-end (binario +
-            modelo + ejecución en un solo click), usa la pestaña <strong>Benchmark</strong>.
+            {t("engines.banner.bodyBefore")}
+            <strong>{t("engines.banner.bodyStart")}</strong>
+            {t("engines.banner.bodyMid")}
+            <strong>{t("engines.banner.bodyBenchmark")}</strong>
+            {t("engines.banner.bodyAfter")}
           </p>
         </div>
         {error && (
@@ -159,6 +163,7 @@ export default function EnginesView({ dockerDown }) {
 }
 
 function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, installProgress }) {
+  const t = useT();
   const { meta, status, runtimes = [] } = engine;
   const isApi = meta.type === "api";
   const state = isApi ? "api" : status?.state || "missing";
@@ -176,7 +181,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
       actions={
         <div className="flex items-center gap-2">
           <StateBadge state={state} />
-          {meta.optimizable && <Badge tone="indigo">optimizable</Badge>}
+          {meta.optimizable && <Badge tone="indigo">{t("engines.badge.optimizable")}</Badge>}
         </div>
       }
     >
@@ -195,7 +200,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
       {!isApi && (
         <div className="mt-4 grid grid-cols-2 gap-3">
           {meta.runtimes.length > 1 && (
-            <Field label="Runtime">
+            <Field label={t("engines.field.runtime")}>
               <select
                 value={wantedRuntime}
                 onChange={(e) => onForm({ runtime: e.target.value })}
@@ -210,26 +215,26 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
               </select>
             </Field>
           )}
-          <Field label="Ruta del modelo">
+          <Field label={t("engines.field.modelPath")}>
             <Input
-              placeholder="C:/modelos/qwen.Q4_K_M.gguf"
+              placeholder={t("engines.placeholder.modelPath")}
               value={form.model_path || ""}
               onChange={(e) => onForm({ model_path: e.target.value })}
               disabled={isRunning}
             />
           </Field>
-          <Field label="Contexto">
+          <Field label={t("engines.field.context")}>
             <Input
               type="number"
-              placeholder="4096"
+              placeholder={t("engines.placeholder.context")}
               value={form.contextLen || ""}
               onChange={(e) => onForm({ contextLen: e.target.value })}
               disabled={isRunning}
             />
           </Field>
-          <Field label="KV cache">
+          <Field label={t("engines.field.kvCache")}>
             <Input
-              placeholder="f16 / q8_0 / q4_0"
+              placeholder={t("engines.placeholder.kvCache")}
               value={form.kvCache || ""}
               onChange={(e) => onForm({ kvCache: e.target.value })}
               disabled={isRunning}
@@ -262,7 +267,9 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
 
       <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4">
         <div className="text-xs text-slate-500">
-          {meta.default_port ? `Puerto :${meta.default_port}` : "Sin puerto local"}
+          {meta.default_port
+            ? t("engines.port.with", { port: meta.default_port })
+            : t("engines.port.none")}
         </div>
         {!isApi && (
           <div className="flex gap-2">
@@ -270,7 +277,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
               <Button
                 onClick={onStart}
                 disabled={busy || dockerUnready}
-                title={dockerUnready ? "Docker no disponible" : ""}
+                title={dockerUnready ? t("engines.actions.dockerUnavailable") : ""}
               >
                 {busy ? (
                   <Spinner />
@@ -279,11 +286,13 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
                 ) : (
                   <Play size={14} />
                 )}{" "}
-                {nativeNeedsInstall ? "Instalar y arrancar" : "Arrancar"}
+                {nativeNeedsInstall
+                  ? t("engines.actions.installAndStart")
+                  : t("engines.actions.start")}
               </Button>
             ) : (
               <Button variant="danger" onClick={onStop} disabled={busy}>
-                {busy ? <Spinner /> : <Square size={14} />} Detener
+                {busy ? <Spinner /> : <Square size={14} />} {t("engines.actions.stop")}
               </Button>
             )}
           </div>
@@ -294,6 +303,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
 }
 
 function InstallProgress({ evt }) {
+  const t = useT();
   if (!evt) return null;
   const phase = evt.phase || "…";
   const pct = evt.pct;
@@ -301,13 +311,13 @@ function InstallProgress({ evt }) {
     <div className="mt-4 rounded border border-indigo-700/40 bg-indigo-950/20 p-3 text-sm">
       <div className="flex items-center justify-between">
         <span className="text-indigo-200">
-          {phase === "lookup" && "Buscando última release…"}
-          {phase === "download" && `Descargando ${evt.name || ""}`}
-          {phase === "extract" && "Extrayendo…"}
-          {phase === "ready" && "Listo"}
-          {phase === "done" && "Instalación completada"}
-          {phase === "error" && `Error: ${evt.message}`}
-          {phase === "starting" && "Iniciando…"}
+          {phase === "lookup" && t("engines.install.lookup")}
+          {phase === "download" && t("engines.install.download", { name: evt.name || "" })}
+          {phase === "extract" && t("engines.install.extract")}
+          {phase === "ready" && t("engines.install.ready")}
+          {phase === "done" && t("engines.install.done")}
+          {phase === "error" && t("engines.install.error", { message: evt.message })}
+          {phase === "starting" && t("engines.install.starting")}
         </span>
         {pct != null && <span className="text-xs text-slate-400">{pct}%</span>}
       </div>
@@ -321,14 +331,17 @@ function InstallProgress({ evt }) {
 }
 
 function StateBadge({ state }) {
+  const t = useT();
   const map = {
-    running: ["emerald", "running"],
-    missing: ["slate", "missing"],
-    "docker-unavailable": ["amber", "docker off"],
-    exited: ["rose", "exited"],
-    api: ["indigo", "API"],
-    created: ["slate", "created"],
+    running: ["emerald", "engines.state.running"],
+    missing: ["slate", "engines.state.missing"],
+    "docker-unavailable": ["amber", "engines.state.dockerOff"],
+    exited: ["rose", "engines.state.exited"],
+    api: ["indigo", "engines.state.api"],
+    created: ["slate", "engines.state.created"],
   };
-  const [tone, label] = map[state] || ["slate", state];
+  const entry = map[state];
+  const tone = entry ? entry[0] : "slate";
+  const label = entry ? t(entry[1]) : state;
   return <Badge tone={tone}>{label}</Badge>;
 }

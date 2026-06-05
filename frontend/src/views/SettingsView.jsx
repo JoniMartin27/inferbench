@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, humanizeError } from "../api";
-import { PageHeader, Card, Stat, Badge, Button, Input } from "../components/ui.jsx";
+import { PageHeader, Card, Stat, Badge, Button, Input, Field } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
+import { useT } from "../i18n/index.jsx";
+import { LanguageSelector } from "../i18n/LanguageSelector.jsx";
 
 export default function SettingsView() {
+  const t = useT();
   const [hw, setHw] = useState(null);
   const [error, setError] = useState(null);
 
@@ -13,30 +16,44 @@ export default function SettingsView() {
 
   return (
     <>
-      <PageHeader title="Ajustes" subtitle="Hardware detectado y endpoint del backend" />
+      <PageHeader title={t("settings.header.title")} subtitle={t("settings.header.subtitle")} />
       <div className="grid gap-6 p-8 md:grid-cols-2">
-        <Card title="Backend">
+        <Card title={t("settings.appearance.title")} className="md:col-span-2">
+          <Field label={t("settings.language.label")} hint={t("settings.language.hint")}>
+            <LanguageSelector />
+          </Field>
+        </Card>
+
+        <Card title={t("settings.backend.title")}>
           <dl className="text-sm">
-            <Row k="API base" v="http://localhost:7777" />
-            <Row k="DB" v="backend/data/inferbench.sqlite" />
-            <Row k="Frontend dev" v="http://localhost:5173" />
+            <Row k={t("settings.backend.apiBase")} v="http://localhost:7777" />
+            <Row k={t("settings.backend.db")} v="backend/data/inferbench.sqlite" />
+            <Row k={t("settings.backend.frontendDev")} v="http://localhost:5173" />
           </dl>
         </Card>
 
-        <Card title="Hardware">
+        <Card title={t("settings.hardware.title")}>
           {error && <p className="text-rose-300">{error}</p>}
           {hw && (
             <div className="grid grid-cols-2 gap-4">
-              <Stat label="CPU" value={hw.cpu.name} />
-              <Stat label="RAM" value={`${hw.ram_gb} GB`} hint={`${hw.ram_available_gb} GB libres`} />
+              <Stat label={t("settings.hardware.cpu")} value={hw.cpu.name} />
               <Stat
-                label="GPU"
+                label={t("settings.hardware.ram")}
+                value={`${hw.ram_gb} GB`}
+                hint={t("settings.hardware.ramFree", { gb: hw.ram_available_gb })}
+              />
+              <Stat
+                label={t("settings.hardware.gpu")}
                 value={hw.gpus[0]?.name || "—"}
-                hint={hw.gpus[0] ? `${hw.gpus[0].vram_gb} GB VRAM` : "CPU-only"}
+                hint={
+                  hw.gpus[0]
+                    ? t("settings.hardware.vram", { gb: hw.gpus[0].vram_gb })
+                    : t("settings.hardware.cpuOnly")
+                }
                 tone="accent"
               />
               <Stat
-                label="OS"
+                label={t("settings.hardware.os")}
                 value={hw.os}
                 hint={hw.os_version}
               />
@@ -44,8 +61,8 @@ export default function SettingsView() {
           )}
         </Card>
 
-        <Card title="GPUs detectadas" className="md:col-span-2">
-          {!hw?.gpus?.length && <p className="text-slate-500">Ninguna GPU detectada. Modo CPU-only.</p>}
+        <Card title={t("settings.gpus.title")} className="md:col-span-2">
+          {!hw?.gpus?.length && <p className="text-slate-500">{t("settings.gpus.none")}</p>}
           <ul className="space-y-2">
             {hw?.gpus?.map((g, i) => (
               <li
@@ -55,7 +72,7 @@ export default function SettingsView() {
                 <div>
                   <div className="font-medium">{g.name}</div>
                   <div className="text-xs text-slate-500">
-                    {g.vendor} · driver {g.driver || "?"}
+                    {t("settings.gpus.driver", { vendor: g.vendor, driver: g.driver || "?" })}
                   </div>
                 </div>
                 <Badge tone="indigo">{g.vram_gb} GB</Badge>
@@ -78,6 +95,7 @@ const PROVIDERS = [
 ];
 
 function ApiKeysCard() {
+  const t = useT();
   const toast = useToast();
   const [saved, setSaved] = useState({});
   const [inputs, setInputs] = useState({});
@@ -94,9 +112,9 @@ function ApiKeysCard() {
       await api.saveKey(id, key);
       setInputs((s) => ({ ...s, [id]: "" }));
       await refresh();
-      toast.success(`Key de ${id} guardada`);
+      toast.success(t("settings.apiKeys.saved", { provider: id }));
     } catch (e) {
-      toast.error(humanizeError(e, "No se pudo guardar la key"));
+      toast.error(humanizeError(e, t("settings.apiKeys.saveError")));
     }
   };
 
@@ -104,18 +122,15 @@ function ApiKeysCard() {
     try {
       await api.deleteKey(id);
       await refresh();
-      toast.success(`Key de ${id} borrada`);
+      toast.success(t("settings.apiKeys.deleted", { provider: id }));
     } catch (e) {
-      toast.error(humanizeError(e, "No se pudo borrar la key"));
+      toast.error(humanizeError(e, t("settings.apiKeys.deleteError")));
     }
   };
 
   return (
-    <Card title="API keys (cloud)" className="md:col-span-2">
-      <p className="mb-3 text-xs text-slate-500">
-        Se guardan en el gestor de credenciales del sistema (no en disco ni en la base de
-        datos). Una vez guardada, el benchmark la usa automáticamente para ese proveedor.
-      </p>
+    <Card title={t("settings.apiKeys.title")} className="md:col-span-2">
+      <p className="mb-3 text-xs text-slate-500">{t("settings.apiKeys.description")}</p>
       <div className="space-y-2">
         {PROVIDERS.map((p) => (
           <div key={p.id} className="flex items-center gap-2">
@@ -123,22 +138,22 @@ function ApiKeysCard() {
             <Input
               type="password"
               autoComplete="off"
-              placeholder={saved[p.id] ? "•••••••••• (guardada)" : p.ph}
+              placeholder={saved[p.id] ? t("settings.apiKeys.placeholderSaved") : p.ph}
               value={inputs[p.id] || ""}
               onChange={(e) => setInputs((s) => ({ ...s, [p.id]: e.target.value }))}
             />
             <Button size="sm" onClick={() => save(p.id)} disabled={!(inputs[p.id] || "").trim()}>
-              Guardar
+              {t("settings.apiKeys.save")}
             </Button>
             {saved[p.id] ? (
               <>
-                <Badge tone="emerald">guardada</Badge>
+                <Badge tone="emerald">{t("settings.apiKeys.badgeSaved")}</Badge>
                 <Button size="sm" variant="ghost" onClick={() => clear(p.id)}>
-                  Borrar
+                  {t("settings.apiKeys.delete")}
                 </Button>
               </>
             ) : (
-              <Badge tone="slate">sin key</Badge>
+              <Badge tone="slate">{t("settings.apiKeys.badgeNone")}</Badge>
             )}
           </div>
         ))}

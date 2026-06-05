@@ -152,7 +152,7 @@ async def start_sweep(req: SweepRequest) -> dict:
 async def sweep_status(sweep_id: str) -> dict:
     s = _SWEEPS.get(sweep_id)
     if not s:
-        raise HTTPException(404, f"sweep desconocido: {sweep_id}")
+        raise HTTPException(404, f"Unknown sweep: {sweep_id}")
     return s
 
 
@@ -160,7 +160,7 @@ async def sweep_status(sweep_id: str) -> dict:
 async def sweep_stop(sweep_id: str) -> dict:
     s = _SWEEPS.get(sweep_id)
     if not s:
-        raise HTTPException(404, f"sweep desconocido: {sweep_id}")
+        raise HTTPException(404, f"Unknown sweep: {sweep_id}")
     s["cancelled"] = True
     if s.get("current"):
         runner = _RUNNERS.get(s["current"])
@@ -173,7 +173,7 @@ async def sweep_stop(sweep_id: str) -> dict:
 async def stop_run(run_id: str) -> dict:
     runner = _RUNNERS.get(run_id)
     if not runner:
-        raise HTTPException(404, f"run_id desconocido o ya finalizado: {run_id}")
+        raise HTTPException(404, f"Unknown or already finished run_id: {run_id}")
     runner.cancel()
     return {"run_id": run_id, "cancelled": True}
 
@@ -182,7 +182,7 @@ async def stop_run(run_id: str) -> dict:
 async def stream_run(run_id: str) -> EventSourceResponse:
     runner = _RUNNERS.get(run_id)
     if not runner:
-        raise HTTPException(404, f"run_id desconocido: {run_id}")
+        raise HTTPException(404, f"Unknown run_id: {run_id}")
 
     async def event_gen() -> AsyncIterator[dict[str, Any]]:
         try:

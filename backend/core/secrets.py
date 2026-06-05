@@ -14,9 +14,24 @@ _SERVICE = "InferBench"
 PROVIDERS = ("openai", "anthropic", "openrouter", "nvidia")
 
 
+class KeyringUnavailableError(RuntimeError):
+    """El keyring del SO no está disponible (bloqueado, sin backend, etc.)."""
+
+
 def set_key(provider: str, key: str) -> None:
-    """Guarda (o reemplaza) la API key de un proveedor en el keyring del SO."""
-    keyring.set_password(_SERVICE, provider, key)
+    """Guarda (o reemplaza) la API key de un proveedor en el keyring del SO.
+
+    Si el keyring no está disponible (Credential Manager bloqueado, sin Secret Service
+    en Linux headless, etc.) lanza `KeyringUnavailableError` para que la API devuelva un
+    error claro en vez de un 500 opaco. NUNCA caemos a guardar en disco en plano.
+    """
+    try:
+        keyring.set_password(_SERVICE, provider, key)
+    except KeyringError as e:
+        logger.warning(f"keyring set '{provider}': {e}")
+        raise KeyringUnavailableError(
+            "No se pudo acceder al gestor de credenciales del sistema para guardar la key."
+        ) from e
 
 
 def get_key(provider: str) -> str | None:

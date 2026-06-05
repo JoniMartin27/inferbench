@@ -27,16 +27,19 @@ async def list_keys() -> dict[str, bool]:
 @router.post("")
 async def save_key(body: KeyIn) -> dict[str, str]:
     if body.provider not in secrets.PROVIDERS:
-        raise HTTPException(400, f"Proveedor desconocido: {body.provider}")
+        raise HTTPException(400, f"Unknown provider: {body.provider}")
     if not body.key.strip():
-        raise HTTPException(400, "La API key está vacía")
-    secrets.set_key(body.provider, body.key.strip())
+        raise HTTPException(400, "The API key is empty")
+    try:
+        secrets.set_key(body.provider, body.key.strip())
+    except secrets.KeyringUnavailableError as e:
+        raise HTTPException(503, str(e)) from e
     return {"saved": body.provider}
 
 
 @router.delete("/{provider}")
 async def delete_key(provider: str) -> dict[str, str]:
     if provider not in secrets.PROVIDERS:
-        raise HTTPException(400, f"Proveedor desconocido: {provider}")
+        raise HTTPException(400, f"Unknown provider: {provider}")
     secrets.delete_key(provider)
     return {"deleted": provider}

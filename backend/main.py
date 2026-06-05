@@ -1,5 +1,6 @@
 """Entry point del backend FastAPI de InferBench."""
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +23,12 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="InferBench Backend", version="0.1.0", lifespan=lifespan)
+try:
+    __version__ = _pkg_version("inferbench-backend")
+except PackageNotFoundError:  # ejecutado sin instalar el paquete (raro)
+    __version__ = "0.0.0+dev"
+
+app = FastAPI(title="InferBench Backend", version=__version__, lifespan=lifespan)
 
 # Hosts loopback permitidos. La API local puede descargar y ejecutar binarios, así que
 # la protegemos contra DNS-rebinding: un sitio malicioso que rebinde su dominio a
@@ -60,7 +66,7 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     from core.docker_mgr import availability
-    return {"status": "ok", "version": "0.1.0", "docker": availability()}
+    return {"status": "ok", "version": __version__, "docker": availability()}
 
 
 app.include_router(hardware_router)

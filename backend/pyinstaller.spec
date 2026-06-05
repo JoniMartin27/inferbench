@@ -11,7 +11,13 @@
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 ROOT = Path(SPECPATH).resolve()
+
+# Incluye el .dist-info del paquete para que importlib.metadata.version() resuelva la
+# versión en el bundle (si no, main.py caería al fallback "0.0.0+dev").
+_pkg_metadata = copy_metadata("inferbench-backend")
 
 a = Analysis(
     ["main.py"],
@@ -20,6 +26,7 @@ a = Analysis(
     datas=[
         ("data/models.json", "data"),
         ("data/prompts.json", "data"),
+        *_pkg_metadata,
     ],
     hiddenimports=[
         "uvicorn.logging",

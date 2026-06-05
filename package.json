@@ -1,6 +1,6 @@
 {
   "name": "inferbench",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Panel de escritorio multiplataforma para descargar, arrancar y benchmarkear motores de inferencia LLM locales (llama.cpp nativo + APIs cloud) con un solo click.",
   "author": "Jonathan Martin",

@@ -7,6 +7,16 @@ export const settings = {
     appearance: {
       title: "Appearance",
     },
+    modes: {
+      title: "Modes / Features",
+      description:
+        "InferBench is one unified app. Turn modes on or off to show only the views you need. At least one mode must stay on.",
+      benchmark: "Benchmark",
+      benchmarkHint: "Download, launch and benchmark local inference engines.",
+      serve: "Serve / MCP",
+      serveHint: "Serve a model residently and expose it to any app over MCP.",
+      atLeastOne: "At least one mode must stay enabled.",
+    },
     language: {
       label: "Language",
       hint: "English by default; Spanish if your system is set to Spanish.",
@@ -54,6 +64,16 @@ export const settings = {
     },
     appearance: {
       title: "Apariencia",
+    },
+    modes: {
+      title: "Modos / Features",
+      description:
+        "InferBench es una sola app unificada. Activa o desactiva modos para mostrar solo las vistas que necesitas. Al menos un modo debe quedar activo.",
+      benchmark: "Benchmark",
+      benchmarkHint: "Descarga, arranca y benchmarkea motores de inferencia locales.",
+      serve: "Serve / MCP",
+      serveHint: "Sirve un modelo de forma residente y exponlo a cualquier app por MCP.",
+      atLeastOne: "Al menos un modo debe quedar activo.",
     },
     language: {
       label: "Idioma",

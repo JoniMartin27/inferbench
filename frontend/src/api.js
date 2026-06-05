@@ -103,6 +103,15 @@ export const api = {
   sweepStatus: (sweepId) => request(`/api/benchmark/sweep/${sweepId}`),
   stopSweep: (sweepId) =>
     request(`/api/benchmark/sweep/${sweepId}/stop`, { method: "POST" }),
+
+  // Serve / MCP — sirve un modelo de forma residente y lo expone por MCP.
+  // serveLoad arranca el motor en background (no bloquea); la vista hace polling de serveStatus.
+  serveLoad: (body) =>
+    request("/api/serve/load", { method: "POST", body: JSON.stringify(body) }),
+  serveStatus: () => request("/api/serve/status"),
+  serveChat: (body) =>
+    request("/api/serve/chat", { method: "POST", body: JSON.stringify(body) }),
+  serveUnload: () => request("/api/serve/unload", { method: "POST" }),
 };
 
 // Suscripción SSE a un run de benchmark.

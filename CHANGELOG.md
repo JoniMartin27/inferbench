@@ -6,6 +6,26 @@ Todos los cambios notables de InferBench. El formato sigue
 
 ## [Unreleased]
 
+### Añadido
+- **Modo Serve / MCP**: además de benchmarkear, InferBench puede **servir** un modelo
+  cuantizado de forma **residente** y exponerlo a cualquier app por **MCP** (Model Context
+  Protocol). Reusa la tubería existente (hardware → optimizador → descarga GGUF → arranque del
+  motor): elige la cuantización óptima para tu hardware, arranca el motor y enruta la
+  inferencia. v1 soporta el motor `llamacpp` (nativo) y un solo modelo a la vez.
+- **Vista Serve** en la app: elige modelo (o "recomendar para mi hardware") con cuantización
+  **Auto (óptimo)**, sírvelo viendo fase/progreso hasta `ready`, pruébalo en un mini-chat y
+  copia el snippet de **Conectar por MCP** para Claude Desktop / Cursor.
+- **Endpoints REST `/api/serve/*`**: `load` (arranca el motor en background, no bloquea),
+  `status`, `chat` (proxy de chat) y `unload` (libera VRAM).
+- **Servidor MCP `inferbench`** con dos transportes que comparten una sola definición de
+  tools: **HTTP** montado bajo `/mcp` en el backend (`http://localhost:7777/mcp`) y **stdio**
+  vía el flag `--mcp` del sidecar (`inferbench-backend.exe --mcp`) para Claude Desktop /
+  Cursor. Tools: `list_models`, `recommend_models`, `get_hardware`, `serve_model`,
+  `serve_status`, `chat`, `stop_model`. Documentado en [docs/MCP.md](docs/MCP.md).
+- **Modos / Features** en Ajustes: toggles para **Benchmark** y **Serve / MCP** (ambos ON por
+  defecto, persistidos en `localStorage`); el sidebar oculta los ítems del modo desactivado.
+  Es una sola app unificada — nunca se pueden desactivar los dos a la vez.
+
 ## [0.1.1] - 2026-06-05
 
 ### Añadido

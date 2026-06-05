@@ -7,6 +7,7 @@ import { models } from "./views/models.js";
 import { benchmark } from "./views/benchmark.js";
 import { history } from "./views/history.js";
 import { settings } from "./views/settings.js";
+import { serve } from "./views/serve.js";
 
 export const en = {
   guide: guide.en,
@@ -16,6 +17,7 @@ export const en = {
   benchmark: benchmark.en,
   history: history.en,
   settings: settings.en,
+  serve: serve.en,
   common: {
     retry: "Retry",
     loading: "Loading…",
@@ -60,6 +62,7 @@ export const en = {
       models: "Models",
       engines: "Engines",
       benchmark: "Benchmark",
+      serve: "Serve / MCP",
       history: "History",
       settings: "Settings",
     },

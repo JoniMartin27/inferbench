@@ -4,6 +4,9 @@ import { PageHeader, Card, Stat, Badge, Button, Input, Field } from "../componen
 import { useToast } from "../components/toast.jsx";
 import { useT } from "../i18n/index.jsx";
 import { LanguageSelector } from "../i18n/LanguageSelector.jsx";
+import { getModes } from "../App.jsx";
+
+const MODES_KEY = "inferbench:modes";
 
 export default function SettingsView() {
   const t = useT();
@@ -23,6 +26,8 @@ export default function SettingsView() {
             <LanguageSelector />
           </Field>
         </Card>
+
+        <ModesCard />
 
         <Card title={t("settings.backend.title")}>
           <dl className="text-sm">
@@ -159,6 +164,82 @@ function ApiKeysCard() {
         ))}
       </div>
     </Card>
+  );
+}
+
+// Modos / Features unificados: toggles Benchmark y Serve / MCP. Persisten en localStorage
+// (clave "inferbench:modes"). App.jsx oculta del sidebar los ítems del modo desactivado.
+// Invariante: al menos un modo activo (no se puede apagar el último).
+function ModesCard() {
+  const t = useT();
+  const toast = useToast();
+  const [modes, setModes] = useState(getModes);
+
+  const apply = (next) => {
+    setModes(next);
+    try {
+      localStorage.setItem(MODES_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+    // Notifica a App (misma pestaña) para que recalcule el sidebar al instante.
+    window.dispatchEvent(new Event("inferbench:modes-changed"));
+  };
+
+  const toggle = (mode) => {
+    const next = { ...modes, [mode]: !modes[mode] };
+    if (!next.benchmark && !next.serve) {
+      toast.error(t("settings.modes.atLeastOne"));
+      return;
+    }
+    apply(next);
+  };
+
+  return (
+    <Card title={t("settings.modes.title")} className="md:col-span-2">
+      <p className="mb-4 text-xs text-slate-500">{t("settings.modes.description")}</p>
+      <div className="space-y-2">
+        <Toggle
+          label={t("settings.modes.benchmark")}
+          hint={t("settings.modes.benchmarkHint")}
+          on={modes.benchmark}
+          onChange={() => toggle("benchmark")}
+        />
+        <Toggle
+          label={t("settings.modes.serve")}
+          hint={t("settings.modes.serveHint")}
+          on={modes.serve}
+          onChange={() => toggle("serve")}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function Toggle({ label, hint, on, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-800 bg-slate-900/30 px-4 py-3">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-slate-200">{label}</div>
+        {hint && <div className="mt-0.5 text-xs text-slate-500">{hint}</div>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        onClick={onChange}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+          on ? "bg-indigo-500" : "bg-slate-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+            on ? "left-[22px]" : "left-0.5"
+          }`}
+        />
+      </button>
+    </div>
   );
 }
 

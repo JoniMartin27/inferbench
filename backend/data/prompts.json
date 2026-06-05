@@ -1,22 +1,22 @@
 [
   {
     "id": "reasoning",
-    "name": "Razonamiento lógico",
+    "name": "Logical reasoning",
     "type": "reasoning",
-    "system": "Eres un asistente que razona paso a paso. Sé conciso pero riguroso. Termina SIEMPRE con una línea de resultado final con la cantidad exacta en euros de cada persona, en el formato: 'Resultado: Ana paga X€, Bea paga Y€, Carlos paga Z€'.",
-    "prompt": "Tres amigos comparten un alquiler de 1500€. Ana paga el doble que Bea, y Carlos paga el triple que Bea. ¿Cuánto paga cada uno? Explica el razonamiento brevemente y da el resultado final.",
+    "system": "You are an assistant that reasons step by step. Be concise but rigorous. ALWAYS end with a final result line giving the exact amount in euros for each person, in the format: 'Result: Ana pays X€, Bea pays Y€, Carlos pays Z€'.",
+    "prompt": "Three friends share a 1500€ rent. Ana pays twice as much as Bea, and Carlos pays three times as much as Bea. How much does each one pay? Explain the reasoning briefly and give the final result.",
     "target_tokens": 512,
-    "reference": "Bea paga 250€, Ana 500€, Carlos 750€. Total 1500€.",
+    "reference": "Bea pays 250€, Ana 500€, Carlos 750€. Total 1500€.",
     "keywords": [["250"], ["500"], ["750"]]
   },
   {
     "id": "code",
-    "name": "Generación de código",
+    "name": "Code generation",
     "type": "code",
-    "system": "Eres un asistente experto en programación. Usa SOLO la librería estándar de Python (sin dependencias externas) y devuelve el código dentro de un bloque ```python.",
-    "prompt": "Implementa una función `merge_intervals(intervals)` que reciba una lista de tuplas (inicio, fin) y devuelva la lista de intervalos solapados fusionados, ordenados por inicio. Usa solo la librería estándar. Ejemplo: merge_intervals([(1,3),(2,6),(8,10)]) -> [(1,6),(8,10)].",
+    "system": "You are an expert programming assistant. Use ONLY the Python standard library (no external dependencies) and return the code inside a ```python block.",
+    "prompt": "Implement a function `merge_intervals(intervals)` that takes a list of (start, end) tuples and returns the list of merged overlapping intervals, sorted by start. Use only the standard library. Example: merge_intervals([(1,3),(2,6),(8,10)]) -> [(1,6),(8,10)].",
     "target_tokens": 512,
-    "reference": "Ordenar por inicio y fusionar mientras el inicio actual <= fin del anterior.",
+    "reference": "Sort by start and merge while the current start <= the previous end.",
     "code_tests": [
       "assert [tuple(i) for i in merge_intervals([(1,3),(2,6),(8,10),(15,18)])] == [(1,6),(8,10),(15,18)]",
       "assert list(merge_intervals([])) == []",
@@ -27,46 +27,46 @@
   },
   {
     "id": "summary",
-    "name": "Resumen",
+    "name": "Summary",
     "type": "summary",
-    "system": "Eres un asistente que resume textos manteniendo todos los datos clave.",
-    "prompt": "Resume en 5 puntos: La inteligencia artificial generativa ha transformado la industria del software en los últimos años. Los grandes modelos de lenguaje, entrenados con cantidades masivas de datos, son capaces de generar código, traducir entre idiomas, redactar documentos y razonar sobre problemas complejos. Sin embargo, plantean retos sobre privacidad, sesgos en los datos de entrenamiento, consumo energético en los centros de datos, y la necesidad de regulación. Empresas y gobiernos de todo el mundo trabajan en frameworks éticos para su despliegue responsable.",
+    "system": "You are an assistant that summarizes text while keeping all the key facts.",
+    "prompt": "Summarize in 5 points: Generative artificial intelligence has transformed the software industry in recent years. Large language models, trained on massive amounts of data, are capable of generating code, translating between languages, drafting documents and reasoning about complex problems. However, they raise challenges around privacy, bias in the training data, energy consumption in data centers, and the need for regulation. Companies and governments around the world are working on ethical frameworks for their responsible deployment.",
     "target_tokens": 384,
-    "reference": "LLMs generan código, traducen y razonan; retos: privacidad, sesgos, consumo energético y regulación.",
+    "reference": "LLMs generate code, translate and reason; challenges: privacy, bias, energy consumption and regulation.",
     "keywords": [
-      ["privacidad", "privacy"],
-      ["sesgo", "bias"],
-      ["energ", "energy"],
-      ["regula", "regulation"],
-      ["codigo", "code"],
-      ["traduc", "translat"]
+      ["privacy", "privacidad"],
+      ["bias", "sesgo"],
+      ["energy", "energ"],
+      ["regulation", "regula"],
+      ["code", "codigo"],
+      ["translat", "traduc"]
     ]
   },
   {
     "id": "chat",
-    "name": "Conocimiento (planetas)",
+    "name": "Knowledge (planets)",
     "type": "chat",
-    "system": "Eres un asistente conciso y preciso.",
-    "prompt": "Lista los ocho planetas del sistema solar en orden desde el Sol, separados por comas.",
+    "system": "You are a concise and accurate assistant.",
+    "prompt": "List the eight planets of the solar system in order from the Sun, separated by commas.",
     "target_tokens": 128,
-    "reference": "Mercurio, Venus, Tierra, Marte, Júpiter, Saturno, Urano, Neptuno.",
+    "reference": "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.",
     "keywords": [
-      ["mercurio", "mercury"],
+      ["mercury", "mercurio"],
       ["venus"],
-      ["tierra", "earth"],
-      ["marte", "mars"],
+      ["earth", "tierra"],
+      ["mars", "marte"],
       ["jupiter"],
-      ["saturno", "saturn"],
-      ["urano", "uranus"],
-      ["neptuno", "neptune"]
+      ["saturn", "saturno"],
+      ["uranus", "urano"],
+      ["neptune", "neptuno"]
     ]
   },
   {
     "id": "long-context",
-    "name": "Contexto largo (retrieval)",
+    "name": "Long context (retrieval)",
     "type": "long-context",
-    "system": "Lee el texto completo y responde solo con el dato pedido, sin explicaciones.",
-    "prompt": "Pregunta: ¿cuál es el código secreto de acceso del sistema central que aparece en el texto? Responde solo con el código.",
+    "system": "Read the full text and answer only with the requested value, no explanations.",
+    "prompt": "Question: what is the secret access code for the central system that appears in the text? Answer only with the code.",
     "target_tokens": 32,
     "reference": "AZUL-4729",
     "context_file": "context_haystack.txt",
@@ -74,36 +74,36 @@
   },
   {
     "id": "vision-scene",
-    "name": "Visión: escena",
+    "name": "Vision: scene",
     "type": "vision",
-    "system": "Eres un asistente que describe imágenes con precisión.",
-    "prompt": "Describe la imagen: ¿qué figuras geométricas hay, de qué color es cada una, y cuántas son en total?",
+    "system": "You are an assistant that describes images accurately.",
+    "prompt": "Describe the image: what geometric shapes are there, what color is each one, and how many are there in total?",
     "target_tokens": 96,
-    "reference": "Tres figuras: un círculo rojo, un cuadrado azul y un triángulo verde.",
+    "reference": "Three shapes: a red circle, a blue square and a green triangle.",
     "image": "vision_scene.png",
     "keywords": [
-      ["círculo", "circle"],
-      ["cuadrado", "square"],
-      ["triángulo", "triangle"],
-      ["rojo", "red"],
-      ["azul", "blue"],
-      ["verde", "green"],
-      ["3", "tres", "three"]
+      ["circle", "círculo"],
+      ["square", "cuadrado"],
+      ["triangle", "triángulo"],
+      ["red", "rojo"],
+      ["blue", "azul"],
+      ["green", "verde"],
+      ["3", "three", "tres"]
     ]
   },
   {
     "id": "vision-count",
-    "name": "Visión: conteo",
+    "name": "Vision: counting",
     "type": "vision",
-    "system": "Eres un asistente que cuenta objetos en imágenes con precisión.",
-    "prompt": "¿Cuántos círculos hay en la imagen y de qué color son? Responde brevemente.",
+    "system": "You are an assistant that counts objects in images accurately.",
+    "prompt": "How many circles are in the image and what color are they? Answer briefly.",
     "target_tokens": 48,
-    "reference": "Cuatro círculos naranjas.",
+    "reference": "Four orange circles.",
     "image": "vision_count.png",
     "keywords": [
-      ["4", "cuatro", "four"],
-      ["círculo", "circle"],
-      ["naranja", "orange"]
+      ["4", "four", "cuatro"],
+      ["circle", "círculo"],
+      ["orange", "naranja"]
     ]
   }
 ]

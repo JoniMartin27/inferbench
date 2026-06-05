@@ -87,7 +87,7 @@ async def optimize(req: OptimizeRequest) -> OptimizeResponse:
     try:
         registry.get_engine(req.engine)
     except KeyError as e:
-        raise HTTPException(404, f"Motor desconocido: {req.engine}") from e
+        raise HTTPException(404, f"Unknown engine: {req.engine}") from e
     cfg = get_optimal_config(req.engine, req.model_id)
     model = get_model(req.model_id)
     hw_info = detect_hardware()
@@ -173,11 +173,11 @@ async def quants_for_model(
     """
     model = get_model(model_id)
     if model is None:
-        raise HTTPException(404, f"Modelo desconocido: {model_id}")
+        raise HTTPException(404, f"Unknown model: {model_id}")
     try:
         eng = registry.get_engine(engine)
     except KeyError as e:
-        raise HTTPException(404, f"Motor desconocido: {engine}") from e
+        raise HTTPException(404, f"Unknown engine: {engine}") from e
 
     quants = ENGINE_QUANTS.get(engine, [])
     if eng.meta.type == "api":
@@ -249,7 +249,7 @@ async def model_engines(
     """
     model = get_model(model_id)
     if model is None:
-        raise HTTPException(404, f"Modelo desconocido: {model_id}")
+        raise HTTPException(404, f"Unknown model: {model_id}")
 
     hw_info = detect_hardware()
 

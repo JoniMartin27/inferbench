@@ -18,6 +18,11 @@
   <img src="assets/inferbench-demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
 </p>
 
+<p align="center">
+  <img src="assets/screenshot-dashboard.png" alt="Dashboard: hardware detectado y modelos recomendados para tu equipo" width="420">
+  <img src="assets/screenshot-models.png" alt="Catálogo de modelos con compatibilidad por motor y optimización automática" width="420">
+</p>
+
 ---
 
 ¿Quieres correr LLMs en local pero no sabes **qué cuantización te entra en tu GPU**, ni **a cuántos tok/s va a ir**, ni **qué motor es más rápido para tu hardware**? InferBench lo responde por ti, midiendo de verdad — sin números inventados.

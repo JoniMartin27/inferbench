@@ -13,10 +13,12 @@ import {
 import { api, humanizeError } from "../api";
 import { PageHeader, Card, Button, Badge, Stat, Empty } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
+import { useT } from "../i18n/index.jsx";
 
 const PROMPT_ORDER = ["reasoning", "code", "summary", "chat"];
 
 export default function HistoryView({ onNavigate }) {
+  const t = useT();
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -29,7 +31,7 @@ export default function HistoryView({ onNavigate }) {
     api
       .listHistory()
       .then(setRuns)
-      .catch((e) => toast.error(humanizeError(e, "No se pudo cargar el historial")))
+      .catch((e) => toast.error(humanizeError(e, t("history.toast.loadError"))))
       .finally(() => setLoading(false));
   useEffect(() => {
     refresh();
@@ -54,10 +56,10 @@ export default function HistoryView({ onNavigate }) {
     });
     try {
       await api.deleteHistory(id);
-      toast.success("Run eliminada");
+      toast.success(t("history.toast.deleteSuccess"));
     } catch (e) {
       setRuns(prev); // revertir si el backend falla
-      toast.error(humanizeError(e, "No se pudo eliminar la run"));
+      toast.error(humanizeError(e, t("history.toast.deleteError")));
     }
   };
 
@@ -75,34 +77,36 @@ export default function HistoryView({ onNavigate }) {
       const data = await api.compareHistory(Array.from(checked));
       setComparison(data);
     } catch (e) {
-      toast.error(humanizeError(e, "No se pudo comparar las runs"));
+      toast.error(humanizeError(e, t("history.toast.compareError")));
     }
   };
 
   return (
     <>
       <PageHeader
-        title="Historial"
-        subtitle="Selecciona 2 o más runs y compáralas para ver qué configuración rinde mejor"
+        title={t("history.header.title")}
+        subtitle={t("history.header.subtitle")}
         actions={
           <Button onClick={compare} disabled={checked.size < 2}>
-            <GitCompare size={14} /> Comparar ({checked.size})
+            <GitCompare size={14} /> {t("history.header.compare", { count: checked.size })}
           </Button>
         }
       />
       <div className="grid gap-6 p-8 lg:grid-cols-[420px_1fr]">
-        <Card title={`Runs (${runs.length})`}>
+        <Card title={t("history.list.cardTitle", { count: runs.length })}>
           {loading && runs.length === 0 && (
-            <p className="py-2 text-sm text-slate-500">Cargando historial…</p>
+            <p className="py-2 text-sm text-slate-500">{t("history.list.loading")}</p>
           )}
           {!loading && runs.length === 0 && (
             <Empty
               icon={Inbox}
-              title="Aún no has lanzado ninguna suite"
-              body="Configura un motor y un modelo en Benchmark y los resultados aparecerán aquí para compararlos."
+              title={t("history.list.empty.title")}
+              body={t("history.list.empty.body")}
               action={
                 onNavigate && (
-                  <Button onClick={() => onNavigate("benchmark")}>Ir a Benchmark</Button>
+                  <Button onClick={() => onNavigate("benchmark")}>
+                    {t("history.list.empty.action")}
+                  </Button>
                 )
               }
             />
@@ -149,8 +153,8 @@ export default function HistoryView({ onNavigate }) {
                   <button
                     onClick={() => remove(r.id)}
                     className="rounded text-slate-500 transition hover:text-rose-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                    title="Eliminar"
-                    aria-label="Eliminar run"
+                    title={t("history.list.deleteTitle")}
+                    aria-label={t("history.list.deleteAriaLabel")}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -166,9 +170,7 @@ export default function HistoryView({ onNavigate }) {
           )}
           {!detail && !comparison && (
             <Card>
-              <p className="text-sm text-slate-500">
-                Selecciona un run para ver detalle, o marca varios y pulsa "Comparar".
-              </p>
+              <p className="text-sm text-slate-500">{t("history.detail.placeholder")}</p>
             </Card>
           )}
           {detail && !comparison && <RunDetail detail={detail} />}
@@ -179,6 +181,7 @@ export default function HistoryView({ onNavigate }) {
 }
 
 function ComparisonPanel({ data, onClose }) {
+  const t = useT();
   const allPrompts = useMemo(() => {
     const set = new Set();
     data.forEach((d) => d.results.forEach((r) => set.add(r.prompt_id)));
@@ -209,13 +212,13 @@ function ComparisonPanel({ data, onClose }) {
   return (
     <>
       <Card
-        title={`Comparación de ${data.length} runs`}
+        title={t("history.comparison.title", { count: data.length })}
         actions={
           <button
             onClick={onClose}
             className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300"
           >
-            <X size={12} /> cerrar
+            <X size={12} /> {t("history.comparison.close")}
           </button>
         }
       >
@@ -223,16 +226,16 @@ function ComparisonPanel({ data, onClose }) {
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
               <tr className="border-b border-slate-800">
-                <th className="py-2 pr-3">Run</th>
-                <th className="py-2 pr-3">Motor</th>
-                <th className="py-2 pr-3">Modelo</th>
-                <th className="py-2 pr-3">Quant</th>
-                <th className="py-2 pr-3">KV</th>
-                <th className="py-2 pr-3">Ctx</th>
-                <th className="py-2 pr-3">Avg tps</th>
-                <th className="py-2 pr-3">Avg TTFT</th>
-                <th className="py-2 pr-3">Avg quality</th>
-                <th className="py-2 pr-3">VRAM peak</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.run")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.engine")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.model")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.quant")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.kv")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.ctx")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.avgTps")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.avgTtft")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.avgQuality")}</th>
+                <th className="py-2 pr-3">{t("history.comparison.table.vramPeak")}</th>
               </tr>
             </thead>
             <tbody>
@@ -268,10 +271,10 @@ function ComparisonPanel({ data, onClose }) {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <CompareChart title="tok/s por prompt" data={chartData("tps")} keys={labels} palette={palette} />
-        <CompareChart title="TTFT (ms) por prompt" data={chartData("ttft_ms")} keys={labels} palette={palette} />
-        <CompareChart title="Calidad por prompt" data={chartData("quality")} keys={labels} palette={palette} />
-        <CompareChart title="VRAM peak (GB) por prompt" data={chartData("vram_gb")} keys={labels} palette={palette} />
+        <CompareChart title={t("history.comparison.charts.tps")} data={chartData("tps")} keys={labels} palette={palette} />
+        <CompareChart title={t("history.comparison.charts.ttft")} data={chartData("ttft_ms")} keys={labels} palette={palette} />
+        <CompareChart title={t("history.comparison.charts.quality")} data={chartData("quality")} keys={labels} palette={palette} />
+        <CompareChart title={t("history.comparison.charts.vram")} data={chartData("vram_gb")} keys={labels} palette={palette} />
       </div>
     </>
   );
@@ -306,6 +309,7 @@ function CompareChart({ title, data, keys, palette }) {
 }
 
 function RunDetail({ detail }) {
+  const t = useT();
   const { run, results } = detail;
   const opts = safeParse(run.opts_json);
   const ok = results.filter((r) => !r.error);
@@ -313,17 +317,17 @@ function RunDetail({ detail }) {
 
   return (
     <>
-      <Card title={`Run ${run.id}`}>
+      <Card title={t("history.detail.cardTitle", { id: run.id })}>
         <div className="grid grid-cols-4 gap-4">
-          <Stat label="Motor" value={run.engine} tone="accent" />
-          <Stat label="Modelo" value={opts.model || "—"} />
-          <Stat label="Cuantización" value={opts.quant || "—"} tone="accent" />
-          <Stat label="Resultados" value={`${ok.length}/${results.length}`} />
-          <Stat label="TTFT medio" value={`${Math.round(avg("ttft_ms"))} ms`} tone="success" />
-          <Stat label="tok/s medio" value={avg("tps").toFixed(1)} tone="success" />
-          <Stat label="Calidad media" value={avg("quality").toFixed(1)} />
+          <Stat label={t("history.detail.stats.engine")} value={run.engine} tone="accent" />
+          <Stat label={t("history.detail.stats.model")} value={opts.model || "—"} />
+          <Stat label={t("history.detail.stats.quant")} value={opts.quant || "—"} tone="accent" />
+          <Stat label={t("history.detail.stats.results")} value={`${ok.length}/${results.length}`} />
+          <Stat label={t("history.detail.stats.avgTtft")} value={`${Math.round(avg("ttft_ms"))} ms`} tone="success" />
+          <Stat label={t("history.detail.stats.avgTps")} value={avg("tps").toFixed(1)} tone="success" />
+          <Stat label={t("history.detail.stats.avgQuality")} value={avg("quality").toFixed(1)} />
           <Stat
-            label="VRAM peak"
+            label={t("history.detail.stats.vramPeak")}
             value={`${Math.max(...(ok.map((r) => r.vram_gb || 0).concat([0]))).toFixed(2)} GB`}
           />
         </div>
@@ -339,7 +343,7 @@ function RunDetail({ detail }) {
       </Card>
 
       {ok.length > 0 && (
-        <Card title="tok/s por prompt">
+        <Card title={t("history.detail.tpsChartTitle")}>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ok}>
@@ -360,20 +364,20 @@ function RunDetail({ detail }) {
         </Card>
       )}
 
-      <Card title="Resultados detallados">
+      <Card title={t("history.detail.resultsTitle")}>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
               <tr className="border-b border-slate-800">
-                <th className="py-2 pr-3">Modelo</th>
-                <th className="py-2 pr-3">Prompt</th>
-                <th className="py-2 pr-3">TTFT</th>
-                <th className="py-2 pr-3">decode tok/s</th>
-                <th className="py-2 pr-3">prefill tok/s</th>
-                <th className="py-2 pr-3">VRAM</th>
-                <th className="py-2 pr-3">Quality</th>
-                <th className="py-2 pr-3">Tokens</th>
-                <th className="py-2 pr-3">Error</th>
+                <th className="py-2 pr-3">{t("history.detail.table.model")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.prompt")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.ttft")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.decodeTps")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.prefillTps")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.vram")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.quality")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.tokens")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.error")}</th>
               </tr>
             </thead>
             <tbody>

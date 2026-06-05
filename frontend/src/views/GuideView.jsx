@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { PageHeader, Card, Button, Badge } from "../components/ui.jsx";
+import { useT } from "../i18n/index.jsx";
 
 export default function GuideView({ onNavigate }) {
+  const t = useT();
   const [state, setState] = useState({
     hw: null,
     engines: [],
@@ -53,72 +55,75 @@ export default function GuideView({ onNavigate }) {
       id: 1,
       done: hwOk,
       icon: Cpu,
-      title: "Verifica tu hardware",
+      title: t("guide.steps.hw.title"),
       detail: hwOk
-        ? `Detectado: ${hw.cpu.name.split(" ").slice(0, 4).join(" ")} · ${hw.ram_gb}GB RAM · ${
-            hw.gpus[0]?.name || "sin GPU"
-          }${hw.gpus[0] ? ` (${hw.gpus[0].vram_gb}GB VRAM)` : ""}`
-        : "InferBench va a usar tu CPU/GPU/RAM para elegir la mejor configuración",
-      why: "El optimizador y el cálculo de compatibilidad dependen de saber qué máquina tienes.",
-      action: { label: "Ver dashboard", view: "dashboard" },
+        ? t("guide.steps.hw.detail", {
+            cpu: hw.cpu.name.split(" ").slice(0, 4).join(" "),
+            ram: hw.ram_gb,
+            gpu: hw.gpus[0]?.name || t("guide.steps.hw.noGpu"),
+            vram: hw.gpus[0] ? ` (${hw.gpus[0].vram_gb}GB VRAM)` : "",
+          })
+        : t("guide.steps.hw.detailPending"),
+      why: t("guide.steps.hw.why"),
+      action: { label: t("guide.steps.hw.action"), view: "dashboard" },
     },
     {
       id: 2,
       done: enginesReady > 0,
       icon: Layers,
-      title: "Tu motor está listo",
+      title: t("guide.steps.engines.title"),
       detail:
         enginesReady > 0
-          ? `${enginesReady} runtime(s) operativo(s)`
-          : "El primer benchmark descarga llama.cpp automáticamente (~300MB binario + ~390MB cudart si tienes NVIDIA)",
-      why: "llama.cpp corre como proceso nativo, sin Docker. Otros motores (Ollama/vLLM/SGLang/TGI) usan Docker si lo tienes.",
-      action: { label: "Ver motores", view: "engines" },
+          ? t("guide.steps.engines.detail", { count: enginesReady })
+          : t("guide.steps.engines.detailPending"),
+      why: t("guide.steps.engines.why"),
+      action: { label: t("guide.steps.engines.action"), view: "engines" },
     },
     {
       id: 3,
       done: localCount > 0 || runs > 0,
       icon: HardDrive,
-      title: "Modelos disponibles",
+      title: t("guide.steps.models.title"),
       detail:
         localCount > 0
-          ? `${localCount} GGUF(s) detectados en tu disco — InferBench escanea LM Studio, HF cache, llama.cpp y más`
-          : "Catálogo de 124+ modelos verificados (Llama, Qwen, Gemma 3, DeepSeek, visión, código…) listos para auto-descargar desde Hugging Face.",
-      why: "Usa cualquier GGUF que ya tengas o descarga del catálogo. La compatibilidad se calcula en tiempo real con tu hardware (incluido offload MoE y GPU+CPU).",
-      action: { label: "Ver catálogo + locales", view: "models" },
+          ? t("guide.steps.models.detail", { count: localCount })
+          : t("guide.steps.models.detailPending"),
+      why: t("guide.steps.models.why"),
+      action: { label: t("guide.steps.models.action"), view: "models" },
     },
     {
       id: 4,
       done: runs > 0,
       icon: PlayCircle,
-      title: "Lanza tu primer benchmark",
+      title: t("guide.steps.firstBench.title"),
       detail: runs > 0
-        ? `${runs} run(s) ejecutadas`
-        : "Recomendado para empezar: Llama 3.2 1B Q4_K_M (~760MB, completa en ~1 minuto en RTX 3070)",
-      why: "Con 1 click la app baja binario + modelo, arranca el motor con la config óptima y mide TTFT, tok/s, VRAM y calidad para 4 prompts.",
-      action: { label: "Ir a benchmark", view: "benchmark", primary: true },
+        ? t("guide.steps.firstBench.detail", { count: runs })
+        : t("guide.steps.firstBench.detailPending"),
+      why: t("guide.steps.firstBench.why"),
+      action: { label: t("guide.steps.firstBench.action"), view: "benchmark", primary: true },
     },
     {
       id: 5,
       done: sweepRuns > 0,
       icon: Download,
-      title: "Compara cuantizaciones (sweep)",
+      title: t("guide.steps.sweep.title"),
       detail:
         sweepRuns > 0
-          ? `${sweepRuns} run(s) de sweep`
-          : "Marca varias cuantizaciones (p.ej. Q4_K_M, Q5_K_M, Q6_K) y pulsa Sweep — corre todas en cola",
-      why: "Q4 suele ser el sweet spot velocidad/calidad, pero depende del modelo. Sweep responde 'cuál es realmente la mejor para mí'.",
-      action: { label: "Ir a benchmark", view: "benchmark" },
+          ? t("guide.steps.sweep.detail", { count: sweepRuns })
+          : t("guide.steps.sweep.detailPending"),
+      why: t("guide.steps.sweep.why"),
+      action: { label: t("guide.steps.sweep.action"), view: "benchmark" },
     },
     {
       id: 6,
       done: hasRunForCompare,
       icon: GitCompare,
-      title: "Compara resultados",
+      title: t("guide.steps.compare.title"),
       detail: hasRunForCompare
-        ? `${runs} runs guardadas, listas para comparar`
-        : "Cuando tengas 2+ runs, podrás compararlas lado a lado",
-      why: "Tabla resumen + 4 gráficos (tok/s, TTFT, calidad, VRAM peak) por prompt. Te dice qué config rinde mejor para cada tarea.",
-      action: { label: "Ver historial", view: "history", disabled: !hasRunForCompare },
+        ? t("guide.steps.compare.detail", { count: runs })
+        : t("guide.steps.compare.detailPending"),
+      why: t("guide.steps.compare.why"),
+      action: { label: t("guide.steps.compare.action"), view: "history", disabled: !hasRunForCompare },
     },
   ];
 
@@ -128,8 +133,8 @@ export default function GuideView({ onNavigate }) {
   return (
     <>
       <PageHeader
-        title="Guía"
-        subtitle="Sigue el flujo recomendado — cada paso muestra su estado actual"
+        title={t("guide.header.title")}
+        subtitle={t("guide.header.subtitle")}
       />
 
       <div className="space-y-6 p-8">
@@ -137,14 +142,14 @@ export default function GuideView({ onNavigate }) {
         <Card>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-xs uppercase tracking-wider text-slate-500">Progreso</div>
+              <div className="text-xs uppercase tracking-wider text-slate-500">{t("guide.progress.label")}</div>
               <div className="mt-1 text-2xl font-semibold">
-                {completed} / {steps.length} pasos completados
+                {t("guide.progress.completed", { completed, total: steps.length })}
               </div>
             </div>
             <div className="text-right">
               <div className="text-3xl font-semibold text-indigo-300">{progress}%</div>
-              <div className="text-xs text-slate-500">del flujo recomendado</div>
+              <div className="text-xs text-slate-500">{t("guide.progress.ofFlow")}</div>
             </div>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded bg-slate-800">
@@ -155,7 +160,7 @@ export default function GuideView({ onNavigate }) {
           </div>
         </Card>
 
-        {loading && <p className="text-slate-500">Cargando estado…</p>}
+        {loading && <p className="text-slate-500">{t("guide.loading")}</p>}
 
         {!loading && (
           <div className="space-y-4">
@@ -173,6 +178,7 @@ export default function GuideView({ onNavigate }) {
 }
 
 function StepCard({ step, onNavigate }) {
+  const t = useT();
   const Icon = step.icon;
   return (
     <div
@@ -197,7 +203,7 @@ function StepCard({ step, onNavigate }) {
             <div className="flex items-center gap-2">
               <Icon size={16} className="text-indigo-300" />
               <h3 className="font-semibold">{step.title}</h3>
-              {step.done && <Badge tone="emerald">hecho</Badge>}
+              {step.done && <Badge tone="emerald">{t("guide.done")}</Badge>}
             </div>
             <p className="mt-1 text-sm text-slate-300">{step.detail}</p>
             <p className="mt-1 text-xs text-slate-500">{step.why}</p>
@@ -216,40 +222,41 @@ function StepCard({ step, onNavigate }) {
 }
 
 function Tips() {
+  const t = useT();
   const items = [
     {
       icon: Square,
-      title: "Detener en cualquier momento",
-      body: "Durante una corrida verás un botón rojo Detener en Benchmark. Cancela bootstrap, descarga o ejecución sin dejar el motor zombi.",
+      title: t("guide.tips.stop.title"),
+      body: t("guide.tips.stop.body"),
     },
     {
       icon: Boxes,
-      title: "Reuso de motor",
-      body: "Si vas a lanzar varias veces el mismo modelo+cuantización, marca 'No detener motor al terminar' para evitar la carga del modelo en cada run (saltas ~5-10s).",
+      title: t("guide.tips.reuse.title"),
+      body: t("guide.tips.reuse.body"),
     },
     {
       icon: Lightbulb,
-      title: "⚡ Optimizar para tu hardware",
-      body: "En la pestaña Modelos, click en ⚡ junto a cualquier modelo: la app calcula la mejor cuantización + KV cache + contexto + flags para tu GPU automáticamente.",
+      title: t("guide.tips.optimize.title"),
+      body: t("guide.tips.optimize.body"),
     },
     {
       icon: HardDrive,
-      title: "Reusa GGUFs que ya tengas",
-      body: "InferBench detecta modelos de LM Studio, llama.cpp, HuggingFace cache, GPT4All... Si tienes un GGUF en otra carpeta, añádela en Modelos → 'Carpetas escaneadas'.",
+      title: t("guide.tips.reuseGguf.title"),
+      body: t("guide.tips.reuseGguf.body"),
     },
     {
       icon: Layers,
-      title: "Compresión de KV-cache",
-      body: "En Benchmark, despliega '¿Qué hace cada compresión?' para entender cada preset (Calidad→Extremo), y mira la tabla 'Modelos más potentes por compresión': comprimir la KV libera VRAM para cargar modelos más grandes.",
+      title: t("guide.tips.kvCache.title"),
+      body: t("guide.tips.kvCache.body"),
     },
     {
       icon: GitCompare,
-      title: "Evaluación de calidad fiable",
-      body: "La calidad por defecto se mide offline contra la referencia (cualquier PC, sin GPU). Para juicio fiable de tareas abiertas, cambia a LLM-judge (motor local ≥7B o API externa) en Benchmark → Evaluación de calidad.",
+      title: t("guide.tips.quality.title"),
+      body: t("guide.tips.quality.body"),
     },
   ];
   return (
-    <Card title="Tips">
+    <Card title={t("guide.tips.heading")}>
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((t, i) => (
           <div key={i} className="flex gap-3 rounded border border-slate-800 p-3">
@@ -266,30 +273,31 @@ function Tips() {
 }
 
 function Faq() {
+  const t = useT();
   const items = [
     {
-      q: "¿Necesito Docker?",
-      a: "No para llama.cpp — corre nativo. Sí lo necesitas para Ollama, vLLM, SGLang y TGI (en implementación). APIs cloud (OpenAI, Anthropic, OpenRouter, NVIDIA NIM) tampoco requieren Docker.",
+      q: t("guide.faq.docker.q"),
+      a: t("guide.faq.docker.a"),
     },
     {
-      q: "¿Dónde se guardan los modelos descargados?",
-      a: "%APPDATA%\\InferBench\\models\\ en Windows o ~/.inferbench/models/ en Linux/Mac. Una vez descargado, se reusa para futuros benchmarks.",
+      q: t("guide.faq.where.q"),
+      a: t("guide.faq.where.a"),
     },
     {
-      q: "¿Puedo usar mis GGUFs existentes?",
-      a: "Sí. La pestaña Modelos → Locales escanea LM Studio, llama.cpp, HuggingFace cache, GPT4All, Jan.ai y muestra todos con su metadata (arquitectura, capas, contexto, params). Añade carpetas extras desde 'Carpetas escaneadas'.",
+      q: t("guide.faq.existing.q"),
+      a: t("guide.faq.existing.a"),
     },
     {
-      q: "¿Y los modelos MoE como Qwen 3 30B-A3B o Mixtral?",
-      a: "Compatibilidad calculada con --n-cpu-moe (offload de capas MoE a CPU). El optimizador elige automáticamente cuántas capas descargar según tu VRAM. Auto-descarga GGUF para MoE aún pendiente.",
+      q: t("guide.faq.moe.q"),
+      a: t("guide.faq.moe.a"),
     },
     {
-      q: "¿Cómo de fiable es la calidad medida?",
-      a: "Hay tres modos (en Benchmark → Evaluación de calidad). Por defecto: comparación offline con la respuesta de referencia (cobertura de datos clave y números + penalización de texto degenerado), que funciona en cualquier ordenador sin GPU ni API y es buena para tareas con respuesta esperada (razonamiento, código, resumen); en tareas abiertas (chat) es aproximada. Para juicio fiable de tareas abiertas: LLM-judge local (el propio motor puntúa, fiable solo con modelos ≥7-8B) o LLM-judge por API externa (modelo cloud imparcial, lo más fiable). TTFT y tok/s siempre son medidas reales del motor.",
+      q: t("guide.faq.reliable.q"),
+      a: t("guide.faq.reliable.a"),
     },
   ];
   return (
-    <Card title="FAQ">
+    <Card title={t("guide.faq.heading")}>
       <div className="space-y-3">
         {items.map((it, i) => (
           <details key={i} className="rounded border border-slate-800 p-3">

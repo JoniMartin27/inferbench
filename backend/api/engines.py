@@ -106,7 +106,7 @@ async def get_engine(engine_id: str) -> EngineSummary:
     try:
         engine = registry.get_engine(engine_id)
     except KeyError:
-        raise HTTPException(404, f"Motor desconocido: {engine_id}")
+        raise HTTPException(404, f"Unknown engine: {engine_id}")
     return EngineSummary(
         meta=engine.meta,
         status=_engine_status(engine),
@@ -119,9 +119,9 @@ async def start_engine(engine_id: str, req: StartRequest):
     try:
         engine = registry.get_engine(engine_id)
     except KeyError:
-        raise HTTPException(404, f"Motor desconocido: {engine_id}")
+        raise HTTPException(404, f"Unknown engine: {engine_id}")
     if engine.is_api:
-        raise HTTPException(400, f"Motor {engine_id} es API, no se arranca")
+        raise HTTPException(400, f"Engine {engine_id} is an API, it can't be started")
     try:
         return await engine.start(req)
     except docker_mgr.DockerUnavailableError as e:
@@ -138,9 +138,9 @@ async def stop_engine(engine_id: str):
     try:
         engine = registry.get_engine(engine_id)
     except KeyError:
-        raise HTTPException(404, f"Motor desconocido: {engine_id}")
+        raise HTTPException(404, f"Unknown engine: {engine_id}")
     if engine.is_api:
-        raise HTTPException(400, f"Motor {engine_id} es API")
+        raise HTTPException(400, f"Engine {engine_id} is an API")
     try:
         # stop() Docker es bloqueante (hasta ~10s); en un hilo para no congelar el event loop.
         return await asyncio.to_thread(engine.stop)
@@ -152,7 +152,7 @@ async def stop_engine(engine_id: str):
 async def install_engine(engine_id: str) -> EventSourceResponse:
     """Instala (descarga) el binario nativo del motor con progreso SSE."""
     if engine_id != "llamacpp":
-        raise HTTPException(400, f"Sin instalador nativo para {engine_id}")
+        raise HTTPException(400, f"No native installer for {engine_id}")
 
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -187,12 +187,14 @@ async def engine_logs(engine_id: str, tail: int = Query(200, ge=1, le=5_000)) ->
     try:
         registry.get_engine(engine_id)  # valida que el motor existe
     except KeyError:
-        raise HTTPException(404, f"Motor desconocido: {engine_id}")
+        raise HTTPException(404, f"Unknown engine: {engine_id}")
     # Probar logs nativos primero, luego Docker
     text = native_runtime.logs(engine_id, tail=tail)
     if not text:
         try:
             text = docker_mgr.logs(engine_id, tail=tail)
-        except docker_mgr.DockerUnavailableError:
-            pass
+        except docker_mgr.DockerUnavailableError as e:
+            # No es fatal: puede ser un motor nativo sin contenedor, o Docker apagado.
+            # No rompemos la respuesta, pero dejamos rastro en vez de tragarlo en silencio.
+            logger.debug(f"logs de {engine_id}: Docker no disponible ({e})")
     return {"engine": engine_id, "tail": tail, "logs": text}

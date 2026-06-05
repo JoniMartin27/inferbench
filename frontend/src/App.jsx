@@ -13,6 +13,7 @@ import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
 import { ToastProvider } from "./components/toast.jsx";
 import { Spinner } from "./components/ui.jsx";
+import { useT } from "./i18n/index.jsx";
 
 // Vistas cargadas bajo demanda (code-splitting): el chunk pesado de recharts (gráficos de
 // Historial/Benchmark) ya no entra en el bundle inicial → arranque más rápido de la app.
@@ -33,18 +34,19 @@ class ViewErrorBoundary extends Component {
     return { error };
   }
   componentDidCatch(error, info) {
-    console.error("Error al cargar la vista:", error, info);
+    console.error("Failed to load view:", error, info);
   }
   render() {
     if (this.state.error) {
+      const t = this.props.t;
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
-          <p className="text-sm">No se pudo cargar esta vista.</p>
+          <p className="text-sm">{t("app.viewLoadError")}</p>
           <button
             onClick={() => this.setState({ error: null })}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
           >
-            Reintentar
+            {t("common.retry")}
           </button>
         </div>
       );
@@ -55,23 +57,23 @@ class ViewErrorBoundary extends Component {
 
 const NAV_GROUPS = [
   {
-    label: "Empezar",
-    items: [{ id: "guide", label: "Guía", icon: Compass, View: GuideView }],
+    labelKey: "app.nav.start",
+    items: [{ id: "guide", labelKey: "app.nav.guide", icon: Compass, View: GuideView }],
   },
   {
-    label: "Workflow",
+    labelKey: "app.nav.workflow",
     items: [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, View: Dashboard },
-      { id: "models", label: "Modelos", icon: Boxes, View: ModelsView },
-      { id: "engines", label: "Motores", icon: Cpu, View: EnginesView },
-      { id: "benchmark", label: "Benchmark", icon: PlayCircle, View: BenchmarkView },
+      { id: "dashboard", labelKey: "app.nav.dashboard", icon: LayoutDashboard, View: Dashboard },
+      { id: "models", labelKey: "app.nav.models", icon: Boxes, View: ModelsView },
+      { id: "engines", labelKey: "app.nav.engines", icon: Cpu, View: EnginesView },
+      { id: "benchmark", labelKey: "app.nav.benchmark", icon: PlayCircle, View: BenchmarkView },
     ],
   },
   {
-    label: "Datos",
+    labelKey: "app.nav.data",
     items: [
-      { id: "history", label: "Historial", icon: HistoryIcon, View: HistoryView },
-      { id: "settings", label: "Ajustes", icon: Settings, View: SettingsView },
+      { id: "history", labelKey: "app.nav.history", icon: HistoryIcon, View: HistoryView },
+      { id: "settings", labelKey: "app.nav.settings", icon: Settings, View: SettingsView },
     ],
   },
 ];
@@ -79,6 +81,7 @@ const NAV_GROUPS = [
 const ALL_NAV = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function App() {
+  const t = useT();
   const [active, setActive] = useState(() => {
     return localStorage.getItem("inferbench:lastView") || "guide";
   });
@@ -133,8 +136,7 @@ export default function App() {
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
             <span>
-              <strong className="text-slate-300">Docker no disponible</strong> — llama.cpp y
-              Ollama (nativo) funcionan sin Docker
+              <strong className="text-slate-300">{t("app.dockerUnavailable")}</strong> — {t("app.dockerHint")}
             </span>
           </span>
           <a
@@ -143,7 +145,7 @@ export default function App() {
             rel="noreferrer"
             className="rounded border border-slate-700/80 px-2 py-0.5 hover:border-slate-500 hover:text-slate-200"
           >
-            Instalar Docker
+            {t("app.installDocker")}
           </a>
         </div>
       )}
@@ -167,7 +169,7 @@ export default function App() {
                 }`}
               />
               <span className="text-slate-500">
-                backend {health.status === "ok" ? `v${health.version}` : health.status}
+                {t("app.backendStatus")} {health.status === "ok" ? `v${health.version}` : health.status}
               </span>
             </div>
           </div>
@@ -176,9 +178,9 @@ export default function App() {
             {NAV_GROUPS.map((group) => (
               <div key={group.label} className="mb-3">
                 <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">
-                  {group.label}
+                  {t(group.labelKey)}
                 </div>
-                {group.items.map(({ id, label, icon: Icon }) => {
+                {group.items.map(({ id, labelKey, icon: Icon }) => {
                   const isActive = active === id;
                   const isRunning = id === "benchmark" && !!benchmark.running;
                   const badge =
@@ -201,11 +203,11 @@ export default function App() {
                         <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-indigo-400" />
                       )}
                       <Icon size={15} className={isActive ? "text-indigo-300" : ""} />
-                      <span className="flex-1 text-left">{label}</span>
+                      <span className="flex-1 text-left">{t(labelKey)}</span>
                       {isRunning && (
                         <span
                           className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow shadow-emerald-500/50"
-                          title="Benchmark en curso"
+                          title={t("app.benchmarkRunning")}
                         />
                       )}
                       {badge != null && (
@@ -229,13 +231,13 @@ export default function App() {
           <div className="border-t border-slate-800 px-4 py-3 text-[10px] text-slate-600">
             <div className="font-mono">localhost:7777</div>
             <div className="mt-0.5 truncate">
-              {health.docker?.available ? `Docker ${health.docker.version}` : "sin Docker"}
+              {health.docker?.available ? t("app.docker", { version: health.docker.version }) : t("app.noDocker")}
             </div>
           </div>
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-          <ViewErrorBoundary key={active}>
+          <ViewErrorBoundary key={active} t={t}>
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-slate-500">

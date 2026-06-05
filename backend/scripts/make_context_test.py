@@ -2,7 +2,8 @@
 
 Es el "needle in a haystack" para el prompt `long-context`: el modelo debe LEER todo el
 texto y recuperar un código secreto enterrado en el medio. Estresa la ventana de contexto
-(los demás prompts son cortos). Determinista, sin dependencias.
+(los demás prompts son cortos). Determinista, sin dependencias. El cuerpo está en inglés
+(producto english-first); el código secreto AZUL-4729 es un token opaco que el scorer busca.
 
   python scripts/make_context_test.py
 """
@@ -13,11 +14,11 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent.parent / "data" / "context_haystack.txt"
 
 SECTORS = [
-    "norte", "sur", "este", "oeste", "central", "logística", "minería",
-    "textil", "naval", "agrícola", "química", "solar", "eólica", "portuaria",
+    "north", "south", "east", "west", "central", "logistics", "mining",
+    "textile", "naval", "agricultural", "chemical", "solar", "wind", "port",
 ]
-STATUS = ["nominal", "elevada", "reducida", "estable", "moderada", "sostenida"]
-NEEDLE_LINE = 72  # índice 0-based → "Registro 073"
+STATUS = ["nominal", "elevated", "reduced", "stable", "moderate", "sustained"]
+NEEDLE_LINE = 72  # índice 0-based → "Record 073"
 
 
 def main() -> None:
@@ -26,18 +27,18 @@ def main() -> None:
         sector = SECTORS[i % len(SECTORS)]
         status = STATUS[(i * 7) % len(STATUS)]
         lines.append(
-            f"Registro {i:03d}: el sector {sector} reporta actividad {status} en el turno "
-            f"{i % 4 + 1}. Producción dentro de los márgenes previstos y sin incidencias "
-            f"relevantes que destacar para el informe operativo diario de la planta."
+            f"Record {i:03d}: the {sector} sector reports {status} activity on shift "
+            f"{i % 4 + 1}. Output within the expected margins and no notable incidents "
+            f"to flag for the plant's daily operations report."
         )
     # El dato escondido (needle), enterrado a mitad del documento.
     lines[NEEDLE_LINE] = (
-        "Registro 073: ATENCIÓN — el código secreto de acceso del sistema central es "
-        "AZUL-4729. Este dato es confidencial y debe recordarse para la auditoría trimestral."
+        "Record 073: ATTENTION — the secret access code for the central system is "
+        "AZUL-4729. This information is confidential and must be remembered for the quarterly audit."
     )
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
     words = sum(len(line.split()) for line in lines)
-    print(f"Escrito {OUT} ({OUT.stat().st_size} bytes, ~{words} palabras / ~{int(words * 1.4)} tokens)")
+    print(f"Wrote {OUT} ({OUT.stat().st_size} bytes, ~{words} words / ~{int(words * 1.4)} tokens)")
 
 
 if __name__ == "__main__":

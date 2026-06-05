@@ -60,7 +60,7 @@ async def update_search_dirs(body: ExtraDirs) -> dict:
 async def get_one(model_id: str) -> Model:
     m = get_model(model_id)
     if m is None:
-        raise HTTPException(404, f"Modelo desconocido: {model_id}")
+        raise HTTPException(404, f"Unknown model: {model_id}")
     return m
 
 
@@ -75,7 +75,7 @@ async def compat_all(
     try:
         eng = registry.get_engine(engine)
     except KeyError as e:
-        raise HTTPException(404, f"Motor desconocido: {engine}") from e
+        raise HTTPException(404, f"Unknown engine: {engine}") from e
 
     hw_info = detect_hardware()
     hw = compat.HardwareSnapshot(vram_gb=hw_info.primary_vram_gb, ram_gb=hw_info.ram_gb)

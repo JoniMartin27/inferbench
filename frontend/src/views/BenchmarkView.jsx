@@ -3,61 +3,71 @@ import { Play, Square, Image as ImageIcon } from "lucide-react";
 import { api, humanizeError } from "../api";
 import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
+import { useT } from "../i18n/index.jsx";
 
 const ALL_PROMPTS = [
-  { id: "reasoning", label: "Razonamiento" },
-  { id: "code", label: "Código" },
-  { id: "summary", label: "Resumen" },
-  { id: "chat", label: "Conocimiento" },
-  { id: "long-context", label: "Contexto largo" },
-  { id: "vision-scene", label: "Visión: escena", vision: true },
-  { id: "vision-count", label: "Visión: conteo", vision: true },
+  { id: "reasoning", labelKey: "benchmark.prompts.reasoning" },
+  { id: "code", labelKey: "benchmark.prompts.code" },
+  { id: "summary", labelKey: "benchmark.prompts.summary" },
+  { id: "chat", labelKey: "benchmark.prompts.chat" },
+  { id: "long-context", labelKey: "benchmark.prompts.longContext" },
+  { id: "vision-scene", labelKey: "benchmark.prompts.visionScene", vision: true },
+  { id: "vision-count", labelKey: "benchmark.prompts.visionCount", vision: true },
 ];
 const VISION_PROMPT_IDS = ALL_PROMPTS.filter((p) => p.vision).map((p) => p.id);
 
 // Mapea kv_cache del optimizador → preset de compresión del frontend
 const KV_TO_COMPRESSION = { f16: "quality", q8_0: "balanced", q5_0: "compressed", q4_0: "aggressive" };
 
-// Etiquetas legibles para el status de compatibilidad de cada cuantización
-const STATUS_LABEL = { ok: "ok", moe: "MoE", partial: "~RAM", cpu: "solo CPU", disk: "no cabe", fail: "error", nofile: "sin archivo" };
-const statusLabel = (s) => STATUS_LABEL[s] || s;
+// Claves i18n para el status de compatibilidad de cada cuantización
+const STATUS_LABEL = {
+  ok: "benchmark.quantStatus.ok",
+  moe: "benchmark.quantStatus.moe",
+  partial: "benchmark.quantStatus.partial",
+  cpu: "benchmark.quantStatus.cpu",
+  disk: "benchmark.quantStatus.disk",
+  fail: "benchmark.quantStatus.fail",
+  nofile: "benchmark.quantStatus.nofile",
+};
+const statusLabelKey = (s) => STATUS_LABEL[s] || s;
 const isQuantDisabled = (s) => s === "disk" || s === "fail" || s === "nofile";
 
+// Presets de compresión. Los campos de texto guardan CLAVES i18n; el llamador hace t(...).
 const COMPRESSION_PRESETS = [
   {
-    id: "quality", label: "Calidad", kvK: "f16", kvV: "f16", nkvo: false, swaFull: false, factor: 1.0,
-    desc: "Sin compresión KV — máxima precisión.",
-    what: "La KV-cache se guarda en 16 bits (f16), sin comprimir.",
-    affects: "Ocupa el doble de VRAM que q8_0; en contextos largos llena la VRAM rápido.",
-    allows: "La mejor calidad posible. Ideal para modelos pequeños/medianos donde la VRAM sobra.",
+    id: "quality", labelKey: "benchmark.compression.quality.label", kvK: "f16", kvV: "f16", nkvo: false, swaFull: false, factor: 1.0,
+    descKey: "benchmark.compression.quality.desc",
+    whatKey: "benchmark.compression.quality.what",
+    affectsKey: "benchmark.compression.quality.affects",
+    allowsKey: "benchmark.compression.quality.allows",
   },
   {
-    id: "balanced", label: "Equilibrado", kvK: "q8_0", kvV: "q8_0", nkvo: false, swaFull: false, factor: 0.5,
-    desc: "KV q8_0 — 50% menos memoria, calidad casi idéntica.",
-    what: "K y V cuantizados a 8 bits (q8_0).",
-    affects: "Mitad de memoria de KV-cache con pérdida de calidad imperceptible.",
-    allows: "El punto dulce por defecto: más contexto o un modelo algo mayor sin notar degradación.",
+    id: "balanced", labelKey: "benchmark.compression.balanced.label", kvK: "q8_0", kvV: "q8_0", nkvo: false, swaFull: false, factor: 0.5,
+    descKey: "benchmark.compression.balanced.desc",
+    whatKey: "benchmark.compression.balanced.what",
+    affectsKey: "benchmark.compression.balanced.affects",
+    allowsKey: "benchmark.compression.balanced.allows",
   },
   {
-    id: "compressed", label: "Comprimido", kvK: "q8_0", kvV: "iq4_nl", nkvo: false, swaFull: false, factor: 0.38,
-    desc: "K=q8_0 + V=iq4_nl — ~60% menos. Buena para contextos largos.",
-    what: "K en 8 bits (preciso) y V en 4 bits i-quant (iq4_nl, moderno).",
-    affects: "~60% menos KV; la clave (K) sigue precisa, solo el valor (V) se comprime más.",
-    allows: "Contextos largos (16k–32k+) manteniendo buena calidad de respuesta.",
+    id: "compressed", labelKey: "benchmark.compression.compressed.label", kvK: "q8_0", kvV: "iq4_nl", nkvo: false, swaFull: false, factor: 0.38,
+    descKey: "benchmark.compression.compressed.desc",
+    whatKey: "benchmark.compression.compressed.what",
+    affectsKey: "benchmark.compression.compressed.affects",
+    allowsKey: "benchmark.compression.compressed.allows",
   },
   {
-    id: "aggressive", label: "Agresivo", kvK: "q4_0", kvV: "q4_0", nkvo: false, swaFull: false, factor: 0.25,
-    desc: "KV q4_0 — 75% menos memoria. Algo de calidad sacrificada.",
-    what: "K y V cuantizados a 4 bits (q4_0).",
-    affects: "75% menos memoria de KV; se nota algo de pérdida de precisión en contextos muy largos.",
-    allows: "Contextos enormes o cargar un modelo bastante más grande en la misma GPU.",
+    id: "aggressive", labelKey: "benchmark.compression.aggressive.label", kvK: "q4_0", kvV: "q4_0", nkvo: false, swaFull: false, factor: 0.25,
+    descKey: "benchmark.compression.aggressive.desc",
+    whatKey: "benchmark.compression.aggressive.what",
+    affectsKey: "benchmark.compression.aggressive.affects",
+    allowsKey: "benchmark.compression.aggressive.allows",
   },
   {
-    id: "extreme", label: "Extremo", kvK: "q4_0", kvV: "q4_0", nkvo: true, swaFull: false, factor: 0.25,
-    desc: "q4_0 + KV en RAM (no-kv-offload). Libera VRAM al máximo.",
-    what: "KV en 4 bits Y movida a RAM del sistema (--no-kv-offload); la VRAM solo guarda los pesos.",
-    affects: "Libera toda la VRAM que usaría la KV, pero baja los tok/s (la KV viaja por PCIe).",
-    allows: "El modelo más grande posible con los pesos 100% en GPU, delegando la KV a la RAM.",
+    id: "extreme", labelKey: "benchmark.compression.extreme.label", kvK: "q4_0", kvV: "q4_0", nkvo: true, swaFull: false, factor: 0.25,
+    descKey: "benchmark.compression.extreme.desc",
+    whatKey: "benchmark.compression.extreme.what",
+    affectsKey: "benchmark.compression.extreme.affects",
+    allowsKey: "benchmark.compression.extreme.allows",
   },
 ];
 
@@ -80,6 +90,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // al desmontaje de esta vista al cambiar de pestaña.
   const { running, events, results, progress, start: startBench, stop: stopBench, subscribe, log: bLog, clear: bClear } = benchmark;
   const toast = useToast();
+  const t = useT();
 
   // Aplicar config de navegación (desde Dashboard u otras vistas)
   useEffect(() => {
@@ -266,13 +277,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
               }
             : { mode: judgeMode },
         notes: localModel
-          ? `local: ${localModel.filename} · ${compression}`
-          : `compresión: ${compression}`,
+          ? t("benchmark.notes.local", { filename: localModel.filename, compression })
+          : t("benchmark.notes.compression", { compression }),
       });
     } catch (e) {
       // El hook ya logueó el evento, sólo dejamos un fallback por si la API falla antes
       console.error("startBench failed:", e);
-      toast.error(humanizeError(e, "No se pudo lanzar el benchmark"));
+      toast.error(humanizeError(e, t("benchmark.toast.launchFailed")));
     }
   };
 
@@ -294,7 +305,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const startSweep = async () => {
     if (!sweepQuants.length) return;
     bClear();
-    bLog("info", `Sweep: ${sweepQuants.join(", ")}`);
+    bLog("info", t("benchmark.sweep.starting", { quants: sweepQuants.join(", ") }));
     try {
       const base = {
         engine,
@@ -303,15 +314,15 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
         auto: !engineIsApi,
         keep_alive: false,
         api_key: apiKey || null,
-        notes: `sweep ${sweepQuants.join("+")}`,
+        notes: t("benchmark.notes.sweep", { quants: sweepQuants.join("+") }),
       };
       const { sweep_id } = await api.startSweep(base, sweepQuants);
-      bLog("info", `Sweep arrancado: ${sweep_id}`);
+      bLog("info", t("benchmark.sweep.started", { id: sweep_id }));
       sweepCancelRef.current = false; // re-armar para esta corrida
       pollSweep(sweep_id);
     } catch (e) {
       bLog("error", e.message);
-      toast.error(humanizeError(e, "No se pudo lanzar el sweep"));
+      toast.error(humanizeError(e, t("benchmark.toast.sweepFailed")));
     }
   };
 
@@ -327,7 +338,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
           subscribe(lastRunId); // re-suscribe a la nueva sub-corrida; setea running
         }
         if (status.completed || status.cancelled) {
-          bLog("success", `Sweep terminado (${status.runs.length} runs)`);
+          bLog("success", t("benchmark.sweep.finished", { count: status.runs.length }));
           return;
         }
       } catch (e) {
@@ -366,13 +377,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   return (
     <>
       <PageHeader
-        title="Benchmark"
-        subtitle="La app descarga binario + modelo, arranca el motor y ejecuta la suite con un solo click"
+        title={t("benchmark.header.title")}
+        subtitle={t("benchmark.header.subtitle")}
       />
       <div className="grid gap-6 p-8 lg:grid-cols-2">
-        <Card title="Configuración">
+        <Card title={t("benchmark.config.title")}>
           <div className="grid gap-4">
-            <Field label="Motor">
+            <Field label={t("benchmark.fields.engine")}>
               <Select
                 value={engine}
                 onChange={(e) => setEngine(e.target.value)}
@@ -383,7 +394,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                   const runtimeReady = isApi || e.runtimes?.some((r) => r.ready);
                   return (
                     <option key={e.meta.id} value={e.meta.id} disabled={!runtimeReady}>
-                      {e.meta.name} ({e.meta.type}){!runtimeReady ? " · no instalado" : ""}
+                      {e.meta.name} ({e.meta.type}){!runtimeReady ? ` · ${t("benchmark.options.notInstalled")}` : ""}
                     </option>
                   );
                 })}
@@ -398,7 +409,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
               />
             )}
             {localModel ? (
-              <Field label="GGUF local seleccionado">
+              <Field label={t("benchmark.fields.localGguf")}>
                 <div className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -421,13 +432,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       className="text-xs text-slate-500 hover:text-rose-300"
                       disabled={!!running}
                     >
-                      cambiar
+                      {t("benchmark.localGguf.change")}
                     </button>
                   </div>
                 </div>
               </Field>
             ) : (
-              <Field label="Modelo">
+              <Field label={t("benchmark.fields.model")}>
                 <Select
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
@@ -445,14 +456,14 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       : true;
                     return (
                       <option key={m.id} value={m.id} disabled={!compatible}>
-                        {m.name}{!compatible ? " · incompatible" : ""}
+                        {m.name}{!compatible ? ` · ${t("benchmark.options.incompatible")}` : ""}
                       </option>
                     );
                   })}
                 </Select>
                 {!engineIsApi && !modelHasGguf && engine === "llamacpp" && (
                   <p className="mt-1 text-xs text-amber-300">
-                    Este modelo no tiene fuente GGUF. Elige otro o usa Modelos → Locales.
+                    {t("benchmark.model.noGguf")}
                   </p>
                 )}
               </Field>
@@ -460,8 +471,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
             {!engineIsApi && !localModel && engineQuants.length > 0 && (
               <>
                 <Field
-                  label="Cuantización"
-                  hint={loadingQuants ? "Comprobando compatibilidad…" : "Para una sola corrida"}
+                  label={t("benchmark.fields.quant")}
+                  hint={loadingQuants ? t("benchmark.quant.checking") : t("benchmark.quant.singleRun")}
                 >
                   <Select value={quant} onChange={(e) => setQuant(e.target.value)} disabled={!!running}>
                     {engineQuants.map((q) => {
@@ -469,13 +480,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       const disabled = isQuantDisabled(st);
                       return (
                         <option key={q} value={q} disabled={disabled}>
-                          {q}{st ? ` · ${statusLabel(st)}` : ""}
+                          {q}{st ? ` · ${t(statusLabelKey(st))}` : ""}
                         </option>
                       );
                     })}
                   </Select>
                 </Field>
-                <Field label="Sweep" hint="Marca varias para comparar (corre secuencial)">
+                <Field label={t("benchmark.fields.sweep")} hint={t("benchmark.sweep.hint")}>
                   <div className="flex flex-wrap gap-2">
                     {engineQuants.map((q) => {
                       const st = feasibleQuants[q];
@@ -487,7 +498,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                           type="button"
                           onClick={() => !infeasible && toggleSweepQuant(q)}
                           disabled={!!running || infeasible}
-                          title={st ? statusLabel(st) : undefined}
+                          title={st ? t(statusLabelKey(st)) : undefined}
                           className={`rounded-md border px-2 py-1 text-xs transition-opacity ${
                             infeasible
                               ? "cursor-not-allowed border-slate-800 text-slate-600 opacity-40"
@@ -521,8 +532,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
             )}
             {supportsSpec && (
               <Field
-                label="Speculative decoding (DFLASH)"
-                hint="Acelera con un modelo draft block-diffusion. Necesita el modelo DFLASH y VRAM extra"
+                label={t("benchmark.dflash.label")}
+                hint={t("benchmark.dflash.hint")}
               >
                 <label className="mb-2 flex items-center gap-2 text-xs text-slate-300">
                   <input
@@ -532,18 +543,18 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                     disabled={!!running}
                     className="accent-indigo-500"
                   />
-                  Activar DFLASH
+                  {t("benchmark.dflash.enable")}
                 </label>
                 {dflash && (
                   <div className="space-y-2">
                     <Input
-                      placeholder="Modelo draft, ej. z-lab/Qwen3.5-35B-A3B-DFlash"
+                      placeholder={t("benchmark.dflash.draftPlaceholder")}
                       value={dflashDraft}
                       onChange={(e) => setDflashDraft(e.target.value)}
                       disabled={!!running}
                     />
                     <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span>Tokens spec:</span>
+                      <span>{t("benchmark.dflash.specTokens")}</span>
                       <Input
                         type="number"
                         min="1"
@@ -554,15 +565,14 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       />
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      SGLang es la ruta oficial de DFLASH; en vLLM requiere una build con
-                      soporte. Acelera 6-8×, sin pérdida de calidad, si cabe en tu VRAM.
+                      {t("benchmark.dflash.note")}
                     </p>
                   </div>
                 )}
               </Field>
             )}
             {engineIsApi && (
-              <Field label="API key" hint="Vacío = usa la guardada en Ajustes (keyring del SO)">
+              <Field label={t("benchmark.fields.apiKey")} hint={t("benchmark.apiKey.hint")}>
                 <Input
                   type="password"
                   value={apiKey}
@@ -573,12 +583,12 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
               </Field>
             )}
             <Field
-              label="Prompts"
+              label={t("benchmark.fields.prompts")}
               hint={
                 isVisionModel
-                  ? "Modelo de visión: el prompt de imagen está disponible"
+                  ? t("benchmark.prompts.visionHint")
                   : engineIsApi
-                  ? "API multimodal (gpt-4o, claude…): los prompts de imagen también valen"
+                  ? t("benchmark.prompts.apiHint")
                   : undefined
               }
             >
@@ -591,7 +601,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       type="button"
                       onClick={() => togglePrompt(p.id)}
                       disabled={!!running || blocked}
-                      title={blocked ? "Solo modelos de visión (mmproj) o APIs multimodales" : undefined}
+                      title={blocked ? t("benchmark.prompts.blocked") : undefined}
                       className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
                         prompts.includes(p.id)
                           ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
@@ -599,7 +609,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       }`}
                     >
                       {p.vision && <ImageIcon size={11} />}
-                      {p.label}
+                      {t(p.labelKey)}
                     </button>
                   );
                 })}
@@ -620,28 +630,28 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                   onChange={(e) => setKeepAlive(e.target.checked)}
                   disabled={!!running}
                 />
-                No detener el motor al terminar (más rápido si vas a relanzar)
+                {t("benchmark.keepAlive")}
               </label>
             )}
             <div className="flex flex-wrap gap-2 pt-2">
               {!running ? (
                 <>
                   <Button onClick={start} disabled={!model || !prompts.length || !canRun}>
-                    <Play size={14} /> Lanzar benchmark
+                    <Play size={14} /> {t("benchmark.actions.launch")}
                   </Button>
                   {sweepQuants.length > 0 && !engineIsApi && (
                     <Button onClick={startSweep} variant="success" disabled={!model || !canRun}>
-                      <Play size={14} /> Sweep ({sweepQuants.length} quants)
+                      <Play size={14} /> {t("benchmark.actions.sweep", { count: sweepQuants.length })}
                     </Button>
                   )}
                 </>
               ) : (
                 <Button variant="danger" onClick={stop}>
-                  <Square size={14} /> Detener
+                  <Square size={14} /> {t("benchmark.actions.stop")}
                 </Button>
               )}
               {running && (
-                <span className="self-center text-xs text-slate-500">run {running}</span>
+                <span className="self-center text-xs text-slate-500">{t("benchmark.runLabel", { id: running })}</span>
               )}
             </div>
             {!engineIsApi && !running && (
@@ -653,20 +663,20 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
         <RunningPanel events={events} progress={progress} running={!!running} />
 
         {results.length > 0 && (
-          <Card title="Resultados" className="lg:col-span-2">
+          <Card title={t("benchmark.results.title")} className="lg:col-span-2">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
                   <tr className="border-b border-slate-800">
-                    <th className="py-2 pr-3">Prompt</th>
-                    <th className="py-2 pr-3">TTFT</th>
-                    <th className="py-2 pr-3">decode tok/s</th>
-                    <th className="py-2 pr-3">prefill tok/s</th>
-                    <th className="py-2 pr-3">VRAM peak</th>
-                    <th className="py-2 pr-3">RAM peak</th>
-                    <th className="py-2 pr-3">Calidad</th>
-                    <th className="py-2 pr-3">Tokens</th>
-                    <th className="py-2 pr-3">Estado</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colPrompt")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colTtft")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colDecode")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colPrefill")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colVramPeak")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colRamPeak")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colQuality")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colTokens")}</th>
+                    <th className="py-2 pr-3">{t("benchmark.results.colStatus")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -690,7 +700,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       <td className="py-2 pr-3 tabular-nums">{r.quality}</td>
                       <td className="py-2 pr-3 tabular-nums">{r.ctx_used}</td>
                       <td className="py-2 pr-3">
-                        {r.error ? <Badge tone="rose">error</Badge> : <Badge tone="emerald">ok</Badge>}
+                        {r.error ? <Badge tone="rose">{t("benchmark.results.statusError")}</Badge> : <Badge tone="emerald">{t("benchmark.results.statusOk")}</Badge>}
                       </td>
                     </tr>
                   ))}
@@ -713,6 +723,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
 }
 
 function PowerByCompression({ engine, contextLen, selected }) {
+  const t = useT();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -733,24 +744,24 @@ function PowerByCompression({ engine, contextLen, selected }) {
   }, [engine, contextLen]);
 
   return (
-    <Card title="Modelos más potentes por compresión" className="lg:col-span-2">
+    <Card title={t("benchmark.power.title")} className="lg:col-span-2">
       <p className="mb-3 text-xs text-slate-400">
-        Para tu hardware y un contexto de{" "}
-        <span className="font-mono text-slate-300">{contextLen.toLocaleString()}</span> tokens:
-        comprimir la KV-cache libera VRAM y te deja cargar modelos más grandes 100% en la GPU.
+        {t("benchmark.power.intro.before")}{" "}
+        <span className="font-mono text-slate-300">{contextLen.toLocaleString()}</span>{" "}
+        {t("benchmark.power.intro.after")}
       </p>
       {loading && rows.length === 0 ? (
-        <p className="text-sm text-slate-500">Calculando…</p>
+        <p className="text-sm text-slate-500">{t("benchmark.power.calculating")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
               <tr className="border-b border-slate-800">
-                <th className="py-2 pr-3">Compresión</th>
-                <th className="py-2 pr-3">KV</th>
-                <th className="py-2 pr-3">Más potente · 100% GPU</th>
-                <th className="py-2 pr-3">KV-cache</th>
-                <th className="py-2 pr-3">Más grande ejecutable</th>
+                <th className="py-2 pr-3">{t("benchmark.power.colCompression")}</th>
+                <th className="py-2 pr-3">{t("benchmark.power.colKv")}</th>
+                <th className="py-2 pr-3">{t("benchmark.power.colTopFullGpu")}</th>
+                <th className="py-2 pr-3">{t("benchmark.power.colKvCache")}</th>
+                <th className="py-2 pr-3">{t("benchmark.power.colLargestRunnable")}</th>
               </tr>
             </thead>
             <tbody>
@@ -808,38 +819,39 @@ function PowerByCompression({ engine, contextLen, selected }) {
 }
 
 function JudgeField({ mode, onMode, api, onApi, running }) {
+  const t = useT();
   const MODES = [
-    { id: "heuristic", label: "Referencia (offline)", hint: "Cobertura de la respuesta de referencia (datos clave, números) + no-degeneración. Sin GPU/API: funciona en cualquier PC. Aproximado en tareas abiertas (chat)." },
-    { id: "self", label: "LLM-judge (motor local)", hint: "El propio modelo puntúa. Sin coste, pero solo fiable con modelos capaces (≥7-8B); los pequeños (1-3B) colapsan a 0. Juez = modelo evaluado (sesgo)." },
-    { id: "api", label: "LLM-judge (API externa)", hint: "Un modelo cloud OpenAI-compatible (p.ej. gpt-4o-mini) juzga. Lo más fiable e imparcial; requiere API key." },
+    { id: "heuristic", labelKey: "benchmark.judge.heuristic.label", hintKey: "benchmark.judge.heuristic.hint" },
+    { id: "self", labelKey: "benchmark.judge.self.label", hintKey: "benchmark.judge.self.hint" },
+    { id: "api", labelKey: "benchmark.judge.api.label", hintKey: "benchmark.judge.api.hint" },
   ];
   const cur = MODES.find((m) => m.id === mode) || MODES[0];
   return (
-    <Field label="Evaluación de calidad" hint={cur.hint}>
+    <Field label={t("benchmark.judge.fieldLabel")} hint={t(cur.hintKey)}>
       <Select value={mode} onChange={(e) => onMode(e.target.value)} disabled={running}>
         {MODES.map((m) => (
           <option key={m.id} value={m.id}>
-            {m.label}
+            {t(m.labelKey)}
           </option>
         ))}
       </Select>
       {mode === "api" && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           <Input
-            placeholder="base_url (ej. https://api.openai.com)"
+            placeholder={t("benchmark.judge.baseUrlPlaceholder")}
             value={api.base_url}
             onChange={(e) => onApi({ ...api, base_url: e.target.value })}
             disabled={running}
           />
           <Input
-            placeholder="modelo juez (ej. gpt-4o-mini)"
+            placeholder={t("benchmark.judge.modelPlaceholder")}
             value={api.model}
             onChange={(e) => onApi({ ...api, model: e.target.value })}
             disabled={running}
           />
           <Input
             type="password"
-            placeholder="API key del juez"
+            placeholder={t("benchmark.judge.apiKeyPlaceholder")}
             value={api.api_key}
             onChange={(e) => onApi({ ...api, api_key: e.target.value })}
             disabled={running}
@@ -852,6 +864,7 @@ function JudgeField({ mode, onMode, api, onApi, running }) {
 }
 
 function CompressionField({ value, onChange, running, model, localModel, customCtx, onCustomCtx }) {
+  const t = useT();
   const preset = COMPRESSION_PRESETS.find((p) => p.id === value);
   // Estimación de bytes/token de KV cache en función del modelo seleccionado
   // Heurística: kv_per_token_MB(f16) ≈ 0.5 * (params/7)^0.7
@@ -864,8 +877,8 @@ function CompressionField({ value, onChange, running, model, localModel, customC
   return (
     <div className="space-y-2">
       <Field
-        label="Compresión de KV-cache"
-        hint={preset?.desc}
+        label={t("benchmark.compression.fieldLabel")}
+        hint={preset ? t(preset.descKey) : undefined}
       >
         <div className="grid grid-cols-5 gap-1 rounded-md border border-slate-700 bg-slate-900/40 p-1">
           {COMPRESSION_PRESETS.map((p) => (
@@ -874,7 +887,7 @@ function CompressionField({ value, onChange, running, model, localModel, customC
               type="button"
               onClick={() => onChange(p.id)}
               disabled={running}
-              title={`${p.label} — ${p.desc}`}
+              title={`${t(p.labelKey)} — ${t(p.descKey)}`}
               className={`rounded px-2 py-1.5 text-[11px] font-medium transition ${
                 value === p.id
                   ? p.id === "quality"
@@ -889,7 +902,7 @@ function CompressionField({ value, onChange, running, model, localModel, customC
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </div>
@@ -897,7 +910,7 @@ function CompressionField({ value, onChange, running, model, localModel, customC
 
       <details className="rounded-md border border-slate-800 bg-slate-900/30 px-3 py-2">
         <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-wider text-slate-400 hover:text-slate-200">
-          ¿Qué hace cada compresión?
+          {t("benchmark.compression.detailsSummary")}
         </summary>
         <div className="mt-3 space-y-2.5">
           {COMPRESSION_PRESETS.map((p) => (
@@ -908,13 +921,13 @@ function CompressionField({ value, onChange, running, model, localModel, customC
               }`}
             >
               <div className="mb-1 flex items-center gap-2">
-                <span className="font-semibold text-slate-200">{p.label}</span>
+                <span className="font-semibold text-slate-200">{t(p.labelKey)}</span>
                 <Badge tone="slate">K={p.kvK} · V={p.kvV}{p.nkvo ? " · RAM" : ""}</Badge>
               </div>
               <dl className="grid grid-cols-[88px_1fr] gap-x-2 gap-y-0.5 text-slate-400">
-                <dt className="text-slate-500">Qué hace</dt><dd className="text-slate-300">{p.what}</dd>
-                <dt className="text-slate-500">En qué afecta</dt><dd>{p.affects}</dd>
-                <dt className="text-slate-500">Qué permite</dt><dd className="text-emerald-300/90">{p.allows}</dd>
+                <dt className="text-slate-500">{t("benchmark.compression.dtWhat")}</dt><dd className="text-slate-300">{t(p.whatKey)}</dd>
+                <dt className="text-slate-500">{t("benchmark.compression.dtAffects")}</dt><dd>{t(p.affectsKey)}</dd>
+                <dt className="text-slate-500">{t("benchmark.compression.dtAllows")}</dt><dd className="text-emerald-300/90">{t(p.allowsKey)}</dd>
               </dl>
             </div>
           ))}
@@ -923,24 +936,24 @@ function CompressionField({ value, onChange, running, model, localModel, customC
 
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Contexto (override)"
-          hint={`Auto: el optimizador calcula el máximo. Pon un número para forzar.`}
+          label={t("benchmark.context.label")}
+          hint={t("benchmark.context.hint")}
         >
           <Input
             type="number"
-            placeholder="auto"
+            placeholder={t("benchmark.context.placeholder")}
             value={customCtx}
             onChange={(e) => onCustomCtx(e.target.value)}
             disabled={running}
           />
         </Field>
         <div className="flex flex-col justify-end rounded-md border border-slate-800 bg-slate-900/40 p-2 text-xs">
-          <div className="text-slate-500">KV-cache en {ctx.toLocaleString()} tokens</div>
+          <div className="text-slate-500">{t("benchmark.context.kvAt", { tokens: ctx.toLocaleString() })}</div>
           <div className="mt-0.5 font-mono text-sm text-slate-200">
             ≈ {kvAtCtxMb < 1024 ? `${kvAtCtxMb.toFixed(0)} MB` : `${(kvAtCtxMb / 1024).toFixed(2)} GB`}
           </div>
           <div className="mt-0.5 text-[10px] text-slate-500">
-            K={preset?.kvK} · V={preset?.kvV}{preset?.nkvo ? " · en RAM" : ""}
+            K={preset?.kvK} · V={preset?.kvV}{preset?.nkvo ? ` · ${t("benchmark.context.inRam")}` : ""}
           </div>
         </div>
       </div>
@@ -949,14 +962,14 @@ function CompressionField({ value, onChange, running, model, localModel, customC
 }
 
 function EngineHint({ engine, selectedEngine, selectedModel }) {
+  const t = useT();
   const nativeRt = selectedEngine?.runtimes?.find((r) => r.runtime === "native");
   const dockerRt = selectedEngine?.runtimes?.find((r) => r.runtime === "docker");
 
   if (engine === "llamacpp") {
     return (
       <p className="text-xs text-slate-500">
-        Si es la primera vez: descarga binario llama.cpp (~300MB + cudart si hay NVIDIA) + el GGUF
-        del modelo. Cacheado en <code>%APPDATA%\InferBench\</code>.
+        {t("benchmark.engineHint.llamacpp.before")} <code>%APPDATA%\InferBench\</code>{t("benchmark.engineHint.llamacpp.after")}
       </p>
     );
   }
@@ -964,9 +977,9 @@ function EngineHint({ engine, selectedEngine, selectedModel }) {
     if (nativeRt && !nativeRt.ready) {
       return (
         <div className="rounded border border-amber-700/40 bg-amber-950/30 p-3 text-xs text-amber-100">
-          <p className="font-semibold">Ollama no instalado.</p>
+          <p className="font-semibold">{t("benchmark.engineHint.ollama.notInstalledTitle")}</p>
           <p className="mt-1 opacity-80">
-            Descárgalo (~700MB) e instálalo, después vuelve y la app detectará el binario:
+            {t("benchmark.engineHint.ollama.notInstalledBody")}
           </p>
           {nativeRt.install_url && (
             <a
@@ -975,7 +988,7 @@ function EngineHint({ engine, selectedEngine, selectedModel }) {
               rel="noreferrer"
               className="mt-2 inline-block rounded border border-amber-600/60 px-2 py-0.5 hover:bg-amber-900/40"
             >
-              Descargar Ollama →
+              {t("benchmark.engineHint.ollama.downloadCta")}
             </a>
           )}
         </div>
@@ -983,9 +996,9 @@ function EngineHint({ engine, selectedEngine, selectedModel }) {
     }
     return (
       <p className="text-xs text-slate-500">
-        Ollama listo. La app pulleará{" "}
-        <code className="text-slate-300">{selectedModel?.ollama_tag || "el modelo"}</code> desde el
-        registro de Ollama si no lo tienes ya.
+        {t("benchmark.engineHint.ollama.readyBefore")}{" "}
+        <code className="text-slate-300">{selectedModel?.ollama_tag || t("benchmark.engineHint.ollama.theModel")}</code>{" "}
+        {t("benchmark.engineHint.ollama.readyAfter")}
       </p>
     );
   }
@@ -993,17 +1006,16 @@ function EngineHint({ engine, selectedEngine, selectedModel }) {
     if (dockerRt && !dockerRt.ready) {
       return (
         <div className="rounded border border-amber-700/40 bg-amber-950/30 p-3 text-xs text-amber-100">
-          <p className="font-semibold">Docker requerido para {engine}.</p>
+          <p className="font-semibold">{t("benchmark.engineHint.docker.requiredTitle", { engine })}</p>
           <p className="mt-1 opacity-80">
-            Arranca Docker Desktop. {engine} corre en GPU NVIDIA dentro del contenedor.
+            {t("benchmark.engineHint.docker.requiredBody", { engine })}
           </p>
         </div>
       );
     }
     return (
       <p className="text-xs text-slate-500">
-        Primera vez: pull de la imagen Docker (~6GB para vLLM/SGLang/TGI) + descarga del modelo HF
-        dentro del contenedor. Puede tardar varios minutos.
+        {t("benchmark.engineHint.docker.firstRun")}
       </p>
     );
   }
@@ -1025,10 +1037,11 @@ const SCORE_BAR_COLOR = (score) =>
   score >= 0.8 ? "bg-emerald-500" : score >= 0.5 ? "bg-amber-500" : score > 0 ? "bg-slate-500" : "bg-rose-900";
 
 function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
+  const t = useT();
   if (loading && recs.length === 0) {
     return (
       <div className="rounded border border-slate-800 bg-slate-900/30 p-2 text-center text-xs text-slate-500">
-        Comprobando motores…
+        {t("benchmark.engineMatrix.checking")}
       </div>
     );
   }
@@ -1041,18 +1054,18 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
     <div className="overflow-hidden rounded border border-slate-800 bg-slate-900/30">
       <div className="flex items-center justify-between border-b border-slate-800 px-3 py-1.5">
         <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-          Motores para este modelo
+          {t("benchmark.engineMatrix.title")}
         </span>
-        {loading && <span className="text-[10px] text-slate-600">actualizando…</span>}
+        {loading && <span className="text-[10px] text-slate-600">{t("benchmark.engineMatrix.updating")}</span>}
       </div>
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-slate-800/60 text-left text-[10px] uppercase tracking-wider text-slate-600">
-            <th className="px-3 py-1.5">Motor</th>
-            <th className="px-2 py-1.5">Mejor quant</th>
-            <th className="px-2 py-1.5">Fuente</th>
-            <th className="px-2 py-1.5">Runtime</th>
-            <th className="px-3 py-1.5">Score</th>
+            <th className="px-3 py-1.5">{t("benchmark.engineMatrix.colEngine")}</th>
+            <th className="px-2 py-1.5">{t("benchmark.engineMatrix.colBestQuant")}</th>
+            <th className="px-2 py-1.5">{t("benchmark.engineMatrix.colSource")}</th>
+            <th className="px-2 py-1.5">{t("benchmark.engineMatrix.colRuntime")}</th>
+            <th className="px-3 py-1.5">{t("benchmark.engineMatrix.colScore")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1065,12 +1078,12 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
                 onClick={() => clickable && onSelect(r.engine_id)}
                 title={
                   !r.model_available
-                    ? "Modelo no disponible en este origen"
+                    ? t("benchmark.engineMatrix.titleModelUnavailable")
                     : !r.runtime_ready
-                    ? "Runtime no instalado"
+                    ? t("benchmark.engineMatrix.titleRuntimeMissing")
                     : !r.feasible
-                    ? "No cabe en el hardware"
-                    : "Click para seleccionar este motor"
+                    ? t("benchmark.engineMatrix.titleWontFit")
+                    : t("benchmark.engineMatrix.titleClickSelect")
                 }
                 className={`border-b border-slate-800/40 transition-colors last:border-0 ${
                   isSelected
@@ -1096,11 +1109,11 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
                 </td>
                 <td className="px-2 py-1.5">
                   {r.type === "api" ? (
-                    <span className="text-indigo-400">cloud</span>
+                    <span className="text-indigo-400">{t("benchmark.engineMatrix.cloud")}</span>
                   ) : r.runtime_ready ? (
-                    <span className="text-emerald-400">listo</span>
+                    <span className="text-emerald-400">{t("benchmark.engineMatrix.ready")}</span>
                   ) : (
-                    <span className="text-amber-500">no instalado</span>
+                    <span className="text-amber-500">{t("benchmark.engineMatrix.notInstalled")}</span>
                   )}
                 </td>
                 <td className="px-3 py-1.5">
@@ -1126,13 +1139,14 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
 }
 
 function RunningPanel({ events, progress, running }) {
+  const t = useT();
   const logRef = useRef(null);
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [events]);
 
   return (
-    <Card title="Ejecución">
+    <Card title={t("benchmark.running.title")}>
       <BootstrapProgress progress={progress} />
       <TokensProgress progress={progress} />
 
@@ -1142,7 +1156,7 @@ function RunningPanel({ events, progress, running }) {
       >
         {events.length === 0 && (
           <p className="text-slate-600">
-            {running ? "Esperando eventos…" : "Configura y pulsa Lanzar benchmark."}
+            {running ? t("benchmark.running.waiting") : t("benchmark.running.idle")}
           </p>
         )}
         {events.map((e, i) => (
@@ -1154,20 +1168,21 @@ function RunningPanel({ events, progress, running }) {
 }
 
 function BootstrapProgress({ progress }) {
+  const t = useT();
   if (progress.kind === "engine.install") {
     return (
-      <PhasePanel label="Descargando binario llama.cpp" progress={progress} color="indigo" />
+      <PhasePanel label={t("benchmark.bootstrap.downloadingBinary")} progress={progress} color="indigo" />
     );
   }
   if (progress.kind === "model.download") {
     return (
-      <PhasePanel label={`Descargando ${progress.name || "GGUF"}`} progress={progress} color="purple" />
+      <PhasePanel label={t("benchmark.bootstrap.downloadingModel", { name: progress.name || "GGUF" })} progress={progress} color="purple" />
     );
   }
   if (progress.kind === "engine.ready") {
     return (
       <div className="rounded border border-emerald-700/40 bg-emerald-950/30 p-3 text-sm text-emerald-200">
-        ✓ Motor listo
+        {t("benchmark.bootstrap.engineReady")}
       </div>
     );
   }
@@ -1202,15 +1217,16 @@ function PhasePanel({ label, progress, color }) {
 }
 
 function TokensProgress({ progress }) {
+  const t = useT();
   if (progress.kind !== "tokens") return null;
   const pct = progress.target ? Math.min(100, (progress.current / progress.target) * 100) : 0;
   return (
     <div>
       <div className="grid grid-cols-3 gap-4 pb-3">
-        <Stat label="TTFT" value={progress.ttft != null ? `${progress.ttft} ms` : "—"} tone="accent" />
-        <Stat label="tok/s actual" value={progress.tps || "—"} tone="success" />
+        <Stat label={t("benchmark.tokens.ttft")} value={progress.ttft != null ? `${progress.ttft} ms` : "—"} tone="accent" />
+        <Stat label={t("benchmark.tokens.tps")} value={progress.tps || "—"} tone="success" />
         <Stat
-          label="Progreso"
+          label={t("benchmark.tokens.progress")}
           value={progress.target ? `${progress.current}/${progress.target}` : "—"}
         />
       </div>

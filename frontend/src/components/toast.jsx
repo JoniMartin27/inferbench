@@ -6,6 +6,7 @@
 //   toast("Mensaje neutro", { title: "Info", ttl: 5000 });
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
+import { useT } from "../i18n/index.jsx";
 
 const ToastCtx = createContext(() => {});
 
@@ -20,6 +21,7 @@ const TONES = {
 };
 
 export function ToastProvider({ children }) {
+  const tr = useT();
   const [toasts, setToasts] = useState([]);
   const idRef = useRef(0);
 
@@ -70,7 +72,7 @@ export function ToastProvider({ children }) {
               </div>
               <button
                 onClick={() => dismiss(t.id)}
-                aria-label="Cerrar notificación"
+                aria-label={tr("common.closeNotification")}
                 className="shrink-0 rounded text-slate-500 transition hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
               >
                 <X size={13} />

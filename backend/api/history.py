@@ -43,7 +43,7 @@ async def get_run(run_id: str) -> RunDetail:
     with get_session() as s:
         run = s.get(BenchmarkRun, run_id)
         if not run:
-            raise HTTPException(404, f"run desconocida: {run_id}")
+            raise HTTPException(404, f"Unknown run: {run_id}")
         results = list(s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all())
         return RunDetail(run=run, results=results)
 
@@ -53,7 +53,7 @@ async def delete_run(run_id: str) -> dict[str, str]:
     with get_session() as s:
         run = s.get(BenchmarkRun, run_id)
         if not run:
-            raise HTTPException(404, f"run desconocida: {run_id}")
+            raise HTTPException(404, f"Unknown run: {run_id}")
         results = list(s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all())
         for r in results:
             s.delete(r)

@@ -7,6 +7,7 @@ y devuelve la ruta a `llama-server[.exe]`.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import platform
 import re
@@ -26,6 +27,18 @@ _TRUSTED_DL_HOSTS = ("github.com", "githubusercontent.com")
 def _is_trusted_dl_host(url: str) -> bool:
     host = (urlparse(url).hostname or "").lower()
     return any(host == h or host.endswith("." + h) for h in _TRUSTED_DL_HOSTS)
+
+
+def _parse_sha256_digest(digest: str | None) -> str | None:
+    """Normaliza el campo `digest` de la API de GitHub a un hex sha256 en minúsculas.
+
+    GitHub lo entrega como "sha256:<64 hex>". Devolvemos None si falta o no es sha256
+    (no verificamos contra un algoritmo que no calculamos).
+    """
+    if not digest or not digest.lower().startswith("sha256:"):
+        return None
+    hexpart = digest.split(":", 1)[1].strip().lower()
+    return hexpart if re.fullmatch(r"[0-9a-f]{64}", hexpart) else None
 
 
 def _safe_extractall(zf: zipfile.ZipFile, dest: Path) -> None:
@@ -159,6 +172,10 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
         raise RuntimeError(f"URL de descarga no confiable (host fuera de GitHub): {url}")
     size = asset.get("size", 0)
     name = asset["name"]
+    # Digest esperado que publica la API de GitHub (formato "sha256:abc…"). Viaja por
+    # TLS desde un host confiable (api.github.com), así que sirve de ancla de integridad
+    # de cadena de suministro: verificamos que los bytes descargados casan con él.
+    expected_digest = _parse_sha256_digest(asset.get("digest"))
     logger.info(f"Descargando {label}: {name} ({size / 1e6:.1f} MB)")
     if progress:
         await progress({"phase": "download", "name": name, "size": size, "downloaded": 0,
@@ -167,6 +184,7 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     zip_path = dest_dir / name
     downloaded = 0
     last_pct = -1
+    hasher = hashlib.sha256()
     try:
         with open(zip_path, "wb") as f:
             async with client.stream("GET", url) as resp:
@@ -182,6 +200,7 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
                             f"Descarga de {name} cancelada por el usuario"
                         )
                     f.write(chunk)
+                    hasher.update(chunk)
                     downloaded += len(chunk)
                     if progress and size:
                         pct = round(downloaded / size * 100, 1)
@@ -198,6 +217,25 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
         except Exception:
             pass
         raise
+
+    # Verificación de integridad: si GitHub publicó el digest, debe casar. Un mismatch
+    # significa corrupción de descarga o un asset manipulado → borramos y abortamos.
+    actual_digest = hasher.hexdigest()
+    if expected_digest:
+        if actual_digest != expected_digest:
+            zip_path.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Checksum SHA-256 no coincide para {name}: "
+                f"esperado {expected_digest}, obtenido {actual_digest}. Descarga abortada."
+            )
+        logger.info(f"Checksum verificado para {name}: sha256:{actual_digest}")
+    else:
+        # La release no expone digest (assets antiguos): no podemos verificar, pero
+        # dejamos el hash en el log para auditoría/reproducibilidad.
+        logger.warning(
+            f"{name} sin digest en la API de GitHub; no se pudo verificar. "
+            f"sha256 calculado: {actual_digest}"
+        )
 
     if progress:
         await progress({"phase": "extract", "label": label, "name": name})

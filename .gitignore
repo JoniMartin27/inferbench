@@ -16,6 +16,12 @@ build/
 # Electron build
 out/
 release/
+# sidecar PyInstaller (artefacto de build, se genera con scripts/build-sidecar.ps1)
+frontend/electron/sidecar/*.exe
+frontend/electron/sidecar/inferbench-backend
+
+# Grabaciones fuente de la demo (los .mp4 candidatos del A/B test; el GIF final sí se versiona)
+assets/*.mp4
 
 # DB y datos locales
 *.sqlite

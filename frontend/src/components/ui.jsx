@@ -209,32 +209,16 @@ export function compatTone(status) {
   );
 }
 
+// Devuelven CLAVES i18n; el llamador hace t(compatLabel(status)). Mantener en sync con
+// la sección `compat` del diccionario (en.js/es.js).
 export function compatLabel(status) {
-  return (
-    {
-      ok: "100% GPU",
-      moe: "MoE offload",
-      partial: "GPU + CPU",
-      cpu: "Solo CPU",
-      disk: "mmap disco",
-      fail: "No cabe",
-      api: "API",
-    }[status] || status
-  );
+  const known = ["ok", "moe", "partial", "cpu", "disk", "fail", "api"];
+  return known.includes(status) ? `compat.label.${status}` : status;
 }
 
 export function compatDescription(status) {
-  return (
-    {
-      ok: "Modelo entero en VRAM. Velocidad máxima.",
-      moe: "Capas expert en CPU, gating+atención en GPU. Tps decente porque solo activos pocos params/token.",
-      partial: "Algunas capas en GPU, resto en CPU. Funciona pero lento (1-10 tok/s típico).",
-      cpu: "Todo en CPU. Muy lento, solo si no hay GPU.",
-      disk: "Modelo paged desde disco vía mmap. Funciona pero MUY lento (0.1-2 tok/s con NVMe).",
-      fail: "No cabe ni con la cuantización más agresiva, ni con paginación de disco.",
-      api: "Cloud — depende del proveedor.",
-    }[status] || ""
-  );
+  const known = ["ok", "moe", "partial", "cpu", "disk", "fail", "api"];
+  return known.includes(status) ? `compat.desc.${status}` : "";
 }
 
 export function compatIcon(status) {

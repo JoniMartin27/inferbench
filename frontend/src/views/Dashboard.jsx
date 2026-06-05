@@ -11,6 +11,7 @@ import {
   Server,
 } from "lucide-react";
 import { api } from "../api";
+import { useT } from "../i18n/index.jsx";
 import {
   PageHeader,
   Card,
@@ -25,6 +26,7 @@ import {
 } from "../components/ui.jsx";
 
 export default function Dashboard({ onNavigate }) {
+  const t = useT();
   const [hw, setHw] = useState(null);
   const [engines, setEngines] = useState([]);
   const [history, setHistory] = useState([]);
@@ -59,12 +61,12 @@ export default function Dashboard({ onNavigate }) {
   return (
     <>
       <PageHeader
-        eyebrow="Resumen"
-        title="Dashboard"
-        subtitle="Estado de tu entorno y modelos recomendados para tu hardware"
+        eyebrow={t("dashboard.header.eyebrow")}
+        title={t("dashboard.header.title")}
+        subtitle={t("dashboard.header.subtitle")}
         actions={
           <Button onClick={() => onNavigate?.("benchmark")}>
-            <PlayCircle size={14} /> Lanzar benchmark
+            <PlayCircle size={14} /> {t("dashboard.header.launchBenchmark")}
           </Button>
         }
       />
@@ -77,9 +79,9 @@ export default function Dashboard({ onNavigate }) {
             ) : (
               <Stat
                 icon={Cpu}
-                label="GPU principal"
+                label={t("dashboard.stats.gpu.label")}
                 value={hw?.gpus?.[0]?.name?.replace("NVIDIA GeForce ", "") || "—"}
-                hint={hw?.gpus?.[0] ? `${hw.gpus[0].vram_gb} GB VRAM` : "CPU-only"}
+                hint={hw?.gpus?.[0] ? t("dashboard.stats.gpu.hint", { vram: hw.gpus[0].vram_gb }) : t("dashboard.stats.gpu.cpuOnly")}
                 tone="accent"
               />
             )}
@@ -90,9 +92,9 @@ export default function Dashboard({ onNavigate }) {
             ) : (
               <Stat
                 icon={HardDrive}
-                label="RAM"
+                label={t("dashboard.stats.ram.label")}
                 value={`${hw?.ram_gb || 0} GB`}
-                hint={`${hw?.ram_available_gb || 0} GB libres`}
+                hint={t("dashboard.stats.ram.hint", { free: hw?.ram_available_gb || 0 })}
               />
             )}
           </Card>
@@ -102,9 +104,9 @@ export default function Dashboard({ onNavigate }) {
             ) : (
               <Stat
                 icon={Server}
-                label="Motores"
+                label={t("dashboard.stats.engines.label")}
                 value={`${operational}/${engines.length}`}
-                hint={running > 0 ? `${running} corriendo` : "ninguno activo"}
+                hint={running > 0 ? t("dashboard.stats.engines.running", { count: running }) : t("dashboard.stats.engines.noneActive")}
                 tone={running > 0 ? "success" : "default"}
               />
             )}
@@ -115,12 +117,12 @@ export default function Dashboard({ onNavigate }) {
             ) : (
               <Stat
                 icon={TrendingUp}
-                label="Runs"
+                label={t("dashboard.stats.runs.label")}
                 value={history.length}
                 hint={
                   history[0]
-                    ? `última hace ${relativeTime(history[0].ts)}`
-                    : "aún sin benchmarks"
+                    ? t("dashboard.stats.runs.lastAgo", { ago: relativeTime(history[0].ts) })
+                    : t("dashboard.stats.runs.noneYet")
                 }
                 tone="purple"
               />
@@ -129,9 +131,9 @@ export default function Dashboard({ onNavigate }) {
         </div>
 
         {/* Full-GPU */}
-        <Card variant="success" title="100% GPU — máxima velocidad" icon={Zap}>
+        <Card variant="success" title={t("dashboard.fullGpu.title")} icon={Zap}>
           <p className="mb-3 text-xs text-slate-400">
-            Caben enteros en tu VRAM con la cuantización más alta posible. Velocidad máxima (50-200+ tok/s típico).
+            {t("dashboard.fullGpu.desc")}
           </p>
           {loading && (
             <div className="space-y-2">
@@ -141,8 +143,8 @@ export default function Dashboard({ onNavigate }) {
           {!loading && fullGpu.length === 0 && (
             <Empty
               icon={Zap}
-              title="Tu GPU es muy pequeña para los modelos del catálogo con status full-GPU"
-              body="Mira la sección MoE offload o GPU+CPU."
+              title={t("dashboard.fullGpu.empty.title")}
+              body={t("dashboard.fullGpu.empty.body")}
             />
           )}
           {!loading && fullGpu.length > 0 && (
@@ -156,9 +158,9 @@ export default function Dashboard({ onNavigate }) {
 
         {/* MoE offload */}
         {(loading || moe.length > 0) && (
-          <Card variant="accent" title="MoE offload — modelos enormes con --n-cpu-moe" icon={Sparkles}>
+          <Card variant="accent" title={t("dashboard.moe.title")} icon={Sparkles}>
             <p className="mb-3 text-xs text-slate-400">
-              Modelos MoE con expertos en CPU y atención en GPU. Pocos parámetros activos por token → velocidad razonable con modelos enormes.
+              {t("dashboard.moe.desc")}
             </p>
             {loading && <Skeleton className="h-16 w-full" />}
             {!loading && (
@@ -173,9 +175,9 @@ export default function Dashboard({ onNavigate }) {
 
         {/* GPU + CPU parcial */}
         {(loading || partial.length > 0) && (
-          <Card title="GPU + CPU — offload parcial de capas" icon={Activity}>
+          <Card title={t("dashboard.partial.title")} icon={Activity}>
             <p className="mb-3 text-xs text-slate-400">
-              No caben enteros en VRAM. Se usa -ngl para poner las capas que caben en GPU y el resto en CPU. Tok/s más bajos pero ejecutable.
+              {t("dashboard.partial.desc")}
             </p>
             {loading && <Skeleton className="h-16 w-full" />}
             {!loading && (
@@ -190,21 +192,21 @@ export default function Dashboard({ onNavigate }) {
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Hardware detail */}
-          <Card title="Hardware" icon={Activity}>
+          <Card title={t("dashboard.hardware.title")} icon={Activity}>
             {loading && <Skeleton className="h-32 w-full" />}
             {!loading && hw && (
               <dl className="grid grid-cols-[110px_1fr] gap-y-2 text-sm">
-                <Row k="OS" v={`${hw.os} ${hw.os_version}`} />
-                <Row k="CPU" v={hw.cpu.name} />
-                <Row k="Cores" v={`${hw.cpu.physical_cores}c / ${hw.cpu.logical_cores}t`} />
-                <Row k="Frecuencia" v={`${hw.cpu.freq_mhz?.toFixed(0) || "?"} MHz`} />
-                <Row k="RAM" v={`${hw.ram_gb} GB total · ${hw.ram_available_gb} GB libres`} />
+                <Row k={t("dashboard.hardware.os")} v={`${hw.os} ${hw.os_version}`} />
+                <Row k={t("dashboard.hardware.cpu")} v={hw.cpu.name} />
+                <Row k={t("dashboard.hardware.cores")} v={`${hw.cpu.physical_cores}c / ${hw.cpu.logical_cores}t`} />
+                <Row k={t("dashboard.hardware.frequency")} v={`${hw.cpu.freq_mhz?.toFixed(0) || "?"} MHz`} />
+                <Row k={t("dashboard.hardware.ram")} v={t("dashboard.hardware.ramValue", { total: hw.ram_gb, free: hw.ram_available_gb })} />
                 <Row
-                  k="GPU"
+                  k={t("dashboard.hardware.gpu")}
                   v={
                     hw.gpus.length
                       ? hw.gpus.map((g) => `${g.name} · ${g.vram_gb}GB · ${g.vendor}`).join(" / ")
-                      : "ninguna"
+                      : t("dashboard.hardware.noGpu")
                   }
                 />
               </dl>
@@ -212,16 +214,16 @@ export default function Dashboard({ onNavigate }) {
           </Card>
 
           {/* Última actividad */}
-          <Card title="Última actividad" icon={TrendingUp}>
+          <Card title={t("dashboard.activity.title")} icon={TrendingUp}>
             {loading && <Skeleton className="h-32 w-full" />}
             {!loading && history.length === 0 && (
               <Empty
                 icon={PlayCircle}
-                title="Sin actividad"
-                body="Lanza tu primer benchmark para empezar a coleccionar métricas."
+                title={t("dashboard.activity.empty.title")}
+                body={t("dashboard.activity.empty.body")}
                 action={
                   <Button onClick={() => onNavigate?.("benchmark")}>
-                    <PlayCircle size={14} /> Ir a Benchmark
+                    <PlayCircle size={14} /> {t("dashboard.activity.empty.goToBenchmark")}
                   </Button>
                 }
               />
@@ -245,14 +247,14 @@ export default function Dashboard({ onNavigate }) {
                           {opts.quant && <Badge tone="indigo">{opts.quant}</Badge>}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {r.engine} · {relativeTime(r.ts)} atrás
+                          {t("dashboard.activity.engineAgo", { engine: r.engine, ago: relativeTime(r.ts) })}
                         </div>
                       </div>
                       <button
                         onClick={() => onNavigate?.("history")}
                         className="text-xs text-slate-500 hover:text-indigo-300"
                       >
-                        ver →
+                        {t("dashboard.activity.view")}
                       </button>
                     </li>
                   );
@@ -263,7 +265,7 @@ export default function Dashboard({ onNavigate }) {
         </div>
 
         {/* Motores compactos */}
-        <Card title={`Motores (${engines.length})`} icon={Server}>
+        <Card title={t("dashboard.engines.title", { count: engines.length })} icon={Server}>
           {loading ? (
             <Skeleton className="h-20 w-full" />
           ) : (
@@ -296,10 +298,10 @@ export default function Dashboard({ onNavigate }) {
                       {meta.type === "api"
                         ? "API"
                         : running
-                        ? "running"
+                        ? t("dashboard.engines.running")
                         : ready
-                        ? "listo"
-                        : "off"}
+                        ? t("dashboard.engines.ready")
+                        : t("dashboard.engines.off")}
                     </Badge>
                   </li>
                 );
@@ -322,6 +324,7 @@ function Row({ k, v }) {
 }
 
 function ModelRecRow({ row, onNavigate, accent }) {
+  const t = useT();
   const { model, config, techniques, engine_note } = row;
   const accents = {
     emerald: "from-emerald-500/20 to-cyan-500/20 text-emerald-300",
@@ -344,13 +347,13 @@ function ModelRecRow({ row, onNavigate, accent }) {
           {model.tags?.includes("popular") && <Sparkles size={11} className="shrink-0 text-amber-300" />}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <Badge tone={compatTone(config.status)}>{compatLabel(config.status)}</Badge>
+          <Badge tone={compatTone(config.status)}>{t(compatLabel(config.status))}</Badge>
           {config.quant && <Badge tone="indigo">{config.quant}</Badge>}
           {config.engine !== "llamacpp" && <Badge tone="amber">{config.engine}</Badge>}
           <Badge tone="slate">{model.params_b}B</Badge>
           {model.is_moe && <Badge tone="purple">MoE</Badge>}
           {config.context_len > 0 && (
-            <span className="text-slate-500">ctx {config.context_len.toLocaleString()}</span>
+            <span className="text-slate-500">{t("dashboard.rec.ctx", { ctx: config.context_len.toLocaleString() })}</span>
           )}
         </div>
         {topTech && (

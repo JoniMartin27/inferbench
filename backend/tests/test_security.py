@@ -1,7 +1,20 @@
 """Tests de endurecimiento: host confiable de descargas + defensa DNS-rebinding."""
 import pytest
 
-from core.binary_manager import _is_trusted_dl_host
+from core.binary_manager import _is_trusted_dl_host, _parse_sha256_digest
+
+
+def test_parse_sha256_digest():
+    h = "a" * 64
+    # GitHub entrega "sha256:<hex>" → lo normalizamos a hex en minúsculas.
+    assert _parse_sha256_digest(f"sha256:{h}") == h
+    assert _parse_sha256_digest(f"SHA256:{h.upper()}") == h
+    # Sin digest, algoritmo no soportado o hex inválido → None (no verificamos a ciegas).
+    assert _parse_sha256_digest(None) is None
+    assert _parse_sha256_digest("") is None
+    assert _parse_sha256_digest(f"sha512:{h}") is None
+    assert _parse_sha256_digest("sha256:nothex") is None
+    assert _parse_sha256_digest(f"sha256:{h[:-1]}") is None  # 63 chars
 
 
 def test_trusted_download_hosts():

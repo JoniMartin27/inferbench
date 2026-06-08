@@ -1275,7 +1275,10 @@ function LogLine({ evt }) {
     );
   }
   if (evt.type === "engine.start") {
-    return <div className="text-cyan-300">[engine] start {evt.binary}</div>;
+    // Show only the binary basename (e.g. "llama-server.exe"), never the full
+    // absolute path — it would leak the OS username (PII) in the live log.
+    const bin = evt.binary ? String(evt.binary).split(/[\\/]/).pop() : "";
+    return <div className="text-cyan-300">[engine] start {bin}</div>;
   }
   if (evt.type === "engine.ready") {
     return <div className="text-emerald-300">[engine] ready · {evt.base_url}</div>;

@@ -38,6 +38,17 @@ class ChatRequest(BaseModel):
     prompt: str | None = None
 
 
+class GenerateRequest(BaseModel):
+    prompt: str
+    negative_prompt: str = ""
+    steps: int = 20
+    width: int = 512
+    height: int = 512
+    seed: int = -1
+    cfg_scale: float = 7.0
+    sampler: str | None = None
+
+
 @router.post("/load")
 async def load(req: LoadRequest):
     """Empieza a servir un modelo de forma residente (no bloquea)."""
@@ -79,6 +90,33 @@ async def chat(req: ChatRequest):
         raise HTTPException(e.status_code, e.message) from e
     except Exception as e:  # noqa: BLE001
         logger.exception("serve chat failed")
+        raise HTTPException(500, str(e)) from e
+
+
+@router.post("/generate")
+async def generate(req: GenerateRequest):
+    """Genera una imagen con el modelo de imagen servido. 409 si no hay uno ready.
+
+    Devuelve la imagen como data URL PNG base64 (`image_b64`) + metadata (seed, tamaño,
+    steps, tiempo). Proxy a stable-diffusion.cpp vía core/serve.py.
+    """
+    if not req.prompt or not req.prompt.strip():
+        raise HTTPException(400, "Falta 'prompt'.")
+    try:
+        return await serve_core.get_manager().generate(
+            prompt=req.prompt,
+            negative_prompt=req.negative_prompt,
+            steps=req.steps,
+            width=req.width,
+            height=req.height,
+            seed=req.seed,
+            cfg_scale=req.cfg_scale,
+            sampler=req.sampler,
+        )
+    except serve_core.ServeError as e:
+        raise HTTPException(e.status_code, e.message) from e
+    except Exception as e:  # noqa: BLE001
+        logger.exception("serve generate failed")
         raise HTTPException(500, str(e)) from e
 
 

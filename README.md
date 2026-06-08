@@ -87,6 +87,7 @@ Coge el instalador para tu sistema desde la [**página de Releases**](https://gi
 - **Stop en cualquier momento**: cancela bootstrap, descarga o ejecución
 - **Persistencia**: SQLite con todos los runs (engine, modelo, quant, flags, métricas por prompt, output bruto)
 - **Modo Serve / MCP**: sirve un modelo cuantizado **óptimo** de forma residente y exponlo a cualquier app por **MCP**. Ver [Serve / MCP](#serve--mcp)
+- **Generación de imagen** (local): además de LLM de texto, InferBench orquesta **modelos de imagen** vía [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) — mismo patrón que con llama.cpp. Sirve un modelo de imagen y **genera** desde la app o por MCP (`generate_image`). Ver [Generación de imagen](#generación-de-imagen)
 
 ---
 
@@ -165,8 +166,59 @@ InferBench expone un servidor MCP llamado **`inferbench`** con dos transportes:
 > devuelven un error claro ("InferBench no está abierto…") en vez de fallar.
 
 **Tools MCP**: `list_models`, `recommend_models`, `get_hardware`, `serve_model`,
-`serve_status`, `chat`, `stop_model`. La guía completa (qué hace cada tool, snippets y
-troubleshooting) está en **[docs/MCP.md](docs/MCP.md)**.
+`serve_status`, `chat`, `stop_model` y `generate_image` (si el modelo servido es de imagen).
+La guía completa (qué hace cada tool, snippets y troubleshooting) está en
+**[docs/MCP.md](docs/MCP.md)**.
+
+---
+
+## Generación de imagen
+
+InferBench no se queda en LLM de texto: orquesta también **modelos de imagen** locales,
+**reutilizando exactamente el mismo patrón**. Donde para texto usa el binario nativo de
+**llama.cpp** + GGUF, para imagen usa su hermano de difusión,
+**[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)** (binario CUDA
+precompilado de los releases de GitHub + pesos GGUF/safetensors de Hugging Face + su **server
+HTTP**). InferBench sigue siendo el **intermediario que orquesta**: elige los pesos, descarga
+lo que falte (incluidos los **archivos auxiliares** de FLUX), arranca `sd-server` de forma
+residente y enruta la generación.
+
+```
+Eliges un modelo de imagen → InferBench:
+  ① descarga el binario de stable-diffusion.cpp (release oficial GitHub + DLLs CUDA)
+  ② descarga los pesos GGUF/safetensors (y los auxiliares t5xxl/clip_l/vae de FLUX)
+  ③ arranca sd-server de forma residente (puerto 7861) y expone su API de imagen
+  ④ genera con tu prompt y te devuelve el PNG — desde la app o por MCP (generate_image)
+```
+
+> Vive **dentro del modo Serve** existente (no es un modo nuevo) y comparte el **slot único**:
+> una GPU = un modelo servido a la vez, sea de **texto o de imagen**.
+
+### Servir y generar
+
+En la **vista Serve**, el selector incluye los modelos de imagen (agrupados por modalidad).
+Al servir uno de imagen, en vez del mini-chat aparece un **GenerateCard**: prompt, negative
+prompt opcional, **steps** (slider, 20 por defecto), **tamaño** con presets
+(512×512 / 768×768 / 1024×1024), **seed** (con botón aleatorio) y botón **Generar**, con
+**preview** de la imagen y el **tiempo** de generación. Por API:
+`POST /api/serve/generate` (proxy a la API AUTOMATIC1111-compatible `/sdapi/v1/txt2img` del
+server, respuesta `images: [PNG base64]`); si no hay modelo de imagen `ready` → **HTTP 409**.
+Por **MCP**, la tool `generate_image` devuelve la imagen para que Claude Desktop la **muestre**.
+
+### Modelos (requisitos honestos en 8 GB)
+
+| Modelo | Archivos | VRAM aprox. (8 GB) |
+|--------|----------|--------------------|
+| **SD 1.5 / SD-Turbo** | single-file | ~2–4 GB · entra holgado (default garantizado) |
+| **SDXL** | single-file | ~6–8 GB · ajustado a 1024×1024 |
+| **FLUX.1-schnell (Q4)** | multi-archivo (diffusion + t5xxl + clip_l + vae) | ~7–8 GB · al límite (showcase) |
+
+> El **vídeo** (Wan2.1/Wan2.2, LTX — ya soportados por stable-diffusion.cpp) llega en una
+> **fase 2**; esta entrega es **solo imagen**. El pipeline de benchmark no cambia: no hay
+> métricas de generación todavía.
+
+La guía completa (modelos, cuantización, archivos auxiliares de FLUX y troubleshooting) está
+en **[docs/IMAGE.md](docs/IMAGE.md)**.
 
 ---
 
@@ -190,6 +242,7 @@ troubleshooting) está en **[docs/MCP.md](docs/MCP.md)**.
 | Motor | Tipo | Modo nativo | Modo Docker | Auto-descarga modelo |
 |-------|------|-------------|-------------|----------------------|
 | `llamacpp` | local | ✅ binarios oficiales | ✅ | ✅ HuggingFace GGUF |
+| `stablediffusion` | local | ✅ binarios oficiales (sd.cpp) | — | ✅ HuggingFace GGUF/safetensors |
 | `ollama` | local | ✅ daemon Ollama | ✅ | ✅ registro Ollama |
 | `vllm` | local | — | ✅ (GPU NVIDIA) | ✅ HF (en contenedor) |
 | `sglang` | local | — | ✅ (GPU NVIDIA) | ✅ HF (en contenedor) |
@@ -199,7 +252,7 @@ troubleshooting) está en **[docs/MCP.md](docs/MCP.md)**.
 | `openrouter` | API | n/a | n/a | n/a |
 | `nvidia` | API | n/a | n/a | n/a |
 
-> Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local): **OpenAI / OpenRouter / NVIDIA** usan el endpoint OpenAI-compatible `/v1/chat/completions`; **Anthropic** usa su **API nativa** (`/v1/messages`, header `x-api-key` + `anthropic-version`, `system` aparte), no es OpenAI-compatible.
+> Todos los motores locales tienen adaptador completo (build de comando por motor, bootstrap automático y schema de optimización propio). `stablediffusion` (stable-diffusion.cpp, nativo) es el motor de **imagen**: sirve un modelo de difusión por su server HTTP en `:7861` — no benchmarkea, genera (ver [Generación de imagen](#generación-de-imagen)). vLLM/SGLang/TGI son Docker-only y requieren GPU NVIDIA; el modelo lo descarga el propio contenedor desde HuggingFace (le pasamos el repo id). Las APIs cloud funcionan con tu API key (sólo parámetros de sampling, sin optimización local): **OpenAI / OpenRouter / NVIDIA** usan el endpoint OpenAI-compatible `/v1/chat/completions`; **Anthropic** usa su **API nativa** (`/v1/messages`, header `x-api-key` + `anthropic-version`, `system` aparte), no es OpenAI-compatible.
 >
 > **Speculative decoding (DFLASH)**: vLLM y SGLang aceptan acelerar con un modelo *draft* block-diffusion ([DFLASH](https://github.com/z-lab/dflash), 6-8× sin pérdida de calidad). En Benchmark, con vLLM/SGLang seleccionado, activa DFLASH e indica el modelo draft (p.ej. `z-lab/Qwen3.5-35B-A3B-DFlash`). SGLang es la ruta oficial; vLLM necesita una build con soporte. Requiere VRAM para el modelo **y** el draft, así que no entra en GPUs pequeñas.
 >
@@ -459,7 +512,8 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | GET | `/api/history/compare/runs?ids=A,B,C` | Detalle multi-run para comparación |
 | POST | `/api/serve/load` | Empieza a servir un modelo residente (no bloquea: arranca en background) |
 | GET | `/api/serve/status` | Estado del slot servido (fase, modelo, quant, endpoint) |
-| POST | `/api/serve/chat` | Proxy de chat al modelo servido |
+| POST | `/api/serve/chat` | Proxy de chat al modelo servido (texto) |
+| POST | `/api/serve/generate` | Genera una imagen con el modelo de imagen servido (409 si no hay modelo de imagen `ready`) |
 | POST | `/api/serve/unload` | Para el motor servido y libera VRAM |
 | — | `/mcp` | Servidor MCP (HTTP streamable) para Claude Desktop / Cursor — ver [docs/MCP.md](docs/MCP.md) |
 
@@ -499,6 +553,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 | **Bonus** | **KV-cache exacta** desde metadata (`n_head_kv`/`head_dim`, capta GQA/MQA) en 123/124 modelos del catálogo | ✅ |
 | **Bonus** | **Visión real (multimodal)**: descarga `mmproj`, `--mmproj` en llama-server y prompt con imagen real | ✅ |
 | **Bonus** | **Modo Serve / MCP**: sirve un modelo cuantizado óptimo de forma residente y lo expone por MCP (stdio + HTTP) a Claude Desktop / Cursor | ✅ |
+| **Bonus** | **Generación de imagen** local vía stable-diffusion.cpp: sirve un modelo de imagen y genera (`POST /api/serve/generate` + tool MCP `generate_image`) | ✅ |
 
 ---
 
@@ -506,6 +561,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 - Más cobertura de tests (ya hay 90 en `backend/tests/`: `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative`, `benchmark_rigor`)
 - Soporte de visión en motores Docker (vLLM/SGLang) y multimodal por API (gpt-4o); hoy la visión real corre en `llamacpp` nativo
+- **Generación de vídeo** (fase 2): stable-diffusion.cpp ya soporta Wan2.1/Wan2.2 y LTX; falta integrarlo (hoy solo imagen). Y métricas de generación en el modo Benchmark
 - Implementar `cache-reuse`, `--prio-batch` y resto de flags de tuning de llama.cpp
 
 ---
@@ -514,6 +570,7 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 - [PROJECT_BRIEF.md](PROJECT_BRIEF.md) — visión, arquitectura, schemas de optimización por motor, fórmulas de compatibilidad
 - [docs/MCP.md](docs/MCP.md) — modo Serve / MCP: tools del servidor MCP, transportes stdio/HTTP, config de Claude Desktop / Cursor y troubleshooting
+- [docs/IMAGE.md](docs/IMAGE.md) — generación de imagen vía stable-diffusion.cpp: modelos soportados, requisitos de VRAM, archivos auxiliares de FLUX y troubleshooting
 - [CLAUDE.md](CLAUDE.md) — convenciones de desarrollo y plan de hitos M1–M9
 
 ---

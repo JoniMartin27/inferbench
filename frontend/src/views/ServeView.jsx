@@ -10,6 +10,9 @@ import {
   Plug,
   Loader2,
   CircleAlert,
+  Image as ImageIcon,
+  Dices,
+  Download,
 } from "lucide-react";
 import { api, humanizeError, API_BASE } from "../api";
 import {
@@ -30,6 +33,17 @@ const QUANTS = ["Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "Q3_K_M", "Q2_K"];
 const POLL_MS = 2000;
 // Ruta esperada del binario empaquetado por PyInstaller (sidecar de Electron).
 const STDIO_COMMAND = "inferbench-backend.exe";
+
+// Presets de tamaño para generación de imagen (cuadrados; sd.cpp acepta cualquier múltiplo de 64).
+const IMAGE_SIZES = [512, 768, 1024];
+
+// La modalidad llega del catálogo del backend (campo `modality`); por defecto "text".
+function modelModality(m) {
+  return m?.modality || "text";
+}
+function isImageModel(m) {
+  return modelModality(m) === "image";
+}
 
 const PHASE_TONE = {
   idle: "slate",
@@ -121,6 +135,10 @@ export default function ServeView() {
     if (next === "recommend" && recommendations.length === 0) loadRecommendations();
   };
 
+  // Modelo seleccionado (objeto completo del catálogo) → decide motor y tipo de card.
+  const selectedModel = models.find((m) => m.id === modelId);
+  const selectedIsImage = isImageModel(selectedModel);
+
   const serve = async () => {
     if (!modelId) {
       toast.error(t("serve.config.pickFirst"));
@@ -130,7 +148,8 @@ export default function ServeView() {
     try {
       const body = {
         model_id: modelId,
-        engine: "llamacpp",
+        // El motor se deriva de la modalidad: difusión vs LLM de texto.
+        engine: selectedIsImage ? "stablediffusion" : "llamacpp",
         quant: quant || null,
         context: context ? Number(context) : null,
       };
@@ -162,6 +181,15 @@ export default function ServeView() {
   const phase = status?.phase || "idle";
   const isBusy = phase === "downloading" || phase === "starting";
   const isReady = phase === "ready";
+
+  // Qué card mostrar: el backend reporta `modality` en el status; mientras carga el slot
+  // (aún sin status definitivo) caemos a la modalidad del modelo elegido para el mismo id.
+  const servedIsImage =
+    status?.modality === "image" ||
+    (status?.served &&
+      status?.model_id &&
+      status.model_id === modelId &&
+      selectedIsImage);
 
   return (
     <>
@@ -208,11 +236,26 @@ export default function ServeView() {
                 {source === "catalog" ? (
                   <Select value={modelId} onChange={(e) => setModelId(e.target.value)}>
                     <option value="">{t("serve.config.modelPlaceholder")}</option>
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} · {m.params_b}B
-                      </option>
-                    ))}
+                    {/* Agrupados por modalidad: el selector único cubre LLMs de texto e imagen. */}
+                    <optgroup label={t("serve.config.groupText")}>
+                      {models
+                        .filter((m) => !isImageModel(m))
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                            {m.params_b ? ` · ${m.params_b}B` : ""}
+                          </option>
+                        ))}
+                    </optgroup>
+                    {models.some(isImageModel) && (
+                      <optgroup label={t("serve.config.groupImage")}>
+                        {models.filter(isImageModel).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </Select>
                 ) : recLoading ? (
                   <div className="flex items-center gap-2 py-2 text-sm text-slate-400">
@@ -233,23 +276,29 @@ export default function ServeView() {
               </Field>
               </div>
 
-              <Field label={t("serve.config.quant")} hint={t("serve.config.quantHint")}>
-                <Select value={quant} onChange={(e) => setQuant(e.target.value)}>
-                  <option value="">{t("serve.config.quantAuto")}</option>
-                  {QUANTS.map((q) => (
-                    <option key={q}>{q}</option>
-                  ))}
-                </Select>
-              </Field>
+              {/* Quant/contexto solo aplican a LLMs de texto; los modelos de imagen
+                  resuelven sus pesos y no usan KV-cache, así que se ocultan. */}
+              {!selectedIsImage && (
+                <>
+                  <Field label={t("serve.config.quant")} hint={t("serve.config.quantHint")}>
+                    <Select value={quant} onChange={(e) => setQuant(e.target.value)}>
+                      <option value="">{t("serve.config.quantAuto")}</option>
+                      {QUANTS.map((q) => (
+                        <option key={q}>{q}</option>
+                      ))}
+                    </Select>
+                  </Field>
 
-              <Field label={t("serve.config.context")} hint={t("serve.config.contextHint")}>
-                <Input
-                  type="number"
-                  value={context}
-                  placeholder={t("serve.config.contextAuto")}
-                  onChange={(e) => setContext(e.target.value)}
-                />
-              </Field>
+                  <Field label={t("serve.config.context")} hint={t("serve.config.contextHint")}>
+                    <Input
+                      type="number"
+                      value={context}
+                      placeholder={t("serve.config.contextAuto")}
+                      onChange={(e) => setContext(e.target.value)}
+                    />
+                  </Field>
+                </>
+              )}
             </div>
 
             <div>
@@ -264,8 +313,12 @@ export default function ServeView() {
         {/* === Estado del slot === */}
         <StatusCard status={status} t={t} toast={toast} />
 
-        {/* === Mini chat === */}
-        <ChatCard ready={isReady} status={status} t={t} toast={toast} />
+        {/* === Interacción: chat (texto) o generación (imagen) según la modalidad servida === */}
+        {servedIsImage ? (
+          <GenerateCard ready={isReady} t={t} toast={toast} />
+        ) : (
+          <ChatCard ready={isReady} status={status} t={t} toast={toast} />
+        )}
 
         {/* === Conectar por MCP === */}
         <McpCard t={t} toast={toast} className="lg:col-span-2" />
@@ -326,6 +379,7 @@ function StatusCard({ status, t, toast }) {
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <Kv k={t("serve.status.model")} v={status.model_id || "—"} />
             <Kv k={t("serve.status.engine")} v={status.engine || "—"} />
+            {/* Para imagen, quant/contexto no aplican: se muestran "—" honestamente. */}
             <Kv k={t("serve.status.quant")} v={status.quant || "—"} />
             <Kv
               k={t("serve.status.context")}
@@ -456,6 +510,197 @@ function ChatCard({ ready, status, t, toast }) {
   );
 }
 
+function GenerateCard({ ready, t, toast }) {
+  const [prompt, setPrompt] = useState("");
+  const [negative, setNegative] = useState("");
+  const [steps, setSteps] = useState(20);
+  const [size, setSize] = useState(512);
+  const [seed, setSeed] = useState("-1");
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState(null); // { image_b64, seed, elapsed_s, width, height }
+
+  const randomizeSeed = () => {
+    // Semilla aleatoria en cliente (32-bit) para poder reproducir un resultado concreto.
+    setSeed(String(Math.floor(Math.random() * 2 ** 31)));
+  };
+
+  const generate = async () => {
+    const text = prompt.trim();
+    if (!text || generating) return;
+    setGenerating(true);
+    try {
+      const parsedSeed = Number.parseInt(seed, 10);
+      const res = await api.serveGenerate({
+        prompt: text,
+        negative_prompt: negative.trim(),
+        steps: Number(steps),
+        width: size,
+        height: size,
+        seed: Number.isFinite(parsedSeed) ? parsedSeed : -1,
+      });
+      setResult(res);
+      // El backend resuelve la semilla efectiva cuando se pidió -1; la reflejamos en el input.
+      if (res?.seed != null) setSeed(String(res.seed));
+    } catch (e) {
+      toast.error(humanizeError(e, t("serve.generate.error")));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const download = () => {
+    if (!result?.image_b64) return;
+    const a = document.createElement("a");
+    a.href = result.image_b64;
+    a.download = `inferbench-${result.seed ?? "image"}.png`;
+    a.click();
+  };
+
+  return (
+    <Card
+      title={t("serve.generate.title")}
+      icon={ImageIcon}
+      actions={
+        result && (
+          <Button size="sm" variant="ghost" onClick={download}>
+            <Download size={12} /> {t("serve.generate.download")}
+          </Button>
+        )
+      }
+    >
+      {!ready ? (
+        <Empty
+          icon={ImageIcon}
+          title={t("serve.generate.empty")}
+          body={t("serve.generate.notReady")}
+        />
+      ) : (
+        <div className="space-y-4">
+          <Field label={t("serve.generate.prompt")}>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  generate();
+                }
+              }}
+              placeholder={t("serve.generate.promptPlaceholder")}
+              rows={3}
+              disabled={generating}
+              className="w-full resize-none rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-indigo-400 focus:bg-slate-900/60"
+            />
+          </Field>
+
+          <Field label={t("serve.generate.negative")}>
+            <Input
+              value={negative}
+              onChange={(e) => setNegative(e.target.value)}
+              placeholder={t("serve.generate.negativePlaceholder")}
+              disabled={generating}
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={`${t("serve.generate.steps")} · ${steps}`}>
+              <input
+                type="range"
+                min={1}
+                max={50}
+                value={steps}
+                onChange={(e) => setSteps(Number(e.target.value))}
+                disabled={generating}
+                className="w-full accent-indigo-500"
+              />
+            </Field>
+
+            <Field label={t("serve.generate.size")}>
+              <div className="flex gap-1 rounded-md border border-slate-700 bg-slate-900/40 p-0.5 text-xs">
+                {IMAGE_SIZES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSize(s)}
+                    disabled={generating}
+                    className={`flex-1 rounded px-2 py-1.5 transition disabled:opacity-50 ${
+                      size === s
+                        ? "bg-indigo-500 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {s}²
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </div>
+
+          <Field label={t("serve.generate.seed")}>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                placeholder={t("serve.generate.seedPlaceholder")}
+                disabled={generating}
+              />
+              <Button
+                variant="ghost"
+                onClick={randomizeSeed}
+                disabled={generating}
+                title={t("serve.generate.seedRandom")}
+              >
+                <Dices size={14} />
+              </Button>
+            </div>
+          </Field>
+
+          <Button onClick={generate} disabled={generating || !prompt.trim()}>
+            {generating ? <Spinner /> : <Sparkles size={14} />}{" "}
+            {generating ? t("serve.generate.generating") : t("serve.generate.generate")}
+          </Button>
+
+          {/* Preview de la imagen generada (o placeholder mientras no hay resultado). */}
+          <div className="relative flex min-h-[16rem] items-center justify-center overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
+            {generating ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Spinner className="text-indigo-400" /> {t("serve.generate.generating")}
+              </div>
+            ) : result?.image_b64 ? (
+              <>
+                <img
+                  src={result.image_b64}
+                  alt={prompt}
+                  className="max-h-[28rem] w-full object-contain"
+                />
+                <div className="absolute bottom-2 right-2 flex gap-1">
+                  {result.elapsed_s != null && (
+                    <Badge tone="emerald">
+                      {t("serve.generate.elapsed", {
+                        s: Math.round(result.elapsed_s * 10) / 10,
+                      })}
+                    </Badge>
+                  )}
+                  {result.seed != null && (
+                    <Badge tone="slate">
+                      {t("serve.generate.seedTag", { seed: result.seed })}
+                    </Badge>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="px-6 py-10 text-center text-xs text-slate-500">
+                {t("serve.generate.placeholder")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function McpCard({ t, toast, className = "" }) {
   const httpUrl = `${API_BASE}/mcp`;
   const stdioSnippet = JSON.stringify(
@@ -489,6 +734,25 @@ function McpCard({ t, toast, className = "" }) {
           t={t}
           toast={toast}
         />
+      </div>
+
+      {/* Tools que el servidor MCP expone (incluye generate_image para modelos de imagen). */}
+      <div className="mt-4">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          {t("serve.mcp.toolsTitle")}
+        </span>
+        <ul className="mt-2 space-y-1.5">
+          {[
+            { icon: Send, label: t("serve.mcp.toolChat") },
+            { icon: ImageIcon, label: t("serve.mcp.toolGenerateImage") },
+            { icon: Server, label: t("serve.mcp.toolStatus") },
+          ].map(({ icon: Icon, label }) => (
+            <li key={label} className="flex items-center gap-2 text-[11px] text-slate-400">
+              <Icon size={12} className="shrink-0 text-indigo-300" />
+              <code className="font-mono">{label}</code>
+            </li>
+          ))}
+        </ul>
       </div>
     </Card>
   );

@@ -111,6 +111,10 @@ export const api = {
   serveStatus: () => request("/api/serve/status"),
   serveChat: (body) =>
     request("/api/serve/chat", { method: "POST", body: JSON.stringify(body) }),
+  // Generación de imagen con el modelo de difusión servido (modality "image").
+  // Devuelve { image_b64 (data URL), seed, width, height, steps, elapsed_s, ... }.
+  serveGenerate: (body) =>
+    request("/api/serve/generate", { method: "POST", body: JSON.stringify(body) }),
   serveUnload: () => request("/api/serve/unload", { method: "POST" }),
 };
 

@@ -27,7 +27,7 @@ expone un servidor MCP llamado **`inferbench`** cuyas tools dejan que el cliente
 
 1. consulte el catálogo y pida recomendaciones para el hardware actual,
 2. mande a InferBench **servir** un modelo (con el quant óptimo elegido automáticamente),
-3. **chatear** contra ese modelo servido, y
+3. **chatear** contra un modelo de texto, o **generar imágenes** contra un modelo de imagen, y
 4. **parar** el modelo y liberar VRAM.
 
 Todas las tools son **finas**: llaman al backend REST de InferBench (`:7777`) por HTTP. Hay
@@ -48,11 +48,18 @@ Server: **`inferbench`**. Tools disponibles:
 | `get_hardware()` | `GET /api/hardware` | CPU, RAM y GPUs detectadas. |
 | `serve_model(model_id, quant=None, engine="llamacpp")` | `POST /api/serve/load` + poll `GET /api/serve/status` | Empieza a servir un modelo de forma residente; espera (poll cada ~2 s, timeout ~300 s) hasta `ready`/`error`. Devuelve el estado final con `endpoint` y el `quant` elegido. Con `quant=None` el optimizador elige la cuantización óptima. |
 | `serve_status()` | `GET /api/serve/status` | Estado del slot servido (fase, modelo, quant, contexto, endpoint, progreso). |
-| `chat(prompt, max_tokens=512, temperature=0.7)` | `POST /api/serve/chat` | Manda un prompt al modelo servido y devuelve el texto. Falla con error claro si no hay modelo en fase `ready`. |
+| `chat(prompt, max_tokens=512, temperature=0.7)` | `POST /api/serve/chat` | Manda un prompt al modelo servido (texto) y devuelve el texto. Falla con error claro si no hay modelo en fase `ready`. |
+| `generate_image(prompt, steps=20, width=512, height=512, seed=-1, negative_prompt="")` | `POST /api/serve/generate` | Genera una imagen con el modelo de **imagen** servido. **Devuelve la imagen** (como `ImageContent` del SDK MCP, para que el cliente la **muestre**) + una línea con seed y tiempo. Falla con error claro si no hay un modelo de imagen en fase `ready` (HTTP 409). |
 | `stop_model()` | `POST /api/serve/unload` | Para el motor servido y libera la VRAM. |
 
 > `recommend_models`, `list_models` y `get_hardware` **reusan endpoints existentes** del
 > backend (los mismos del modo Benchmark): no hay endpoint nuevo para ellos.
+
+> **Imagen vs. texto.** `chat` aplica al modelo servido cuando es un **LLM de texto**;
+> `generate_image` cuando es un modelo de **imagen** (vía stable-diffusion.cpp). El slot es
+> **único**: se sirve un modelo a la vez, sea de texto o de imagen. `serve_model` arranca el
+> que toque según la **modalidad** del modelo del catálogo. Detalles de generación de imagen
+> en **[docs/IMAGE.md](IMAGE.md)**.
 
 ### Ciclo de vida típico desde un cliente MCP
 
@@ -67,6 +74,18 @@ stop_model()                        → libera VRAM
 `serve_model` con `quant=None` (por defecto) deja que InferBench elija la cuantización
 óptima para tu hardware vía `core/optimizer.py`. Si pasas un `quant` explícito (p.ej.
 `"Q4_K_M"`), se respeta.
+
+### Ciclo para un modelo de imagen
+
+```
+serve_model("sd-turbo")                        → arranca sd-server (modelo de imagen)
+generate_image("a red fox in a snowy forest")  → devuelve el PNG (Claude lo muestra) + seed/tiempo
+stop_model()                                    → libera VRAM
+```
+
+`serve_model` arranca el binario correcto según la **modalidad** del modelo del catálogo
+(stable-diffusion.cpp para imagen, llama.cpp para texto). Con un modelo de imagen servido,
+usa `generate_image` (no `chat`). Más en **[docs/IMAGE.md](IMAGE.md)**.
 
 ---
 
@@ -200,6 +219,13 @@ No hay ningún modelo en fase `ready`. Llama antes a `serve_model(...)` y espera
 estado sea `ready` (la propia tool `serve_model` hace el poll por ti). Comprueba el estado
 con `serve_status()`.
 
+### `generate_image` devuelve un error 409 / "no hay modelo de imagen servido"
+
+`generate_image` necesita un modelo de **imagen** en fase `ready`. Si no has servido ninguno,
+o el modelo servido es de **texto**, devuelve 409. Sirve un modelo de modalidad imagen con
+`serve_model(...)` (p.ej. SD1.5) y reintenta. Recuerda que el slot es único: servir un modelo
+de imagen reemplaza al de texto que hubiera. Ver [docs/IMAGE.md](IMAGE.md).
+
 ### El modelo tarda mucho en quedar `ready`
 
 `serve_model` cubre **descarga + arranque**. Un GGUF grande puede tardar (depende de tu red).
@@ -217,5 +243,6 @@ La tool hace poll hasta ~300 s; si tu modelo es muy grande, sírvelo primero des
 ## Ver también
 
 - [README — sección Serve / MCP](../README.md#serve--mcp)
+- [docs/IMAGE.md](IMAGE.md) — generación de imagen (modelos, VRAM, FLUX, troubleshooting)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [CLAUDE.md](../CLAUDE.md) — convenciones de desarrollo

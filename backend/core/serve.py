@@ -14,6 +14,7 @@ el endpoint; el estado de fase/progreso se consulta vía status().
 from __future__ import annotations
 
 import asyncio
+import random
 from typing import Any, Literal
 
 import httpx
@@ -29,8 +30,12 @@ from .optimizer import (
     plan_llamacpp_run,
 )
 
-# Endpoint OpenAI del motor servido. v1 solo soporta llamacpp nativo (puerto 8080).
-ENGINE_PORTS: dict[str, int] = {"llamacpp": 8080}
+# Endpoint del motor servido. Texto: llamacpp nativo (8080, API OpenAI /v1).
+# Imagen: stable-diffusion.cpp nativo (7861, API A1111 /sdapi/v1 + OpenAI /v1/images).
+ENGINE_PORTS: dict[str, int] = {"llamacpp": 8080, "stablediffusion": 7861}
+
+# Motor por defecto según la modalidad del modelo (el frontend puede sobreescribir).
+DEFAULT_ENGINE_BY_MODALITY: dict[str, str] = {"text": "llamacpp", "image": "stablediffusion"}
 
 Phase = Literal["idle", "downloading", "starting", "ready", "error"]
 
@@ -84,6 +89,7 @@ class ServeManager:
         self.engine: str | None = None
         self.quant: str | None = None
         self.context: int | None = None
+        self.modality: str = "text"  # "text" (chat) | "image" (generate)
         self.phase: Phase = "idle"
         self.progress: float | None = None
         self.message: str = "Sin modelo servido."
@@ -122,6 +128,7 @@ class ServeManager:
             "engine": self.engine,
             "quant": self.quant,
             "context": self.context,
+            "modality": self.modality,
             "endpoint": self.endpoint if phase in ("ready", "starting") else None,
             "phase": phase,
             "progress": self.progress,
@@ -143,10 +150,15 @@ class ServeManager:
         en fase 'downloading' y lanza la carga real en background. Devuelve el estado
         inicial inmediatamente. Si ya está servido el MISMO model+quant+engine ready,
         reusa el motor y responde 'ready' sin reiniciar.
+
+        Discrimina por modalidad: los modelos modality="image" se sirven con
+        stable-diffusion.cpp (slot único, mismo binario=un slot de GPU), no con llama-server.
         """
+        # Rechazo temprano de motores no soportados en Serve (antes del lookup del modelo),
+        # para que un engine inválido dé 400 aunque el modelo no exista.
         if engine not in ENGINE_PORTS:
             raise ServeError(
-                f"Motor '{engine}' no soportado en modo Serve (v1 solo: "
+                f"Motor '{engine}' no soportado en modo Serve (soportados: "
                 f"{', '.join(ENGINE_PORTS)}).",
                 status_code=400,
             )
@@ -155,10 +167,31 @@ class ServeManager:
             raise ServeError(f"Modelo desconocido: {model_id}", status_code=404)
         if not model.hf_gguf:
             raise ServeError(
-                f"El modelo {model_id} no tiene fuente GGUF en HuggingFace; no se puede "
+                f"El modelo {model_id} no tiene fuente en HuggingFace; no se puede "
                 f"auto-descargar para servirlo.",
                 status_code=400,
             )
+
+        # Auto-selección de motor por modalidad: si el caller deja el default 'llamacpp'
+        # pero el modelo es de imagen, conmutamos a stablediffusion (y viceversa no aplica).
+        if model.is_image and engine == "llamacpp":
+            engine = DEFAULT_ENGINE_BY_MODALITY["image"]
+        # El motor de imagen solo sirve modelos de imagen y al revés.
+        if model.is_image and engine != "stablediffusion":
+            raise ServeError(
+                f"El modelo {model_id} es de imagen; sírvelo con el motor "
+                f"'stablediffusion', no '{engine}'.",
+                status_code=400,
+            )
+        if not model.is_image and engine == "stablediffusion":
+            raise ServeError(
+                f"El motor 'stablediffusion' solo sirve modelos de imagen; {model_id} "
+                f"es de texto.",
+                status_code=400,
+            )
+
+        if model.is_image:
+            return await self._load_image(model_id, engine)
 
         async with self._lock:
             # Resolver quant/ctx óptimos cuando vienen en None (misma lógica que el bench).
@@ -205,6 +238,7 @@ class ServeManager:
             self.engine = engine
             self.quant = chosen_quant
             self.context = chosen_ctx
+            self.modality = "text"
             self.phase = "downloading"
             self.progress = None
             self.message = "Preparando motor y modelo…"
@@ -338,6 +372,244 @@ class ServeManager:
             except Exception:  # noqa: BLE001
                 pass
 
+    # --- carga de imagen (stable-diffusion.cpp) ---------------------------------
+
+    async def _load_image(self, model_id: str, engine: str) -> dict[str, Any]:
+        """Variante de load() para modelos de imagen. No usa el optimizer de texto:
+        sd.cpp no tiene quant/ctx/ngl; el slot único sigue siendo válido (un binario en
+        GPU). Lanza la carga en background y devuelve el estado inicial."""
+        async with self._lock:
+            model = get_model(model_id)
+            assert model is not None
+
+            # ¿Ya servimos exactamente esto y está vivo? → reusar sin reiniciar.
+            if (
+                self.phase == "ready"
+                and self.model_id == model_id
+                and self.engine == engine
+                and self._engine_running()
+            ):
+                logger.info(f"serve: reusando server de imagen ya cargado {model_id}")
+                return self.status_dict()
+
+            # Parar el motor previo (texto o imagen) — slot único de GPU.
+            if self.engine and self._engine_running():
+                logger.info("serve: parando motor previo antes de cargar el de imagen")
+                native_runtime.stop(self.engine)
+                native_runtime.set_loaded(self.engine, None)
+
+            self.model_id = model_id
+            self.engine = engine
+            self.quant = None
+            self.context = None
+            self.modality = "image"
+            self.phase = "downloading"
+            self.progress = None
+            self.message = "Preparando stable-diffusion.cpp y el modelo…"
+
+            self._task = asyncio.create_task(self._run_load_image(model_id, engine))
+            return self.status_dict()
+
+    async def _run_load_image(self, model_id: str, engine: str) -> None:
+        """Tarea en background: binario sd.cpp → checkpoint/auxiliares → arranque del server."""
+        try:
+            model = get_model(model_id)
+            assert model is not None and model.hf_gguf is not None
+
+            # 1. Binario sd-server (+ DLLs CUDA). Idempotente.
+            self.phase = "downloading"
+            self.message = "Preparando binario de stable-diffusion.cpp…"
+
+            async def bin_progress(evt: dict) -> None:
+                self.progress = evt.get("pct")
+                self.message = f"Binario sd.cpp: {evt.get('phase', 'descargando')}"
+
+            if not binary_manager.stablediffusion_fully_installed():
+                await binary_manager.install_stablediffusion(progress=bin_progress)
+            binary = binary_manager.stablediffusion_binary_path()
+
+            # 2. Modelo + auxiliares desde HF (idempotente vía caché).
+            async def model_progress(evt: dict) -> None:
+                pct = evt.get("pct")
+                if pct is not None:
+                    self.progress = pct
+                self.message = f"Descargando {evt.get('kind', 'modelo')} ({pct or 0:.0f}%)"
+
+            opts: dict[str, Any] = {}
+            gg = model.hf_gguf
+            if gg.diffusion_model:
+                # FLUX (multi-archivo): diffusion-model + auxiliares.
+                self.message = "Descargando diffusion-model y auxiliares…"
+                aux = await model_manager.ensure_all_aux(model, progress=model_progress)
+                if "diffusion_model" not in aux:
+                    raise RuntimeError(
+                        f"No se pudo obtener el diffusion-model de {model_id}"
+                    )
+                opts["diffusion_model"] = str(aux["diffusion_model"])
+                for kind in ("vae", "clip_l", "clip_g", "t5xxl"):
+                    if kind in aux:
+                        opts[kind] = str(aux[kind])
+            else:
+                # SD1.x/SDXL/SD-Turbo single-file.
+                self.message = "Descargando checkpoint…"
+                ckpt = await model_manager.ensure_single_file(model, progress=model_progress)
+                if ckpt is None:
+                    raise RuntimeError(
+                        f"El modelo {model_id} no declara checkpoint (`file`) ni diffusion-model"
+                    )
+                opts["model"] = str(ckpt)
+
+            # Defaults de arranque del pipeline (cfg/offload/flash-attn) desde el catálogo.
+            spec = model.image
+            if spec:
+                opts["cfg_scale"] = spec.default_cfg_scale
+                if spec.offload_to_cpu:
+                    opts["offload_to_cpu"] = True
+                if spec.diffusion_fa:
+                    opts["diffusion_fa"] = True
+
+            # 3. Arrancar el server sd.cpp con los args del engine.
+            self.phase = "starting"
+            self.progress = None
+            self.message = "Arrancando stable-diffusion.cpp…"
+
+            from engines.base import StartRequest
+            from engines.registry import get_engine
+
+            sd_engine = get_engine(engine)
+            port = ENGINE_PORTS[engine]
+            req = StartRequest(port=port, gpu=True, engine_opts=opts)
+            args = sd_engine.native_args(req)
+
+            logger.info(f"serve start [image/{engine}]: {model_id} opts={list(opts)}")
+            native_runtime.start(engine, exe=binary, args=args, port=port)
+            native_runtime.set_loaded(
+                engine,
+                {"model": model.id, "modality": "image", "served": True},
+            )
+
+            self.message = "Esperando a que el server de imagen responda…"
+            await _wait_engine_ready(engine_endpoint(engine), timeout=180.0)
+
+            self.phase = "ready"
+            self.progress = 100.0
+            self.message = f"Sirviendo {model_id} (imagen) en {self.endpoint}"
+            logger.success(f"serve: {model_id} (imagen) listo en {self.endpoint}")
+        except asyncio.CancelledError:
+            self.phase = "error"
+            self.message = "Carga cancelada."
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("serve: fallo al cargar el modelo de imagen")
+            self.phase = "error"
+            self.progress = None
+            self.message = f"Error al servir el modelo de imagen: {e}"
+            try:
+                if engine:
+                    native_runtime.stop(engine)
+                    native_runtime.set_loaded(engine, None)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # --- generate (proxy a sd.cpp) ----------------------------------------------
+
+    async def generate(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        steps: int = 20,
+        width: int = 512,
+        height: int = 512,
+        seed: int = -1,
+        cfg_scale: float = 7.0,
+        sampler: str | None = None,
+    ) -> dict[str, Any]:
+        """Genera una imagen vía el server sd.cpp servido. 409 si no hay modelo de imagen
+        ready. Proxy a /sdapi/v1/txt2img (A1111-compat, JSON-in/JSON-out); devuelve la
+        imagen como data URL PNG base64.
+        """
+        if self.modality != "image":
+            raise ServeError(
+                "No hay ningún modelo de IMAGEN servido. Carga uno con /api/serve/load "
+                "(modelo modality='image') y espera a la fase 'ready'.",
+                status_code=409,
+            )
+        if self.phase != "ready" or not self.endpoint:
+            raise ServeError(
+                "No hay ningún modelo de imagen servido y listo. Carga uno y espera a "
+                "la fase 'ready'.",
+                status_code=409,
+            )
+        if not self._engine_running():
+            self.phase = "error"
+            self.message = "El proceso del server de imagen terminó inesperadamente."
+            raise ServeError("El server de imagen ya no está corriendo.", status_code=409)
+
+        base = engine_endpoint(self.engine or "stablediffusion")
+        url = f"{base}/sdapi/v1/txt2img"
+        # Resolvemos -1 a una semilla CONCRETA aquí (no en sd.cpp): el endpoint A1111 de
+        # sd.cpp NO devuelve la semilla efectiva (el campo `info` viene vacío y `parameters`
+        # solo refleja la petición), así que si dejáramos pasar -1 nunca podríamos reportar
+        # la semilla real y el resultado sería irreproducible. Elegirla nosotros es honesto
+        # (no inventamos métricas: ES la semilla que de verdad usa la generación) y cumple el
+        # contrato de reproducibilidad del frontend/MCP.
+        effective_seed = int(seed)
+        if effective_seed < 0:
+            effective_seed = random.randint(0, 2**31 - 1)
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "negative_prompt": negative_prompt or "",
+            "steps": int(steps),
+            "width": int(width),
+            "height": int(height),
+            "seed": effective_seed,
+            "cfg_scale": float(cfg_scale),
+            "batch_size": 1,
+        }
+        if sampler:
+            body["sampler_name"] = sampler
+
+        loop = asyncio.get_event_loop()
+        t0 = loop.time()
+        try:
+            # La generación es lenta (decenas de segundos en CPU/FLUX): timeout generoso.
+            async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
+                resp = await client.post(url, json=body)
+                if resp.status_code >= 400:
+                    raise ServeError(
+                        f"El server de imagen respondió HTTP {resp.status_code}: "
+                        f"{resp.text[:300]}",
+                        status_code=502,
+                    )
+                data = resp.json()
+        except ServeError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise ServeError(
+                f"No se pudo contactar al server de imagen: {e}", status_code=502
+            )
+
+        elapsed = round(loop.time() - t0, 2)
+        images = data.get("images") or []
+        if not images:
+            raise ServeError(
+                "El server de imagen no devolvió ninguna imagen.", status_code=502
+            )
+        raw_b64 = images[0]
+        # sd.cpp devuelve PNG base64 sin prefijo; el contrato pide data URL.
+        image_b64 = raw_b64 if raw_b64.startswith("data:") else f"data:image/png;base64,{raw_b64}"
+        return {
+            "image_b64": image_b64,
+            "model_id": self.model_id,
+            "seed": effective_seed,
+            "width": int(width),
+            "height": int(height),
+            "steps": int(steps),
+            "elapsed_s": elapsed,
+            "phase": self.phase,
+            "message": "ok",
+        }
+
     # --- chat (proxy) -----------------------------------------------------------
 
     async def chat(
@@ -351,6 +623,11 @@ class ServeManager:
         Junta el texto y lo devuelve con usage/tps. Si no hay modelo ready → ServeError
         409 (lo mapea el router).
         """
+        if self.modality == "image":
+            raise ServeError(
+                "El modelo servido es de IMAGEN; usa /api/serve/generate, no /chat.",
+                status_code=409,
+            )
         if self.phase != "ready" or not self.endpoint:
             raise ServeError(
                 "No hay ningún modelo servido y listo. Carga uno con /api/serve/load "
@@ -423,6 +700,7 @@ class ServeManager:
             self.engine = None
             self.quant = None
             self.context = None
+            self.modality = "text"
             self.phase = "idle"
             self.progress = None
             self.message = "Motor parado. Sin modelo servido."

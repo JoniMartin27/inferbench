@@ -419,6 +419,119 @@ async def ensure_gguf(
         raise RuntimeError(not_found + hint) from e
 
 
+# ---------------------------------------------------------------------------
+# Modelos single-file (imagen: SD1.x/SDXL/SD-Turbo) y archivos auxiliares (FLUX:
+# diffusion-model + vae + clip_l/clip_g + t5xxl). Mismo patrón que ensure_mmproj:
+# un archivo extra que vive junto al modelo en el mismo repo HF.
+# ---------------------------------------------------------------------------
+
+
+def single_file_path(model: Model) -> Path | None:
+    """Ruta local del checkpoint único (`hf_gguf.file`), o None si no aplica.
+
+    Para modelos de imagen single-file (SD-Turbo, SD1.5) el catálogo trae `file` con el
+    nombre exacto (sin {quant}); model_manager lo descarga tal cual.
+    """
+    if not (model.hf_gguf and model.hf_gguf.file):
+        return None
+    return _repo_dir(model) / model.hf_gguf.file
+
+
+def single_file_installed(model: Model) -> bool:
+    p = single_file_path(model)
+    return bool(p and p.exists())
+
+
+async def ensure_single_file(
+    model: Model,
+    progress: ProgressCb = None,
+    cancel_event: asyncio.Event | None = None,
+) -> Path | None:
+    """Descarga el checkpoint único (`hf_gguf.file`) del repo. None si no aplica."""
+    target = single_file_path(model)
+    if target is None:
+        return None
+    if target.exists():
+        return target
+    repo = model.hf_gguf.repo
+    fn = model.hf_gguf.file
+    url = f"https://huggingface.co/{repo}/resolve/main/{fn}"
+    logger.info(f"Descargando checkpoint de imagen: {url}")
+    if progress:
+        await progress({"phase": "model.lookup", "model": model.id, "file": fn, "url": url})
+    return await _download_resilient(
+        url, target, progress, cancel_event,
+        label=f"checkpoint de {model.id}",
+        progress_meta={"model": model.id, "kind": "checkpoint"},
+        not_found_msg=f"Checkpoint {fn} no disponible para {model.id} en {repo}.",
+    )
+
+
+def aux_path(model: Model, kind: str) -> Path | None:
+    """Ruta local de un archivo auxiliar (vae/clip_l/clip_g/t5xxl/diffusion_model), o None.
+
+    Análogo a mmproj_path: el auxiliar vive en el mismo repo HF que el modelo de difusión.
+    `kind` es la clave del aux declarado en hf_gguf (ver HfGguf.aux_files).
+    """
+    if not model.hf_gguf:
+        return None
+    fn = model.hf_gguf.aux_files.get(kind)
+    if not fn:
+        return None
+    return _repo_dir(model) / fn
+
+
+def aux_installed(model: Model, kind: str) -> bool:
+    p = aux_path(model, kind)
+    return bool(p and p.exists())
+
+
+async def ensure_aux(
+    model: Model,
+    kind: str,
+    progress: ProgressCb = None,
+    cancel_event: asyncio.Event | None = None,
+) -> Path | None:
+    """Descarga un archivo auxiliar de difusión del mismo repo HF. None si no está declarado.
+
+    Generaliza ensure_mmproj a los auxiliares de sd.cpp (FLUX): diffusion-model, VAE y
+    encoders (clip_l/clip_g/t5xxl) viven junto al modelo y se cargan con sus flags.
+    """
+    target = aux_path(model, kind)
+    if target is None:
+        return None
+    if target.exists():
+        return target
+    repo = model.hf_gguf.repo
+    fn = model.hf_gguf.aux_files[kind]
+    url = f"https://huggingface.co/{repo}/resolve/main/{fn}"
+    logger.info(f"Descargando auxiliar {kind}: {url}")
+    if progress:
+        await progress({"phase": "model.lookup", "model": model.id, "aux": kind, "url": url})
+    return await _download_resilient(
+        url, target, progress, cancel_event,
+        label=f"{kind} de {model.id}",
+        progress_meta={"model": model.id, "kind": kind},
+        not_found_msg=f"Auxiliar {fn} ({kind}) no disponible para {model.id} en {repo}.",
+    )
+
+
+async def ensure_all_aux(
+    model: Model,
+    progress: ProgressCb = None,
+    cancel_event: asyncio.Event | None = None,
+) -> dict[str, Path]:
+    """Descarga TODOS los auxiliares declarados del modelo. Devuelve kind→ruta local."""
+    out: dict[str, Path] = {}
+    if not model.hf_gguf:
+        return out
+    for kind in model.hf_gguf.aux_files:
+        p = await ensure_aux(model, kind, progress, cancel_event)
+        if p:
+            out[kind] = p
+    return out
+
+
 def mmproj_path(model: Model) -> Path | None:
     """Ruta local del projector multimodal (mmproj), o None si el modelo no es de visión."""
     if not (model.hf_gguf and model.hf_gguf.mmproj):

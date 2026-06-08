@@ -180,6 +180,57 @@ def _build_server():
         return data.get("content", "")
 
     @mcp.tool()
+    async def generate_image(
+        prompt: str,
+        steps: int = 20,
+        width: int = 512,
+        height: int = 512,
+        seed: int = -1,
+        negative_prompt: str = "",
+    ):
+        """Genera una imagen con el modelo de IMAGEN servido (stable-diffusion.cpp).
+
+        Requiere un modelo modality='image' en phase 'ready' (sírvelo antes con serve_model,
+        ej. 'sd-turbo' o 'flux.1-schnell-q4'). Devuelve la imagen para que el cliente la
+        MUESTRE, más una línea de texto con seed y tiempo de generación.
+        """
+        from mcp.types import ImageContent, TextContent
+
+        data = await _post(
+            "/api/serve/generate",
+            {
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "steps": steps,
+                "width": width,
+                "height": height,
+                "seed": seed,
+            },
+        )
+        # El backend devuelve un data URL ("data:image/png;base64,<...>"); ImageContent
+        # del SDK MCP quiere el base64 PELADO + mimeType aparte.
+        image_b64 = data.get("image_b64", "") or ""
+        if image_b64.startswith("data:"):
+            header, _, payload = image_b64.partition(",")
+            mime = "image/png"
+            if ";" in header and ":" in header:
+                mime = header.split(":", 1)[1].split(";", 1)[0] or "image/png"
+            image_b64 = payload
+        else:
+            mime = "image/png"
+        elapsed = data.get("elapsed_s")
+        used_seed = data.get("seed")
+        info = (
+            f"Imagen generada con {data.get('model_id', '?')} "
+            f"({data.get('width')}x{data.get('height')}, {data.get('steps')} steps, "
+            f"seed {used_seed}, {elapsed}s)."
+        )
+        return [
+            ImageContent(type="image", data=image_b64, mimeType=mime),
+            TextContent(type="text", text=info),
+        ]
+
+    @mcp.tool()
     async def stop_model() -> dict[str, Any]:
         """Para el motor servido y libera la VRAM."""
         return await _post("/api/serve/unload")

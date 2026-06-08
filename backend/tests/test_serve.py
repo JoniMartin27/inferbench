@@ -22,6 +22,7 @@ _STATUS_KEYS = {
     "engine",
     "quant",
     "context",
+    "modality",
     "endpoint",
     "phase",
     "progress",
@@ -37,12 +38,14 @@ def _reset_manager():
     mgr.engine = None
     mgr.quant = None
     mgr.context = None
+    mgr.modality = "text"
     mgr.phase = "idle"
     mgr.progress = None
     mgr.message = "Sin modelo servido."
     mgr._task = None
     yield
     mgr.phase = "idle"
+    mgr.modality = "text"
     mgr.model_id = None
     mgr.engine = None
 

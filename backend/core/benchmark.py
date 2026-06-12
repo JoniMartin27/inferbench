@@ -557,8 +557,15 @@ def _build_judge_user(prompt: Prompt, output: str) -> str:
 
 
 def _parse_judge_score(content: str) -> float | None:
-    """Primer entero en rango 0-100 de la respuesta del juez (robusto ante texto extra)."""
-    for tok in re.findall(r"\d{1,3}", content or ""):
+    """Primer entero en rango 0-100 de la respuesta del juez (robusto ante texto extra).
+
+    Captura cada número como una secuencia MÁXIMA de dígitos (`\\d+`), no troceada. Con
+    `\\d{1,3}` un número fuera de rango se partía en un sub-token válido — "1500" daba
+    "150"+"0" → 0.0 (nota falsa baja) y "1000" daba "100"+"0" → 100.0 (nota falsa
+    perfecta) — silenciando la heurística con una nota inventada. Ahora un número de 4+
+    dígitos se ve entero, queda fuera de [0,100] y se salta correctamente.
+    """
+    for tok in re.findall(r"\d+", content or ""):
         n = int(tok)
         if 0 <= n <= 100:
             return float(n)

@@ -41,5 +41,7 @@ jobs:
         run: npm ci
       - name: Build (Vite)
         run: npm run build --workspace frontend
+      - name: Unit tests (node --test)
+        run: npm run test:unit --workspace frontend
       - name: Audit (no rompe el build)
         run: npm audit --omit=dev || true

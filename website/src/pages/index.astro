@@ -320,7 +320,8 @@ const icons = {
         <!-- Tabla de motores -->
         <div class="reveal glass overflow-hidden rounded-2xl">
           <div class="border-b border-slate-800 px-5 py-3 text-sm font-semibold text-slate-300">Motores soportados</div>
-          <table class="w-full text-sm">
+          <div class="overflow-x-auto">
+          <table class="w-full min-w-[22rem] text-sm">
             <thead class="text-xs text-slate-500">
               <tr class="border-b border-slate-800/60">
                 <th class="px-5 py-2 text-left font-medium">Motor</th>
@@ -350,6 +351,7 @@ const icons = {
               ))}
             </tbody>
           </table>
+          </div>
           <div class="border-t border-slate-800 px-5 py-2.5 text-[11px] text-slate-500">Todos los motores locales tienen adaptador completo. llama.cpp/ollama corren nativos (sin Docker); vLLM/SGLang/TGI vía Docker + GPU NVIDIA, descargando el modelo de HuggingFace en el contenedor. Las APIs cloud usan tu key (sólo sampling).</div>
         </div>
       </div>

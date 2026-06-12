@@ -15,6 +15,11 @@
 </p>
 
 <p align="center">
+  ⭐ <b>¿Te ahorra tiempo decidiendo qué modelo entra en tu GPU? <a href="https://github.com/JoniMartin27/inferbench">Dale una estrella</a></b> — es la forma más rápida de ayudar.<br>
+  ¿Te falta un motor o algo no arranca en tu hardware? <a href="https://github.com/JoniMartin27/inferbench/issues">Abre un issue</a> y lo miramos.
+</p>
+
+<p align="center">
   <img src="assets/inferbench-promo.gif" alt="InferBench: benchmark de LLMs locales en un click — pipeline automático, métricas reales (TTFT, tok/s, VRAM, calidad) y comparación de runs" width="800">
 </p>
 

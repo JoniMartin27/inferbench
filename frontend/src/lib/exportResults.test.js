@@ -9,16 +9,19 @@ import {
   buildCsv,
   buildJson,
   exportFilename,
+  kvLabel,
 } from "./exportResults.js";
 
 const RUN = {
   run: {
     id: "r1",
     engine: "llamacpp",
+    // Forma REAL que guarda el benchmark: kvCacheK/kvCacheV por separado (no un único
+    // `kvCache`). El balanced preset usa K=V=q8_0.
     opts_json: JSON.stringify({
       model: "Qwen2.5-7B",
       quant: "Q4_K_M",
-      engine_opts: { kvCache: "q8_0", contextLen: 8192 },
+      engine_opts: { kvCacheK: "q8_0", kvCacheV: "q8_0", contextLen: 8192 },
     }),
   },
   results: [
@@ -54,6 +57,21 @@ test("csvEscape only quotes when needed", () => {
   assert.equal(csvEscape(null), "");
   assert.equal(csvEscape(undefined), "");
   assert.equal(csvEscape(0), "0");
+});
+
+test("kvLabel deriva la KV del par kvCacheK/kvCacheV real del benchmark", () => {
+  // K=V se colapsa a un único valor
+  assert.equal(kvLabel({ engine_opts: { kvCacheK: "q8_0", kvCacheV: "q8_0" } }), "q8_0");
+  // K≠V (preset "compressed") se muestra como K/V
+  assert.equal(kvLabel({ engine_opts: { kvCacheK: "q8_0", kvCacheV: "iq4_nl" } }), "q8_0/iq4_nl");
+  // Solo uno presente: se reutiliza para el otro
+  assert.equal(kvLabel({ engine_opts: { kvCacheK: "f16" } }), "f16");
+  // Fallback legacy a kvCache / kv_cache
+  assert.equal(kvLabel({ engine_opts: { kvCache: "q4_0" } }), "q4_0");
+  assert.equal(kvLabel({ kv_cache: "f16" }), "f16");
+  // Sin datos → cadena vacía (no "undefined")
+  assert.equal(kvLabel({}), "");
+  assert.equal(kvLabel({ engine_opts: {} }), "");
 });
 
 test("runToRows desnormaliza las opciones del run en cada fila", () => {

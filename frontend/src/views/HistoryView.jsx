@@ -14,7 +14,7 @@ import { api, humanizeError } from "../api";
 import { PageHeader, Card, Button, Badge, Stat, Empty } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import { useT } from "../i18n/index.jsx";
-import { exportRunsCsv, exportRunsJson } from "../lib/exportResults.js";
+import { exportRunsCsv, exportRunsJson, kvLabel } from "../lib/exportResults.js";
 
 const PROMPT_ORDER = ["reasoning", "code", "summary", "chat"];
 
@@ -258,7 +258,7 @@ function ComparisonPanel({ data, onClose }) {
                     <td className="py-2 pr-3">
                       <Badge tone="indigo">{o.quant || "—"}</Badge>
                     </td>
-                    <td className="py-2 pr-3">{o.engine_opts?.kvCache || o.kv_cache || "—"}</td>
+                    <td className="py-2 pr-3">{kvLabel(o) || "—"}</td>
                     <td className="py-2 pr-3 tabular-nums">{o.engine_opts?.contextLen || "—"}</td>
                     <td className="py-2 pr-3 tabular-nums text-emerald-300">
                       {avg("tps").toFixed(1)}

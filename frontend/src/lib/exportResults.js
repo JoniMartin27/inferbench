@@ -36,6 +36,22 @@ function safeParse(s) {
   }
 }
 
+// Deriva una etiqueta legible de KV-cache desde engine_opts. El benchmark real guarda
+// `kvCacheK`/`kvCacheV` por separado (preset de compresión), no un único `kvCache`; si K=V
+// se colapsa a un valor ("q8_0"), si difieren se muestra "K/V" ("q8_0/iq4_nl"). Se mantiene
+// el fallback al `kvCache`/`kv_cache` legacy para runs antiguos.
+export function kvLabel(opts = {}) {
+  const eo = opts.engine_opts || {};
+  const k = eo.kvCacheK;
+  const v = eo.kvCacheV;
+  if (k || v) {
+    const kk = k || v;
+    const vv = v || k;
+    return kk === vv ? kk : `${kk}/${vv}`;
+  }
+  return eo.kvCache || opts.kv_cache || "";
+}
+
 // Escapa un valor para CSV (RFC 4180): entrecomilla si contiene coma, comilla o salto de
 // línea, y duplica las comillas internas. null/undefined → cadena vacía.
 export function csvEscape(value) {
@@ -50,7 +66,7 @@ export function csvEscape(value) {
 // Aplana un único run ({ run, results }) a filas planas (objetos con las claves de CSV_COLUMNS).
 export function runToRows({ run, results }) {
   const opts = safeParse(run?.opts_json);
-  const kv = opts.engine_opts?.kvCache || opts.kv_cache || "";
+  const kv = kvLabel(opts);
   const ctx = opts.engine_opts?.contextLen || opts.context_len || "";
   return (results || []).map((r) => ({
     run_id: run?.id ?? "",

@@ -586,4 +586,12 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 Las PRs son bienvenidas — lee [**CONTRIBUTING.md**](CONTRIBUTING.md) para el setup, cómo correr lint/tests y las convenciones. Buenos primeros aportes: los adaptadores reales para `ollama`/`vllm`/`sglang`/`tgi` y más tests de `compat.py`/`optimizer.py`. Abre un issue antes de un cambio grande para acordar el enfoque.
 
-El proyecto sigue 
+El proyecto sigue un [Código de conducta](CODE_OF_CONDUCT.md).
+
+## Seguridad
+
+¿Encontraste una vulnerabilidad? **No abras un issue público** — sigue [SECURITY.md](SECURITY.md). El proyecto ha pasado una [auditoría de seguridad](SECURITY-AUDIT.md) (postura buena; los hallazgos están remediados).
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Jonathan Martin.

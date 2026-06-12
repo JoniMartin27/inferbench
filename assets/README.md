@@ -24,4 +24,8 @@ ffmpeg -y -ss 5.5 -i inferbench-demo.gif -frames:v 1 screenshot-models.png
 # Clip corto del benchmark en vivo (recorta el tramo de la escena Benchmark)
 ffmpeg -y -ss 9 -t 7.5 -i inferbench-demo.gif \
   -vf "fps=12,scale=900:-1:flags=lanczos,palettegen=stats_mode=diff" palette.png
-ffmpeg -y -ss 9 -t 7.5 -i inferbench-dem
+ffmpeg -y -ss 9 -t 7.5 -i inferbench-demo.gif -i palette.png \
+  -lavfi "fps=12,scale=900:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" inferbench-run.gif
+```
+
+El GIF de cabecera se regraba con el pipeline reproducible del repo: `scripts/seed_demo_runs.py` (siembra runs reales) + `scripts/record-demo.mjs` (Playwright → ffmpeg). Mantén el ancho del GIF de cabecera a 900px y el peso < 8 MB para que cargue rápido en GitHub.

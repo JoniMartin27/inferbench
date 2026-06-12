@@ -169,3 +169,16 @@ def test_parse_judge_score():
     assert _parse_judge_score("Score: 100") == 100.0
     assert _parse_judge_score("no number here") is None
     assert _parse_judge_score("") is None
+
+
+def test_parse_judge_score_does_not_chop_out_of_range_numbers():
+    # Un número fuera de rango (4+ dígitos) NO debe trocearse en un sub-token válido.
+    # Antes `\d{1,3}` partía "1500" en "150"+"0" y devolvía 0.0 (nota falsa baja), y
+    # "1000" en "100"+"0" → 100.0 (nota falsa perfecta), silenciando la heurística.
+    assert _parse_judge_score("1500") is None        # no es 0.0
+    assert _parse_judge_score("1000") is None        # no es 100.0
+    # Si tras un número fuera de rango hay un entero válido, ese sí cuenta.
+    assert _parse_judge_score("confidence 1000, score 90") == 90.0
+    # Casos legítimos siguen igual (no regresión).
+    assert _parse_judge_score("92/100") == 92.0
+    assert _parse_judge_score("the answer deserves a 73") == 73.0

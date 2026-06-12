@@ -15,8 +15,15 @@
 </p>
 
 <p align="center">
-  <img src="assets/inferbench-demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
+  <img src="assets/inferbench-promo.gif" alt="InferBench: benchmark de LLMs locales en un click — pipeline automático, métricas reales (TTFT, tok/s, VRAM, calidad) y comparación de runs" width="800">
 </p>
+
+<details align="center">
+  <summary>🎬 Ver la app real en acción (demo completa)</summary>
+  <p align="center">
+    <img src="assets/inferbench-demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
+  </p>
+</details>
 
 <p align="center">
   <img src="assets/screenshot-dashboard.png" alt="Dashboard: hardware detectado y modelos recomendados para tu equipo" width="420">
@@ -579,12 +586,4 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 Las PRs son bienvenidas — lee [**CONTRIBUTING.md**](CONTRIBUTING.md) para el setup, cómo correr lint/tests y las convenciones. Buenos primeros aportes: los adaptadores reales para `ollama`/`vllm`/`sglang`/`tgi` y más tests de `compat.py`/`optimizer.py`. Abre un issue antes de un cambio grande para acordar el enfoque.
 
-El proyecto sigue un [Código de conducta](CODE_OF_CONDUCT.md).
-
-## Seguridad
-
-¿Encontraste una vulnerabilidad? **No abras un issue público** — sigue [SECURITY.md](SECURITY.md). El proyecto ha pasado una [auditoría de seguridad](SECURITY-AUDIT.md) (postura buena; los hallazgos están remediados).
-
-## Licencia
-
-[MIT](LICENSE) © 2026 Jonathan Martin.
+El proyecto sigue 

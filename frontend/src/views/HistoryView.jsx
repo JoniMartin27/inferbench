@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, GitCompare, X, Inbox } from "lucide-react";
+import { Trash2, GitCompare, X, Inbox, Download } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -14,6 +14,7 @@ import { api, humanizeError } from "../api";
 import { PageHeader, Card, Button, Badge, Stat, Empty } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import { useT } from "../i18n/index.jsx";
+import { exportRunsCsv, exportRunsJson } from "../lib/exportResults.js";
 
 const PROMPT_ORDER = ["reasoning", "code", "summary", "chat"];
 
@@ -214,12 +215,15 @@ function ComparisonPanel({ data, onClose }) {
       <Card
         title={t("history.comparison.title", { count: data.length })}
         actions={
-          <button
-            onClick={onClose}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300"
-          >
-            <X size={12} /> {t("history.comparison.close")}
-          </button>
+          <div className="flex items-center gap-3">
+            <ExportButtons data={data} prefix="inferbench-comparison" />
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300"
+            >
+              <X size={12} /> {t("history.comparison.close")}
+            </button>
+          </div>
         }
       >
         <div className="overflow-x-auto">
@@ -317,7 +321,10 @@ function RunDetail({ detail }) {
 
   return (
     <>
-      <Card title={t("history.detail.cardTitle", { id: run.id })}>
+      <Card
+        title={t("history.detail.cardTitle", { id: run.id })}
+        actions={<ExportButtons data={detail} prefix={`inferbench-${run.id}`} />}
+      >
         <div className="grid grid-cols-4 gap-4">
           <Stat label={t("history.detail.stats.engine")} value={run.engine} tone="accent" />
           <Stat label={t("history.detail.stats.model")} value={opts.model || "—"} />
@@ -408,6 +415,46 @@ function RunDetail({ detail }) {
         </div>
       </Card>
     </>
+  );
+}
+
+// Botones de exportación (CSV / JSON) reutilizables: sirven tanto para un run individual
+// ({ run, results }) como para una comparación (array de runs). La descarga se dispara en el
+// navegador/Electron sin pasar por el backend.
+function ExportButtons({ data, prefix }) {
+  const t = useT();
+  const toast = useToast();
+
+  const doExport = (fmt) => {
+    try {
+      const ok =
+        fmt === "csv" ? exportRunsCsv(data, prefix) : exportRunsJson(data, prefix);
+      if (ok) toast.success(t("history.export.success", { fmt: fmt.toUpperCase() }));
+      else toast.error(t("history.export.error"));
+    } catch {
+      toast.error(t("history.export.error"));
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="soft"
+        size="sm"
+        onClick={() => doExport("csv")}
+        title={t("history.export.csvTitle")}
+      >
+        <Download size={12} /> {t("history.export.csv")}
+      </Button>
+      <Button
+        variant="soft"
+        size="sm"
+        onClick={() => doExport("json")}
+        title={t("history.export.jsonTitle")}
+      >
+        <Download size={12} /> {t("history.export.json")}
+      </Button>
+    </div>
   );
 }
 

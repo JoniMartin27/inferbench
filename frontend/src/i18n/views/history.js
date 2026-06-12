@@ -73,6 +73,14 @@ export const history = {
       deleteError: "Could not delete the run",
       compareError: "Could not compare the runs",
     },
+    export: {
+      csv: "CSV",
+      json: "JSON",
+      csvTitle: "Download results as CSV (one row per prompt)",
+      jsonTitle: "Download the raw results as JSON",
+      success: "Exported as {fmt}",
+      error: "Could not export the results",
+    },
   },
   es: {
     header: {
@@ -146,6 +154,14 @@ export const history = {
       deleteSuccess: "Run eliminada",
       deleteError: "No se pudo eliminar la run",
       compareError: "No se pudo comparar las runs",
+    },
+    export: {
+      csv: "CSV",
+      json: "JSON",
+      csvTitle: "Descargar los resultados en CSV (una fila por prompt)",
+      jsonTitle: "Descargar los resultados en bruto en JSON",
+      success: "Exportado como {fmt}",
+      error: "No se pudieron exportar los resultados",
     },
   },
 };

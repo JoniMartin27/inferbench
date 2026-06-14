@@ -5,7 +5,9 @@ const { title = "InferBench — Benchmarkea LLMs locales con un click", descript
 
 const base = import.meta.env.BASE_URL;
 const ogImage = new URL(`${base}/og.png`.replace(/\/+/g, "/"), Astro.site).toString();
-const canonical = new URL(base.endsWith("/") ? base : `${base}/`, Astro.site).toString();
+// SEO consolidation: this landing is duplicated under the Fervon brand domain.
+// Point the canonical at fervon.dev/inferbench so ranking signals consolidate there.
+const canonical = "https://fervon.dev/inferbench/";
 ---
 
 <!doctype html>

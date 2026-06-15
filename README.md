@@ -7,6 +7,7 @@
 
 <p align="center">
   <img alt="Plataformas" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2b2b2b">
+  <img alt="npm" src="https://img.shields.io/npm/v/inferbench">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
   <a href="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Electron" src="https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white">
@@ -605,3 +606,7 @@ El proyecto sigue un [Código de conducta](CODE_OF_CONDUCT.md).
 ---
 
 InferBench forma parte de [**Fervon**](https://fervon.dev), el estudio que agrupa el portfolio de herramientas open source (Trace, lookspan, claudescope, launchpad y más). La identidad de marca Fervon se está aplicando a la landing — ver la rama `feat/fervon-theme`.
+
+---
+
+Part of [Fervon](https://fervon.dev) — a portfolio of local-first developer tools.

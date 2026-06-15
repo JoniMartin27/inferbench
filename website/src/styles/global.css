@@ -1,17 +1,54 @@
 @import "tailwindcss";
 
-/* ---- Tema InferBench ---- */
+/* ============================================================
+   Tema Fervon · "Forjado al rojo vivo"
+   Paleta carbón + brasa/ámbar. Acento de inferbench: ámbar (#FFB02E).
+   Los nombres de color heredados (indigo/emerald/purple/...) se
+   remapean a la paleta Fervon para no reescribir todo el markup.
+   ============================================================ */
 @theme {
-  --color-ink: #020617; /* slate-950 */
-  --color-ink-2: #0b1120;
-  --color-indigo: #6366f1;
-  --color-indigo-bright: #818cf8;
-  --color-emerald: #34d399;
-  --color-purple: #a855f7;
-  --color-amber: #fbbf24;
-  --color-rose: #fb7185;
+  /* Carbón (fondos) */
+  --color-ink: #0e0b0a;   /* carbon */
+  --color-ink-2: #16110e; /* carbon-2 */
+  --color-card: #1a1310;
+  --color-line: #2c211b;
+  --color-line2: #3a2c22;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Fuego */
+  --color-ember: #ff6a00;
+  --color-brasa: #e0480f;
+  --color-amber: #ffb02e;
+  --color-amber-bright: #ffc55e;
+
+  /* Texto */
+  --color-bone: #efe7dc;
+  --color-ash: #a89a8e;
+  --color-dim: #94867a;
+
+  /* ---- Remapeo de los tokens heredados de InferBench ----
+     El markup usa indigo/indigo-bright/emerald/purple/amber/rose.
+     Los apuntamos a la paleta Fervon (acento ámbar/brasa). */
+  --color-indigo: #ff6a00;          /* ember */
+  --color-indigo-bright: #ffb02e;   /* amber (acento de inferbench) */
+  --color-emerald: #8fd06b;         /* verde "libre/ok" del sistema Fervon */
+  --color-purple: #ff8a3a;          /* naranja cálido en vez de morado */
+  --color-rose: #e0480f;            /* brasa */
+
+  /* ---- Remapeo de la escala "slate" a carbón cálido ----
+     El markup heredado usa slate-200..950 para fondos, bordes y
+     texto apagado. La reescribimos a tonos carbón/ceniza Fervon
+     para que toda la página comparta la temperatura de la forja. */
+  --color-slate-950: #0b0807;
+  --color-slate-900: #16110e;
+  --color-slate-800: #2c211b;
+  --color-slate-700: #3a2c22;
+  --color-slate-600: #5a4a3e;
+  --color-slate-500: #94867a; /* dim */
+  --color-slate-400: #a89a8e; /* ash */
+  --color-slate-300: #cbbfb2;
+  --color-slate-200: #efe7dc; /* bone */
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -22,46 +59,73 @@ html {
 
 body {
   font-family: var(--font-sans);
-  color: #e2e8f0; /* slate-200 */
+  color: var(--color-bone);
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(99, 102, 241, 0.18), transparent 60%),
-    radial-gradient(900px 500px at 10% 10%, rgba(168, 85, 247, 0.12), transparent 55%),
+    radial-gradient(1200px 600px at 80% -10%, rgba(255, 106, 0, 0.16), transparent 60%),
+    radial-gradient(900px 500px at 10% 10%, rgba(224, 72, 15, 0.12), transparent 55%),
     var(--color-ink);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Resplandor de brasa que respira (hero) */
+@keyframes breathe {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+.ember-glow {
+  position: absolute;
+  top: -160px;
+  left: 50%;
+  width: 760px;
+  height: 520px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255, 106, 0, 0.2), rgba(224, 72, 15, 0.08) 38%, transparent 70%);
+  animation: breathe 6s ease-in-out infinite;
+}
+
 /* Grid sutil de fondo */
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(168, 154, 142, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168, 154, 142, 0.05) 1px, transparent 1px);
   background-size: 44px 44px;
   -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 80%);
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 80%);
 }
 
-/* Texto con gradiente */
+/* Texto con gradiente de forja */
 .text-gradient {
-  background: linear-gradient(110deg, #fff 10%, var(--color-indigo-bright) 45%, var(--color-purple) 90%);
+  background: linear-gradient(110deg, #fff 6%, var(--color-amber) 42%, var(--color-ember) 92%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-/* Tarjeta glass */
+/* Tarjeta "carbón" (antes glass) */
 .glass {
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.025), transparent), rgba(26, 19, 16, 0.62);
+  border: 1px solid var(--color-line);
   backdrop-filter: blur(12px);
 }
 .glass:hover {
-  border-color: rgba(129, 140, 248, 0.4);
+  border-color: rgba(255, 176, 46, 0.42);
 }
 
-/* Resplandor de botón */
+/* Botón de fuego (resplandor) */
 .glow {
-  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.4), 0 12px 40px -8px rgba(99, 102, 241, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 176, 46, 0.38), 0 12px 40px -8px rgba(255, 106, 0, 0.5);
+}
+
+/* Botón primario tipo .btn-fire de Fervon */
+.btn-fire {
+  background: linear-gradient(180deg, var(--color-ember), var(--color-brasa));
+  color: #1a0e06;
+  box-shadow: 0 8px 26px rgba(255, 106, 0, 0.3);
+}
+.btn-fire:hover {
+  box-shadow: 0 12px 32px rgba(255, 106, 0, 0.42);
 }
 
 /* Scroll reveal */
@@ -99,14 +163,14 @@ body {
 .float { animation: float 6s ease-in-out infinite; }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.35);
+  background: rgba(255, 106, 0, 0.35);
 }
 
 /* Scrollbar oscura */
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-track { background: var(--color-ink); }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2c211b;
   border-radius: 6px;
 }
-::-webkit-scrollbar-thumb:hover { background: #334155; }
+::-webkit-scrollbar-thumb:hover { background: #3a2c22; }

@@ -10,7 +10,7 @@
     "type": "git",
     "url": "https://github.com/JoniMartin27/inferbench.git"
   },
-  "keywords": ["llm", "benchmark", "llama-cpp", "gguf", "local-llm", "inference", "electron", "fastapi"],
+  "keywords": ["llm", "benchmark", "llama-cpp", "gguf", "local-llm", "inference", "electron", "fastapi", "mcp", "mcp-server", "model-context-protocol", "ai", "local-ai", "image-generation", "tokens-per-second"],
   "workspaces": ["frontend"],
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",

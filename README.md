@@ -606,7 +606,3 @@ El proyecto sigue un [Código de conducta](CODE_OF_CONDUCT.md).
 ---
 
 InferBench forma parte de [**Fervon**](https://fervon.dev), el estudio que agrupa el portfolio de herramientas open source (Trace, lookspan, claudescope, launchpad y más). La identidad de marca Fervon se está aplicando a la landing — ver la rama `feat/fervon-theme`.
-
----
-
-Part of [Fervon](https://fervon.dev) — a portfolio of local-first developer tools.

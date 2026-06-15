@@ -22,7 +22,7 @@ motor (release oficial de llama.cpp), baja el GGUF de Hugging Face, arranca el m
 config óptima para tu hardware y corre una suite de benchmarks midiendo TTFT, tok/s, VRAM y
 calidad. Mide de verdad — no inventa números.
 
-- 124 modelos verificados en el catálogo (con compatibilidad calculada para TU hardware).
+- 126 modelos verificados en el catálogo (con compatibilidad calculada para TU hardware).
 - llama.cpp en modo nativo (sin Docker); Ollama / vLLM / SGLang / TGI vía Docker; + APIs cloud.
 - Rigor: descarta una pasada de warmup y reporta la mediana de N muestras + desviación.
 - Calidad evaluada con scorers verificables (ejecuta el código que genera el modelo, etc.).
@@ -85,7 +85,7 @@ source, sin Docker, sin CLI. 🧵
 config óptima para tu hardware y corre los benchmarks midiendo TTFT, tok/s, VRAM y calidad.
 Mide de verdad, no inventa números.
 
-3/ 124 modelos verificados. llama.cpp nativo (sin Docker) + Ollama/vLLM/SGLang/TGI + APIs
+3/ 126 modelos verificados. llama.cpp nativo (sin Docker) + Ollama/vLLM/SGLang/TGI + APIs
 cloud. 100% local: tus datos no salen del equipo. Ej. real en mi RTX 3070: Qwen2.5 7B
 Q4_K_M a 75 tok/s, TTFT 284 ms.
 

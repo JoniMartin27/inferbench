@@ -32,7 +32,7 @@ vLLM/SGLang/TGI pre-asignan `fracción · VRAM_total`. En un equipo de UNA GPU q
 - `ruff` + `black`, línea 100 (configurado en `pyproject.toml`).
 - Type hints en funciones públicas. Pydantic models para entradas/salidas de la API (no dicts sueltos).
 - `loguru` para logging, nunca `print()`.
-- Pytest + pytest-asyncio instalados. Hay **90 tests** en `backend/tests/` (cubren `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative` y `benchmark_rigor`); corre `pytest` antes de tocar `core/`. Al añadir features amplía la cobertura de `core/compat.py` y `core/optimizer.py`.
+- Pytest + pytest-asyncio instalados. Hay **122 tests** en `backend/tests/` (cubren `compat`, `optimizer`, `quality`, `gguf_reader`, `multimodal`, `security`, `api`, `gpu_safety`, `keys`, `lookspan`, `multipart`, `speculative`, `benchmark_rigor`, `serve`, `mcp` e `image_serve`); corre `pytest` antes de tocar `core/`. Al añadir features amplía la cobertura de `core/compat.py` y `core/optimizer.py`.
 
 ### Frontend (`frontend/`)
 - JSX, no TypeScript (decisión deliberada del MVP — no migres sin hablarlo).
@@ -109,7 +109,7 @@ Salida en `frontend/release/`.
 Ver `README.md` para la tabla completa. Los SSE viven en `/api/engines/{id}/install`, `/api/benchmark/{run_id}/stream`. El runner devuelve `run_id` síncronamente; el stream va aparte.
 
 ## Ya implementado (no son pendientes)
-- **Catálogo de 124 modelos** verificados contra HF. Para ampliarlo usa `backend/scripts/verify_models.py` + `merge_models.py` (verifican repo GGUF, derivan `file_template` real y validan contra el schema). NO añadas modelos a mano sin verificar.
+- **Catálogo de 126 modelos** verificados contra HF (124 de texto + 2 de imagen por difusión). Para ampliarlo usa `backend/scripts/verify_models.py` + `merge_models.py` (verifican repo GGUF, derivan `file_template` real y validan contra el schema). NO añadas modelos a mano sin verificar.
 - **Cuenta de parámetros** de GGUFs locales se lee de la metadata (`core/gguf_reader.py::estimate_param_count`), no del tamaño de archivo.
 - **KV-cache exacta** (`core/compat.py::kv_per_token_mb_f16`): `2·n_layer·n_head_kv·head_dim·2B`, captura GQA/MQA. El catálogo trae `n_head_kv`/`head_dim` (poblados por `scripts/enrich_arch.py` leyendo el header GGUF vía Range). Si faltan dims, cae a la heurística `0.5·(params/7)^0.7`. NO reintroduzcas la heurística en `optimizer.py`: usa `compat.kv_per_token_mb_f16`.
 - **Plan de arranque por run** (`optimizer.plan_llamacpp_run`): el ctx y `ngl` se calculan para el quant REAL que se ejecuta y la KV efectiva (kvCacheK/V + `nkvo`=KV en RAM), NO para el quant que el optimizer elegiría. NO uses `optimal.context_len`/`optimal.flags['ngl']` directamente en el arranque (causaba OOM al correr un quant ≠ óptimo). La KV cuantizada (`-ctk/-ctv` ≠ f16) **fuerza `-fa on`** (llama.cpp lo exige). Los flags del arranque se construyen una sola vez (base optimizer + overrides de engine_opts, sin duplicar).

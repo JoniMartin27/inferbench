@@ -208,7 +208,8 @@ function ComparisonPanel({ data, onClose }) {
     return `${o.model || d.run.engine} ${o.quant || ""}`.trim();
   });
 
-  const palette = ["#6366f1", "#10b981", "#a78bfa", "#f59e0b", "#f43f5e", "#06b6d4"];
+  // Serie categórica cálida (forja): ember, ámbar, link cálido, verde permitido, gold, brasa.
+  const palette = ["#FF6A00", "#FFB02E", "#FFB86B", "#8FD06B", "#FFD76A", "#E0480F"];
 
   return (
     <>
@@ -290,13 +291,13 @@ function CompareChart({ title, data, keys, palette }) {
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="prompt" stroke="#64748b" fontSize={12} />
-            <YAxis stroke="#64748b" fontSize={12} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#2C211B" />
+            <XAxis dataKey="prompt" stroke="#A89A8E" fontSize={12} />
+            <YAxis stroke="#A89A8E" fontSize={12} />
             <Tooltip
               contentStyle={{
-                background: "#0f172a",
-                border: "1px solid #1e293b",
+                background: "#16110E",
+                border: "1px solid #2C211B",
                 borderRadius: 6,
                 fontSize: 12,
               }}
@@ -354,17 +355,17 @@ function RunDetail({ detail }) {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ok}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="prompt_id" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#2C211B" />
+                <XAxis dataKey="prompt_id" stroke="#A89A8E" />
+                <YAxis stroke="#A89A8E" />
                 <Tooltip
                   contentStyle={{
-                    background: "#0f172a",
-                    border: "1px solid #1e293b",
+                    background: "#16110E",
+                    border: "1px solid #2C211B",
                     borderRadius: 6,
                   }}
                 />
-                <Bar dataKey="tps" fill="#6366f1" />
+                <Bar dataKey="tps" fill="#FF6A00" />
               </BarChart>
             </ResponsiveContainer>
           </div>

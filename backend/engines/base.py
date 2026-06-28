@@ -137,10 +137,14 @@ class Engine(ABC):
         # publicar host:port → container:port. Clavarlo a default_port dejaba el motor
         # inalcanzable si el llamador pasaba un req.port distinto.
         ports = {f"{port}/tcp": port}
+        # Un comando vacío ([]) significa "usa el CMD por defecto de la imagen" (p.ej. el
+        # contenedor de Ollama arranca su daemon solo). Pasar [] a docker-py SOBREESCRIBE el
+        # CMD con nada → contenedor inútil. Lo convertimos a None para respetar el default.
+        command = self.build_command(req) or None
         st = docker_mgr.start(
             self.meta.id,
             image=self.meta.image,
-            command=self.build_command(req),
+            command=command,
             ports=ports,
             environment=self.build_environment(req),
             volumes=self.build_volumes(req),
@@ -186,6 +190,10 @@ class Engine(ABC):
         try:
             d = docker_mgr.status(self.meta.id)
             if d.state in ("running", "exited", "created", "paused", "restarting", "dead"):
+                return d
+            # Docker apagado: para un motor solo-Docker el nativo informará "missing";
+            # propaga "docker-unavailable" para que la UI muestre el badge correcto.
+            if d.state == "docker-unavailable" and n.state in ("missing", "stopped"):
                 return d
         except Exception:
             pass

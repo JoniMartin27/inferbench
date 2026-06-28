@@ -298,6 +298,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   // Cancela el polling del sweep si el usuario navega fuera (desmonta la vista): sin esto,
   // el while(true) seguiría vivo en segundo plano abriendo EventSources nuevos.
   const sweepCancelRef = useRef(false);
+  // ID del sweep en curso (no-null = hay barrido activo → se muestra el botón Cancelar).
+  const [activeSweep, setActiveSweep] = useState(null);
   useEffect(() => () => {
     sweepCancelRef.current = true;
   }, []);
@@ -319,10 +321,23 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
       const { sweep_id } = await api.startSweep(base, sweepQuants);
       bLog("info", t("benchmark.sweep.started", { id: sweep_id }));
       sweepCancelRef.current = false; // re-armar para esta corrida
+      setActiveSweep(sweep_id);
       pollSweep(sweep_id);
     } catch (e) {
       bLog("error", e.message);
       toast.error(humanizeError(e, t("benchmark.toast.sweepFailed")));
+    }
+  };
+
+  // Aborta el sweep en el BACKEND (no solo el polling de cliente): la sub-corrida en curso
+  // se cancela y el resto de quants planificados no se ejecutan.
+  const cancelSweep = async () => {
+    if (!activeSweep) return;
+    try {
+      await api.stopSweep(activeSweep);
+      bLog("warn", t("benchmark.sweep.cancelled"));
+    } catch (e) {
+      toast.error(humanizeError(e, t("benchmark.toast.sweepCancelFailed")));
     }
   };
 
@@ -339,10 +354,12 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
         }
         if (status.completed || status.cancelled) {
           bLog("success", t("benchmark.sweep.finished", { count: status.runs.length }));
+          setActiveSweep(null);
           return;
         }
       } catch (e) {
         bLog("warn", `poll: ${e.message}`);
+        setActiveSweep(null);
         return;
       }
       await new Promise((r) => setTimeout(r, 1500));
@@ -618,8 +635,8 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
             <JudgeField
               mode={judgeMode}
               onMode={setJudgeMode}
-              api={judgeApi}
-              onApi={setJudgeApi}
+              judge={judgeApi}
+              onJudge={setJudgeApi}
               running={!!running}
             />
             {!engineIsApi && (
@@ -648,6 +665,11 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
               ) : (
                 <Button variant="danger" onClick={stop}>
                   <Square size={14} /> {t("benchmark.actions.stop")}
+                </Button>
+              )}
+              {activeSweep && (
+                <Button variant="danger" onClick={cancelSweep}>
+                  <Square size={14} /> {t("benchmark.actions.cancelSweep")}
                 </Button>
               )}
               {running && (
@@ -818,7 +840,10 @@ function PowerByCompression({ engine, contextLen, selected }) {
   );
 }
 
-function JudgeField({ mode, onMode, api, onApi, running }) {
+// `judge`/`onJudge` (no `api`): el prop NO debe sombrear el import `api` de ../api.
+// Aunque este componente no llama a la API HTTP, nombrar el prop `api` era una trampa
+// de mantenimiento (un futuro `api.listEngines()` aquí llamaría al objeto equivocado).
+function JudgeField({ mode, onMode, judge, onJudge, running }) {
   const t = useT();
   const MODES = [
     { id: "heuristic", labelKey: "benchmark.judge.heuristic.label", hintKey: "benchmark.judge.heuristic.hint" },
@@ -839,21 +864,21 @@ function JudgeField({ mode, onMode, api, onApi, running }) {
         <div className="mt-2 grid grid-cols-2 gap-2">
           <Input
             placeholder={t("benchmark.judge.baseUrlPlaceholder")}
-            value={api.base_url}
-            onChange={(e) => onApi({ ...api, base_url: e.target.value })}
+            value={judge.base_url}
+            onChange={(e) => onJudge({ ...judge, base_url: e.target.value })}
             disabled={running}
           />
           <Input
             placeholder={t("benchmark.judge.modelPlaceholder")}
-            value={api.model}
-            onChange={(e) => onApi({ ...api, model: e.target.value })}
+            value={judge.model}
+            onChange={(e) => onJudge({ ...judge, model: e.target.value })}
             disabled={running}
           />
           <Input
             type="password"
             placeholder={t("benchmark.judge.apiKeyPlaceholder")}
-            value={api.api_key}
-            onChange={(e) => onApi({ ...api, api_key: e.target.value })}
+            value={judge.api_key}
+            onChange={(e) => onJudge({ ...judge, api_key: e.target.value })}
             disabled={running}
             className="col-span-2"
           />

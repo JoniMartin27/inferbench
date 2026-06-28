@@ -52,6 +52,10 @@ class LlamaCppEngine(Engine):
         cmd += ["-ngl", str(int(ngl))]
 
         kv = opts.get("kvCache") or opts.get("kv_cache")
+        # KV cuantizada (≠ f16) REQUIERE flash attention en llama.cpp: si no, llama-server
+        # falla al arrancar. Forzamos -fa on en ese caso (load-bearing, ver CLAUDE.md), aunque
+        # el formulario de EnginesView no marque flash-attn.
+        kv_quantized = bool(kv) and str(kv).lower() not in ("f16", "fp16")
         if kv:
             cmd += ["-ctk", str(kv), "-ctv", str(kv)]
 
@@ -65,7 +69,7 @@ class LlamaCppEngine(Engine):
             cmd += ["--no-mmap"]
         if opts.get("mlock"):
             cmd += ["--mlock"]
-        if opts.get("flashAttn") or opts.get("flash_attn"):
+        if opts.get("flashAttn") or opts.get("flash_attn") or kv_quantized:
             cmd += ["-fa", "on"]
 
         threads = opts.get("threads")

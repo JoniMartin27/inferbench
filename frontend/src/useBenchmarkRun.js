@@ -42,12 +42,15 @@ export function useBenchmarkRun() {
       } else if (evt.type === "engine.ready") {
         setProgress({ kind: "engine.ready" });
       } else if (evt.type === "tokens") {
-        setProgress({
+        // Conservar el ttft ya fijado por el evento phase/ttft (que llega ANTES del primer
+        // `tokens`): sin el spread, el primer `tokens` lo borraba y el panel perdía el TTFT.
+        setProgress((p) => ({
+          ...p,
           kind: "tokens",
           current: evt.current,
           target: evt.target,
           tps: evt.tps_current,
-        });
+        }));
       } else if (evt.phase === "ttft") {
         setProgress((p) => ({ ...p, kind: "tokens", ttft: evt.ttft_ms }));
       }

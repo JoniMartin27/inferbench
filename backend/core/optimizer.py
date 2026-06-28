@@ -88,14 +88,19 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
         f"Hardware: {hw.primary_vram_gb}GB VRAM + {hw.ram_gb}GB RAM"
     ]
 
-    # MoE offload candidato (solo llama.cpp)
-    moe_candidate = _estimate_moe_offload(model, snap) if (model.is_moe and engine_id == "llamacpp") else None
-    if moe_candidate:
-        rationale.append(f"Modelo MoE detectado: probando --n-cpu-moe={moe_candidate}")
+    is_moe_llamacpp = model.is_moe and engine_id == "llamacpp"
+    if is_moe_llamacpp:
+        rationale.append("Modelo MoE detectado: --n-cpu-moe se estima por cuantización")
 
     best: OptimalConfig | None = None
     for kv in kv_pref:
         for quant in quants:
+            # MoE offload candidato estimado para el quant REAL que se está probando.
+            # Un Q8_0 ocupa ~2× un Q4_K_M → necesita descargar más capas; estimarlo
+            # siempre con Q4_K_M provocaba OOM a quant alto (ver _estimate_moe_offload).
+            moe_candidate = (
+                _estimate_moe_offload(model, snap, quant) if is_moe_llamacpp else None
+            )
             opts = compat.EngineOpts(
                 quant=quant, kv_cache=kv, context_len=MIN_CONTEXT, moe_offload=moe_candidate
             )
@@ -131,7 +136,10 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     context_len=max_ctx,
                     moe_offload=moe_used,
                     flags=flags,
-                    rationale=rationale + [
+                    rationale=rationale + (
+                        [f"MoE offload --n-cpu-moe={moe_used} (estimado para {quant})"]
+                        if moe_used else []
+                    ) + [
                         f"Elegida cuantización {quant} con KV {kv}: status={status}",
                         f"Contexto máximo automático: {max_ctx} tokens",
                         f"Memoria estimada total: {round(total, 2)} GB"

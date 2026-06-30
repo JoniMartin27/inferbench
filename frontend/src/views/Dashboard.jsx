@@ -10,8 +10,9 @@ import {
   Sparkles,
   Server,
 } from "lucide-react";
-import { api } from "../api";
+import { api, humanizeError } from "../api";
 import { useT } from "../i18n/index.jsx";
+import { useToast } from "../components/toast.jsx";
 import {
   PageHeader,
   Card,
@@ -27,6 +28,7 @@ import {
 
 export default function Dashboard({ onNavigate }) {
   const t = useT();
+  const toast = useToast();
   const [hw, setHw] = useState(null);
   const [engines, setEngines] = useState([]);
   const [history, setHistory] = useState([]);
@@ -34,6 +36,7 @@ export default function Dashboard({ onNavigate }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       api.hardware().catch(() => null),
       api.listEngines().catch(() => []),
@@ -41,15 +44,26 @@ export default function Dashboard({ onNavigate }) {
       api.getRecommendations(15).catch(() => []),
     ])
       .then(([h, e, hist, recRows]) => {
+        if (cancelled) return;
         setHw(h);
         setEngines(e);
         setHistory(hist);
         setRecs(recRows);
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(humanizeError(err, t("dashboard.toast.loadError")));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const running = engines.filter((e) => e.status?.state === "running").length;
+  const runningCount = engines.filter((e) => e.status?.state === "running").length;
   const operational = engines.filter(
     (e) => e.runtimes?.some((r) => r.ready) || e.meta.type === "api"
   ).length;
@@ -106,8 +120,8 @@ export default function Dashboard({ onNavigate }) {
                 icon={Server}
                 label={t("dashboard.stats.engines.label")}
                 value={`${operational}/${engines.length}`}
-                hint={running > 0 ? t("dashboard.stats.engines.running", { count: running }) : t("dashboard.stats.engines.noneActive")}
-                tone={running > 0 ? "success" : "default"}
+                hint={runningCount > 0 ? t("dashboard.stats.engines.running", { count: runningCount }) : t("dashboard.stats.engines.noneActive")}
+                tone={runningCount > 0 ? "success" : "default"}
               />
             )}
           </Card>
@@ -240,7 +254,9 @@ export default function Dashboard({ onNavigate }) {
                       key={r.id}
                       className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-2.5 text-sm"
                     >
-                      <Badge tone={r.status === "done" ? "emerald" : "amber"}>{r.status}</Badge>
+                      <Badge tone={r.status === "done" ? "emerald" : "amber"}>
+                        {t(`history.list.status.${r.status}`)}
+                      </Badge>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 truncate">
                           <span className="font-medium">{opts.model || r.engine}</span>
@@ -281,7 +297,7 @@ export default function Dashboard({ onNavigate }) {
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium">{meta.name}</div>
                       <div className="text-xs text-slate-500">
-                        {meta.type === "api" ? "API" : meta.runtimes?.join(" · ") || "—"}
+                        {meta.type === "api" ? t("dashboard.engines.api") : meta.runtimes?.join(" · ") || "—"}
                       </div>
                     </div>
                     <Badge
@@ -296,7 +312,7 @@ export default function Dashboard({ onNavigate }) {
                       }
                     >
                       {meta.type === "api"
-                        ? "API"
+                        ? t("dashboard.engines.api")
                         : running
                         ? t("dashboard.engines.running")
                         : ready

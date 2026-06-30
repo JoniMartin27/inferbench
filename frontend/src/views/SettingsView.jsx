@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Cpu as CpuIcon } from "lucide-react";
 import { api, humanizeError } from "../api";
-import { PageHeader, Card, Stat, Badge, Button, Input, Field } from "../components/ui.jsx";
+import { PageHeader, Card, Stat, Badge, Button, Input, Field, Skeleton, Empty } from "../components/ui.jsx";
 import { useToast } from "../components/toast.jsx";
 import { useT } from "../i18n/index.jsx";
 import { LanguageSelector } from "../i18n/LanguageSelector.jsx";
@@ -14,7 +15,19 @@ export default function SettingsView() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.hardware().then(setHw).catch((e) => setError(e.message));
+    let cancelled = false;
+    api
+      .hardware()
+      .then((res) => {
+        if (!cancelled) setHw(res);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(humanizeError(e, t("settings.hardware.loadError")));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -38,7 +51,15 @@ export default function SettingsView() {
         </Card>
 
         <Card title={t("settings.hardware.title")}>
-          {error && <p className="text-rose-300">{error}</p>}
+          {error && <p className="text-sm text-rose-300">{error}</p>}
+          {!error && !hw && (
+            <div className="grid grid-cols-2 gap-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          )}
           {hw && (
             <div className="grid grid-cols-2 gap-4">
               <Stat label={t("settings.hardware.cpu")} value={hw.cpu.name} />
@@ -67,23 +88,33 @@ export default function SettingsView() {
         </Card>
 
         <Card title={t("settings.gpus.title")} className="md:col-span-2">
-          {!hw?.gpus?.length && <p className="text-slate-500">{t("settings.gpus.none")}</p>}
-          <ul className="space-y-2">
-            {hw?.gpus?.map((g, i) => (
-              <li
-                key={i}
-                className="flex items-center justify-between rounded border border-slate-800 px-3 py-2"
-              >
-                <div>
-                  <div className="font-medium">{g.name}</div>
-                  <div className="text-xs text-slate-500">
-                    {t("settings.gpus.driver", { vendor: g.vendor, driver: g.driver || "?" })}
+          {!error && !hw && (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          )}
+          {hw && !hw.gpus?.length && (
+            <Empty icon={CpuIcon} title={t("settings.gpus.none")} />
+          )}
+          {!!hw?.gpus?.length && (
+            <ul className="space-y-2">
+              {hw.gpus.map((g, i) => (
+                <li
+                  key={`${g.name}-${i}`}
+                  className="flex items-center justify-between rounded border border-slate-800 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{g.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {t("settings.gpus.driver", { vendor: g.vendor, driver: g.driver || "?" })}
+                    </div>
                   </div>
-                </div>
-                <Badge tone="indigo">{g.vram_gb} GB</Badge>
-              </li>
-            ))}
-          </ul>
+                  <Badge tone="indigo" className="shrink-0">{g.vram_gb} GB</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <ApiKeysCard />
@@ -105,10 +136,22 @@ function ApiKeysCard() {
   const [saved, setSaved] = useState({});
   const [inputs, setInputs] = useState({});
 
-  const refresh = () => api.listKeys().then(setSaved).catch(() => {});
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    api
+      .listKeys()
+      .then((res) => {
+        if (!cancelled) setSaved(res);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const refresh = () => api.listKeys().then(setSaved).catch(() => {});
+
+  const providerLabel = (id) => PROVIDERS.find((p) => p.id === id)?.label || id;
 
   const save = async (id) => {
     const key = (inputs[id] || "").trim();
@@ -117,7 +160,7 @@ function ApiKeysCard() {
       await api.saveKey(id, key);
       setInputs((s) => ({ ...s, [id]: "" }));
       await refresh();
-      toast.success(t("settings.apiKeys.saved", { provider: id }));
+      toast.success(t("settings.apiKeys.saved", { provider: providerLabel(id) }));
     } catch (e) {
       toast.error(humanizeError(e, t("settings.apiKeys.saveError")));
     }
@@ -127,7 +170,7 @@ function ApiKeysCard() {
     try {
       await api.deleteKey(id);
       await refresh();
-      toast.success(t("settings.apiKeys.deleted", { provider: id }));
+      toast.success(t("settings.apiKeys.deleted", { provider: providerLabel(id) }));
     } catch (e) {
       toast.error(humanizeError(e, t("settings.apiKeys.deleteError")));
     }
@@ -143,6 +186,7 @@ function ApiKeysCard() {
             <Input
               type="password"
               autoComplete="off"
+              aria-label={t("settings.apiKeys.inputLabel", { provider: p.label })}
               placeholder={saved[p.id] ? t("settings.apiKeys.placeholderSaved") : p.ph}
               value={inputs[p.id] || ""}
               onChange={(e) => setInputs((s) => ({ ...s, [p.id]: e.target.value }))}

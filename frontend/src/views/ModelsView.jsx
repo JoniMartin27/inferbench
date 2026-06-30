@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play, Filter, Sparkles } from "lucide-react";
+import { Zap, RefreshCw, FolderOpen, HardDrive, Cloud, Play, Sparkles } from "lucide-react";
 import { api, humanizeError } from "../api";
 import {
   PageHeader,
@@ -66,15 +66,20 @@ export default function ModelsView({ onNavigate }) {
   };
 
   useEffect(() => {
-    api.listEngines().then(setEngines).catch(() => {});
+    api
+      .listEngines()
+      .then(setEngines)
+      .catch((e) => toast.error(humanizeError(e, t("models.toast.enginesError"))));
     refreshLocal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     setLoading(true);
+    let cancelled = false;
     // Debounce: al teclear en contexto/MoE (inputs numéricos) no disparamos una
     // petición por pulsación; esperamos 250ms a que el usuario pare.
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api
         .modelCompat({
           engine,
@@ -83,11 +88,23 @@ export default function ModelsView({ onNavigate }) {
           contextLen,
           moeOffload: moeOffload ? Number(moeOffload) : null,
         })
-        .then(setRows)
-        .catch(() => setRows([]))
-        .finally(() => setLoading(false));
+        .then((res) => {
+          if (cancelled) return;
+          setRows(res);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          setRows([]);
+          toast.error(humanizeError(e, t("models.toast.compatError")));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [engine, quant, kvCache, contextLen, moeOffload]);
 
   const isApi = engines.find((e) => e.meta.id === engine)?.meta.type === "api";
@@ -163,7 +180,7 @@ export default function ModelsView({ onNavigate }) {
                     rows={4}
                     value={extraInput}
                     onChange={(e) => setExtraInput(e.target.value)}
-                    placeholder="C:/MisModelos&#10;D:/llm-cache"
+                    placeholder={t("models.local.extraDirsPlaceholder")}
                     className="w-full rounded-md border border-slate-700 bg-slate-900/40 px-3 py-2 font-mono text-xs text-slate-200 outline-none focus:border-indigo-400"
                   />
                   <div className="mt-2 flex gap-2">
@@ -352,67 +369,6 @@ export default function ModelsView({ onNavigate }) {
           optimize={optimize}
           optimizing={optimizing}
         />
-        {false && (
-        <Card title={t("models.catalog.titleLegacy", { count: rows.length })}>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
-                <tr className="border-b border-slate-800">
-                  <th className="py-2 pr-3">{t("models.catalog.col.model")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.type")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.params")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.size")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.total")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.maxCtx")}</th>
-                  <th className="py-2 pr-3">{t("models.catalog.col.compat")}</th>
-                  <th className="py-2 pr-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-500">
-                      {t("models.catalog.calculating")}
-                    </td>
-                  </tr>
-                )}
-                {!loading &&
-                  rows.map(({ model, status, model_size_gb, estimated_total_gb, max_context }) => (
-                    <tr key={model.id} className="border-b border-slate-900 hover:bg-slate-900/40">
-                      <td className="py-2 pr-3">
-                        <div className="font-medium">{model.name}</div>
-                        <div className="text-xs text-slate-500">{model.id}</div>
-                      </td>
-                      <td className="py-2 pr-3">
-                        {model.is_moe ? (
-                          <Badge tone="purple">{t("models.catalog.moeActive", { active: model.active_b })}</Badge>
-                        ) : (
-                          <Badge>{t("models.catalog.dense")}</Badge>
-                        )}
-                      </td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-300">{model.params_b}B</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-300">{model_size_gb} GB</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-300">{estimated_total_gb} GB</td>
-                      <td className="py-2 pr-3 tabular-nums text-slate-300">{max_context.toLocaleString()}</td>
-                      <td className="py-2 pr-3">
-                        <Badge tone={compatTone(status)}>{t(compatLabel(status))}</Badge>
-                      </td>
-                      <td className="py-2 pr-3">
-                        <button
-                          onClick={() => optimize(model.id)}
-                          className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-indigo-400 hover:text-indigo-200"
-                          title={t("models.catalog.optimizeTitle")}
-                        >
-                          {optimizing === model.id ? <Spinner /> : <Zap size={12} />} {t("models.catalog.optimize")}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-        )}
       </div>
       )}
     </>
@@ -434,7 +390,7 @@ function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, 
         return (
           r.model.name.toLowerCase().includes(q) ||
           r.model.id.toLowerCase().includes(q) ||
-          r.model.tags.some((t) => t.toLowerCase().includes(q))
+          r.model.tags.some((tag) => tag.toLowerCase().includes(q))
         );
       }
       return true;
@@ -477,6 +433,7 @@ function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, 
               key={m.id}
               onClick={() => setFilterMode(m.id)}
               title={m.title}
+              aria-pressed={filterMode === m.id}
               className={`rounded px-2 py-1 transition ${
                 filterMode === m.id
                   ? "bg-indigo-500 text-white"
@@ -490,6 +447,7 @@ function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, 
         <select
           value={familyFilter}
           onChange={(e) => setFamilyFilter(e.target.value)}
+          aria-label={t("models.catalog.allFamilies")}
           className="rounded border border-slate-700 bg-slate-900/40 px-2 py-1 text-xs"
         >
           <option value="all">{t("models.catalog.allFamilies")}</option>
@@ -500,6 +458,7 @@ function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, 
         <input
           type="text"
           placeholder={t("models.catalog.searchPlaceholder")}
+          aria-label={t("models.catalog.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="flex-1 min-w-[200px] rounded border border-slate-700 bg-slate-900/40 px-3 py-1 text-xs"
@@ -549,9 +508,9 @@ function CatalogTable({ rows, loading, filterMode, setFilterMode, familyFilter, 
                     <div className="text-xs text-slate-500">{model.id}</div>
                     {model.tags.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {model.tags.filter((t) => t !== "popular").map((t) => (
-                          <span key={t} className="rounded bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400">
-                            {t}
+                        {model.tags.filter((tag) => tag !== "popular").map((tag) => (
+                          <span key={tag} className="rounded bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-400">
+                            {tag}
                           </span>
                         ))}
                       </div>
@@ -594,6 +553,8 @@ function TabButton({ active, onClick, icon: Icon, children }) {
   return (
     <button
       onClick={onClick}
+      role="tab"
+      aria-selected={active}
       className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition ${
         active
           ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
@@ -662,10 +623,10 @@ function OptimalDetail({ cfg, techniques = [] }) {
             {t("models.optimal.techniques", { count: techniques.length })}
           </div>
           <ul className="space-y-1.5 text-sm text-slate-200">
-            {techniques.map((t, i) => (
+            {techniques.map((tech, i) => (
               <li key={i} className="flex gap-2">
                 <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                <span>{t}</span>
+                <span>{tech}</span>
               </li>
             ))}
           </ul>

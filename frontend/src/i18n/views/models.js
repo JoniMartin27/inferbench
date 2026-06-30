@@ -14,6 +14,8 @@ export const models = {
       scanLocalError: "Could not scan local models",
       dirsSaved: "Search folders saved",
       dirsSaveError: "Could not save the folders",
+      enginesError: "Could not load the list of engines",
+      compatError: "Could not calculate hardware compatibility",
     },
     optimize: {
       error: "Could not optimize {model}: {reason}",
@@ -23,6 +25,7 @@ export const models = {
       scannedDirs: "Scanned folders",
       knownDirs: "Known folders",
       extraDirs: "Extra folders (one per line)",
+      extraDirsPlaceholder: "C:/MyModels\nD:/llm-cache",
       save: "Save",
       savedTo: "Saved to {file}",
       scanning: "Scanning…",
@@ -71,7 +74,6 @@ export const models = {
     },
     catalog: {
       title: "Catalog ({shown} of {total})",
-      titleLegacy: "Catalog ({count} models)",
       statGpu: "{count} GPU",
       statMoe: "{count} MoE",
       statMixed: "{count} Mixed",
@@ -119,6 +121,8 @@ export const models = {
       scanLocalError: "No se pudieron escanear los modelos locales",
       dirsSaved: "Carpetas de búsqueda guardadas",
       dirsSaveError: "No se pudieron guardar las carpetas",
+      enginesError: "No se pudo cargar la lista de motores",
+      compatError: "No se pudo calcular la compatibilidad con tu hardware",
     },
     optimize: {
       error: "No se pudo optimizar {model}: {reason}",
@@ -128,6 +132,7 @@ export const models = {
       scannedDirs: "Carpetas escaneadas",
       knownDirs: "Carpetas conocidas",
       extraDirs: "Carpetas extra (una por línea)",
+      extraDirsPlaceholder: "C:/MisModelos\nD:/llm-cache",
       save: "Guardar",
       savedTo: "Se guarda en {file}",
       scanning: "Escaneando…",
@@ -176,7 +181,6 @@ export const models = {
     },
     catalog: {
       title: "Catálogo ({shown} de {total})",
-      titleLegacy: "Catálogo ({count} modelos)",
       statGpu: "{count} GPU",
       statMoe: "{count} MoE",
       statMixed: "{count} Mixto",

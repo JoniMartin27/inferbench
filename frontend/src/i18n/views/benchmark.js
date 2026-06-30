@@ -205,7 +205,8 @@ export const benchmark = {
     "running": {
       "title": "Execution",
       "waiting": "Waiting for events…",
-      "idle": "Configure and press Launch benchmark."
+      "idle": "Configure and press Launch benchmark.",
+      "streamError": "Lost connection to the backend"
     },
     "bootstrap": {
       "downloadingBinary": "Downloading llama.cpp binary",
@@ -436,7 +437,8 @@ export const benchmark = {
     "running": {
       "title": "Ejecución",
       "waiting": "Esperando eventos…",
-      "idle": "Configura y pulsa Lanzar benchmark."
+      "idle": "Configura y pulsa Lanzar benchmark.",
+      "streamError": "Se perdió la conexión con el backend"
     },
     "bootstrap": {
       "downloadingBinary": "Descargando binario llama.cpp",

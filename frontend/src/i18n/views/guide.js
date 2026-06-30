@@ -10,7 +10,6 @@ export const guide = {
       completed: "{completed} / {total} steps completed",
       ofFlow: "of the recommended flow",
     },
-    loading: "Loading status…",
     done: "done",
     steps: {
       hw: {
@@ -123,7 +122,6 @@ export const guide = {
       completed: "{completed} / {total} pasos completados",
       ofFlow: "del flujo recomendado",
     },
-    loading: "Cargando estado…",
     done: "hecho",
     steps: {
       hw: {

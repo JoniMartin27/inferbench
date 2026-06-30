@@ -4,10 +4,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, subscribeBenchmark } from "./api";
+import { useT } from "./i18n/index.jsx";
 
 const MAX_EVENTS = 400;
 
 export function useBenchmarkRun() {
+  const t = useT();
   const [running, setRunning] = useState(null); // run_id o null
   const [events, setEvents] = useState([]);
   const [results, setResults] = useState([]);
@@ -27,7 +29,7 @@ export function useBenchmarkRun() {
         // El stream cayó antes de terminar: surfacea el error y desbloquea la UI.
         setEvents((arr) => [
           ...arr.slice(-MAX_EVENTS),
-          { type: "log", level: "error", text: evt.error || "Se perdió la conexión con el backend" },
+          { type: "log", level: "error", text: evt.error || t("benchmark.running.streamError") },
         ]);
         setRunning(null);
         unsubRef.current = null;
@@ -59,7 +61,7 @@ export function useBenchmarkRun() {
         unsubRef.current = null;
       }
     });
-  }, []);
+  }, [t]);
 
   const start = useCallback(
     async (config) => {

@@ -26,6 +26,8 @@ export const engines = {
       modelPath: "Model path",
       context: "Context",
       kvCache: "KV cache",
+      flashAttn: "flash-attn",
+      mlock: "mlock",
     },
     placeholder: {
       modelPath: "C:/models/qwen.Q4_K_M.gguf",
@@ -55,6 +57,13 @@ export const engines = {
       api: "API",
       created: "created",
     },
+    toast: {
+      listError: "Could not load the list of engines",
+    },
+    empty: {
+      title: "No engines available",
+      body: "No inference engines were found. Check that the backend is running.",
+    },
   },
   es: {
     header: {
@@ -82,6 +91,8 @@ export const engines = {
       modelPath: "Ruta del modelo",
       context: "Contexto",
       kvCache: "KV cache",
+      flashAttn: "flash-attn",
+      mlock: "mlock",
     },
     placeholder: {
       modelPath: "C:/modelos/qwen.Q4_K_M.gguf",
@@ -110,6 +121,13 @@ export const engines = {
       exited: "exited",
       api: "API",
       created: "created",
+    },
+    toast: {
+      listError: "No se pudo cargar la lista de motores",
+    },
+    empty: {
+      title: "No hay motores disponibles",
+      body: "No se encontraron motores de inferencia. Comprueba que el backend esté arrancado.",
     },
   },
 };

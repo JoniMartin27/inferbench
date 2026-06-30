@@ -75,16 +75,25 @@ export default function ServeView() {
   const [loading, setLoading] = useState(false); // serveLoad en curso
   const [stopping, setStopping] = useState(false);
   const pollRef = useRef(null);
+  const mountedRef = useRef(true);
 
   // Carga inicial del catálogo + estado actual
   useEffect(() => {
+    mountedRef.current = true;
     api
       .listModels()
-      .then((m) => setModels(m))
-      .catch((e) => toast.error(humanizeError(e, t("serve.config.modelsError"))));
+      .then((m) => {
+        if (mountedRef.current) setModels(m);
+      })
+      .catch((e) => {
+        if (mountedRef.current) toast.error(humanizeError(e, t("serve.config.modelsError")));
+      });
     // Recoge el estado por si ya había un modelo servido al entrar en la vista.
     refreshStatus();
-    return () => stopPolling();
+    return () => {
+      mountedRef.current = false;
+      stopPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,6 +107,10 @@ export default function ServeView() {
   const refreshStatus = async () => {
     try {
       const s = await api.serveStatus();
+      // El componente puede haberse desmontado (cambio de vista) mientras la petición
+      // estaba en vuelo: evita setState fuera de ciclo de vida y, sobre todo, evita
+      // re-arrancar el polling después de que el cleanup ya lo hubiera parado.
+      if (!mountedRef.current) return null;
       setStatus(s);
       // Si el backend dice que ya está en fase terminal, dejamos de pollear.
       if (s.phase === "ready" || s.phase === "error" || s.phase === "idle") {
@@ -121,11 +134,12 @@ export default function ServeView() {
     setRecLoading(true);
     try {
       const rows = await api.getRecommendations(8);
+      if (!mountedRef.current) return;
       setRecommendations(rows);
     } catch (e) {
-      toast.error(humanizeError(e, t("serve.config.recommendError")));
+      if (mountedRef.current) toast.error(humanizeError(e, t("serve.config.recommendError")));
     } finally {
-      setRecLoading(false);
+      if (mountedRef.current) setRecLoading(false);
     }
   };
 
@@ -154,13 +168,14 @@ export default function ServeView() {
         context: context ? Number(context) : null,
       };
       const s = await api.serveLoad(body);
+      if (!mountedRef.current) return;
       setStatus(s);
       toast.info(t("serve.status.loadStarted"));
       startPolling();
     } catch (e) {
-      toast.error(humanizeError(e, t("serve.status.loadError")));
+      if (mountedRef.current) toast.error(humanizeError(e, t("serve.status.loadError")));
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -169,12 +184,13 @@ export default function ServeView() {
     try {
       const s = await api.serveUnload();
       stopPolling();
+      if (!mountedRef.current) return;
       setStatus(s || { served: false, phase: "idle" });
       toast.success(t("serve.status.stopped"));
     } catch (e) {
-      toast.error(humanizeError(e, t("serve.status.stopError")));
+      if (mountedRef.current) toast.error(humanizeError(e, t("serve.status.stopError")));
     } finally {
-      setStopping(false);
+      if (mountedRef.current) setStopping(false);
     }
   };
 
@@ -194,7 +210,7 @@ export default function ServeView() {
   return (
     <>
       <PageHeader
-        eyebrow="Serve / MCP"
+        eyebrow={t("serve.header.eyebrow")}
         title={t("serve.header.title")}
         subtitle={t("serve.header.subtitle")}
         actions={
@@ -217,7 +233,9 @@ export default function ServeView() {
               ].map((s) => (
                 <button
                   key={s.id}
+                  type="button"
                   onClick={() => onSourceChange(s.id)}
+                  aria-pressed={source === s.id}
                   className={`rounded px-3 py-1.5 transition ${
                     source === s.id
                       ? "bg-indigo-500 text-white"
@@ -232,48 +250,48 @@ export default function ServeView() {
 
             <div className="grid gap-4 md:grid-cols-4">
               <div className="md:col-span-2">
-              <Field label={t("serve.config.model")}>
-                {source === "catalog" ? (
-                  <Select value={modelId} onChange={(e) => setModelId(e.target.value)}>
-                    <option value="">{t("serve.config.modelPlaceholder")}</option>
-                    {/* Agrupados por modalidad: el selector único cubre LLMs de texto e imagen. */}
-                    <optgroup label={t("serve.config.groupText")}>
-                      {models
-                        .filter((m) => !isImageModel(m))
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                            {m.params_b ? ` · ${m.params_b}B` : ""}
-                          </option>
-                        ))}
-                    </optgroup>
-                    {models.some(isImageModel) && (
-                      <optgroup label={t("serve.config.groupImage")}>
-                        {models.filter(isImageModel).map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
+                <Field label={t("serve.config.model")}>
+                  {source === "catalog" ? (
+                    <Select value={modelId} onChange={(e) => setModelId(e.target.value)}>
+                      <option value="">{t("serve.config.modelPlaceholder")}</option>
+                      {/* Agrupados por modalidad: el selector único cubre LLMs de texto e imagen. */}
+                      <optgroup label={t("serve.config.groupText")}>
+                        {models
+                          .filter((m) => !isImageModel(m))
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                              {m.params_b ? ` · ${m.params_b}B` : ""}
+                            </option>
+                          ))}
                       </optgroup>
-                    )}
-                  </Select>
-                ) : recLoading ? (
-                  <div className="flex items-center gap-2 py-2 text-sm text-slate-400">
-                    <Spinner className="text-indigo-400" /> {t("serve.config.recommendLoading")}
-                  </div>
-                ) : recommendations.length === 0 ? (
-                  <p className="py-2 text-sm text-slate-500">{t("serve.config.recommendEmpty")}</p>
-                ) : (
-                  <Select value={modelId} onChange={(e) => setModelId(e.target.value)}>
-                    <option value="">{t("serve.config.modelPlaceholder")}</option>
-                    {recommendations.map((r) => (
-                      <option key={r.model.id} value={r.model.id}>
-                        {r.model.name} · {r.config.quant || "?"} · {r.config.status}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
+                      {models.some(isImageModel) && (
+                        <optgroup label={t("serve.config.groupImage")}>
+                          {models.filter(isImageModel).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </Select>
+                  ) : recLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-slate-400">
+                      <Spinner className="text-indigo-400" /> {t("serve.config.recommendLoading")}
+                    </div>
+                  ) : recommendations.length === 0 ? (
+                    <p className="py-2 text-sm text-slate-500">{t("serve.config.recommendEmpty")}</p>
+                  ) : (
+                    <Select value={modelId} onChange={(e) => setModelId(e.target.value)}>
+                      <option value="">{t("serve.config.modelPlaceholder")}</option>
+                      {recommendations.map((r) => (
+                        <option key={r.model.id} value={r.model.id}>
+                          {r.model.name} · {r.config.quant || "?"} · {r.config.status}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
               </div>
 
               {/* Quant/contexto solo aplican a LLMs de texto; los modelos de imagen
@@ -317,7 +335,7 @@ export default function ServeView() {
         {servedIsImage ? (
           <GenerateCard ready={isReady} t={t} toast={toast} />
         ) : (
-          <ChatCard ready={isReady} status={status} t={t} toast={toast} />
+          <ChatCard ready={isReady} t={t} toast={toast} />
         )}
 
         {/* === Conectar por MCP === */}
@@ -356,7 +374,7 @@ function StatusCard({ status, t, toast }) {
             </Badge>
             {status.progress != null && phase === "downloading" && (
               <span className="text-xs tabular-nums text-slate-400">
-                {Math.round(status.progress)}%
+                {Math.min(100, Math.round(status.progress))}%
               </span>
             )}
           </div>
@@ -408,32 +426,45 @@ function StatusCard({ status, t, toast }) {
   );
 }
 
-function ChatCard({ ready, status, t, toast }) {
+function ChatCard({ ready, t, toast }) {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState([]); // {role, content, tps?}
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+  // Evita setState tras desmontar (p.ej. si la respuesta llega después de cambiar de vista
+  // o de que el slot servido pase a modalidad imagen y esta card se desmonte).
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const send = async () => {
     const text = prompt.trim();
     if (!text || sending) return;
-    setMessages((m) => [...m, { role: "user", content: text }]);
+    // id estable por mensaje — el índice del array no sirve de key porque "Clear" reinicia
+    // la lista y un mensaje en vuelo podría llegar después, desalineando índices.
+    setMessages((m) => [...m, { id: `u-${Date.now()}-${m.length}`, role: "user", content: text }]);
     setPrompt("");
     setSending(true);
     try {
       const res = await api.serveChat({ prompt: text, max_tokens: 512, temperature: 0.7 });
+      if (!mountedRef.current) return;
       setMessages((m) => [
         ...m,
-        { role: "assistant", content: res.content || "", tps: res.tps },
+        { id: `a-${Date.now()}-${m.length}`, role: "assistant", content: res.content || "", tps: res.tps },
       ]);
     } catch (e) {
-      toast.error(humanizeError(e, t("serve.chat.error")));
+      if (mountedRef.current) toast.error(humanizeError(e, t("serve.chat.error")));
     } finally {
-      setSending(false);
+      if (mountedRef.current) setSending(false);
     }
   };
 
@@ -457,9 +488,9 @@ function ChatCard({ ready, status, t, toast }) {
             {messages.length === 0 && (
               <p className="py-4 text-center text-sm text-slate-500">{t("serve.chat.placeholder")}</p>
             )}
-            {messages.map((m, i) => (
+            {messages.map((m) => (
               <div
-                key={i}
+                key={m.id}
                 className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
               >
                 <div className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-500">
@@ -518,6 +549,16 @@ function GenerateCard({ ready, t, toast }) {
   const [seed, setSeed] = useState("-1");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null); // { image_b64, seed, elapsed_s, width, height }
+  const mountedRef = useRef(true);
+
+  // Evita setState tras desmontar (p.ej. si el slot servido vuelve a modalidad texto
+  // mientras una generación de imagen sigue en curso).
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const randomizeSeed = () => {
     // Semilla aleatoria en cliente (32-bit) para poder reproducir un resultado concreto.
@@ -538,13 +579,14 @@ function GenerateCard({ ready, t, toast }) {
         height: size,
         seed: Number.isFinite(parsedSeed) ? parsedSeed : -1,
       });
+      if (!mountedRef.current) return;
       setResult(res);
       // El backend resuelve la semilla efectiva cuando se pidió -1; la reflejamos en el input.
       if (res?.seed != null) setSeed(String(res.seed));
     } catch (e) {
-      toast.error(humanizeError(e, t("serve.generate.error")));
+      if (mountedRef.current) toast.error(humanizeError(e, t("serve.generate.error")));
     } finally {
-      setGenerating(false);
+      if (mountedRef.current) setGenerating(false);
     }
   };
 
@@ -553,7 +595,10 @@ function GenerateCard({ ready, t, toast }) {
     const a = document.createElement("a");
     a.href = result.image_b64;
     a.download = `inferbench-${result.seed ?? "image"}.png`;
+    // Algunos navegadores solo disparan el click si el <a> está en el DOM.
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -623,6 +668,7 @@ function GenerateCard({ ready, t, toast }) {
                     type="button"
                     onClick={() => setSize(s)}
                     disabled={generating}
+                    aria-pressed={size === s}
                     className={`flex-1 rounded px-2 py-1.5 transition disabled:opacity-50 ${
                       size === s
                         ? "bg-indigo-500 text-white"
@@ -650,6 +696,7 @@ function GenerateCard({ ready, t, toast }) {
                 onClick={randomizeSeed}
                 disabled={generating}
                 title={t("serve.generate.seedRandom")}
+                aria-label={t("serve.generate.seedRandom")}
               >
                 <Dices size={14} />
               </Button>
@@ -743,11 +790,11 @@ function McpCard({ t, toast, className = "" }) {
         </span>
         <ul className="mt-2 space-y-1.5">
           {[
-            { icon: Send, label: t("serve.mcp.toolChat") },
-            { icon: ImageIcon, label: t("serve.mcp.toolGenerateImage") },
-            { icon: Server, label: t("serve.mcp.toolStatus") },
-          ].map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-2 text-[11px] text-slate-400">
+            { id: "chat", icon: Send, label: t("serve.mcp.toolChat") },
+            { id: "generate_image", icon: ImageIcon, label: t("serve.mcp.toolGenerateImage") },
+            { id: "serve_status", icon: Server, label: t("serve.mcp.toolStatus") },
+          ].map(({ id, icon: Icon, label }) => (
+            <li key={id} className="flex items-center gap-2 text-[11px] text-slate-400">
               <Icon size={12} className="shrink-0 text-indigo-300" />
               <code className="font-mono">{label}</code>
             </li>
@@ -760,13 +807,17 @@ function McpCard({ t, toast, className = "" }) {
 
 function Snippet({ title, hint, value, t, toast }) {
   const [copied, setCopied] = useState(false);
+  const resetRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(resetRef.current), []);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
       toast.success(t("serve.mcp.copied"));
-      setTimeout(() => setCopied(false), 1500);
+      clearTimeout(resetRef.current);
+      resetRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       toast.error(t("serve.mcp.copyError"));
     }

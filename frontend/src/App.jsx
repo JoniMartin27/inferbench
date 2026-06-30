@@ -13,7 +13,7 @@ import {
 import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
 import { ToastProvider } from "./components/toast.jsx";
-import { Spinner } from "./components/ui.jsx";
+import { Button, Spinner } from "./components/ui.jsx";
 import { useT } from "./i18n/index.jsx";
 
 // Vistas cargadas bajo demanda (code-splitting): el chunk pesado de recharts (gráficos de
@@ -44,12 +44,9 @@ class ViewErrorBoundary extends Component {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-400">
           <p className="text-sm">{t("app.viewLoadError")}</p>
-          <button
-            onClick={() => this.setState({ error: null })}
-            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-          >
+          <Button variant="ghost" size="sm" onClick={() => this.setState({ error: null })}>
             {t("common.retry")}
-          </button>
+          </Button>
         </div>
       );
     }
@@ -92,7 +89,7 @@ export function getModes() {
   try {
     const raw = JSON.parse(localStorage.getItem(MODES_KEY) || "{}");
     const benchmark = raw.benchmark !== false; // default ON
-    let serve = raw.serve !== false; // default ON
+    const serve = raw.serve !== false; // default ON
     // Invariante: al menos un modo activo. Si ambos quedaron OFF, reactiva benchmark.
     if (!benchmark && !serve) return { benchmark: true, serve: false };
     return { benchmark, serve };
@@ -179,132 +176,133 @@ export default function App() {
 
   return (
     <ToastProvider>
-    <div className="flex h-full flex-col bg-slate-950">
-      {dockerDown && (
-        <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900/80 to-slate-900/50 px-6 py-1.5 text-xs text-slate-400">
-          <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            <span>
-              <strong className="text-slate-300">{t("app.dockerUnavailable")}</strong> — {t("app.dockerHint")}
-            </span>
-          </span>
-          <a
-            href="https://docs.docker.com/get-docker/"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded border border-slate-700/80 px-2 py-0.5 hover:border-slate-500 hover:text-slate-200"
-          >
-            {t("app.installDocker")}
-          </a>
-        </div>
-      )}
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="flex w-60 flex-col border-r border-slate-800 bg-gradient-to-b from-slate-950 to-slate-950/80">
-          <div className="border-b border-slate-800 px-5 py-5">
-            <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-900/40">
-                <Activity size={14} />
-              </div>
-              Infer<span className="text-indigo-400">Bench</span>
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  health.status === "ok"
-                    ? "bg-emerald-400 shadow shadow-emerald-500/50"
-                    : health.status === "checking"
-                    ? "bg-amber-400"
-                    : "bg-rose-500"
-                }`}
-              />
-              <span className="text-slate-500">
-                {t("app.backendStatus")} {health.status === "ok" ? `v${health.version}` : health.status}
+      <div className="flex h-full flex-col bg-slate-950">
+        {dockerDown && (
+          <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900/80 to-slate-900/50 px-6 py-1.5 text-xs text-slate-400">
+            <span className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <span>
+                <strong className="text-slate-300">{t("app.dockerUnavailable")}</strong> — {t("app.dockerHint")}
               </span>
-            </div>
-          </div>
-
-          <nav className="flex-1 overflow-y-auto p-2">
-            {navGroups.map((group) => (
-              <div key={group.labelKey} className="mb-3">
-                <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">
-                  {t(group.labelKey)}
-                </div>
-                {group.items.map(({ id, labelKey, icon: Icon }) => {
-                  const isActive = active === id;
-                  const isRunning = id === "benchmark" && !!benchmark.running;
-                  const badge =
-                    id === "history" && counts.history > 0
-                      ? counts.history
-                      : id === "models" && counts.models > 0
-                      ? counts.models
-                      : null;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => navigate(id)}
-                      className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                        isActive
-                          ? "bg-gradient-to-r from-indigo-500/15 to-transparent text-indigo-200"
-                          : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-100"
-                      }`}
-                    >
-                      {isActive && (
-                        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-indigo-400" />
-                      )}
-                      <Icon size={15} className={isActive ? "text-indigo-300" : ""} />
-                      <span className="flex-1 text-left">{t(labelKey)}</span>
-                      {isRunning && (
-                        <span
-                          className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow shadow-emerald-500/50"
-                          title={t("app.benchmarkRunning")}
-                        />
-                      )}
-                      {badge != null && (
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
-                            isActive
-                              ? "bg-indigo-500/20 text-indigo-200"
-                              : "bg-slate-800/60 text-slate-500"
-                          }`}
-                        >
-                          {badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div className="border-t border-slate-800 px-4 py-3 text-[10px] text-slate-600">
-            <div className="font-mono">localhost:7777</div>
-            <div className="mt-0.5 truncate">
-              {health.docker?.available ? t("app.docker", { version: health.docker.version }) : t("app.noDocker")}
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
-          <ViewErrorBoundary key={active} t={t}>
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center text-slate-500">
-                  <Spinner className="text-indigo-400" />
-                </div>
-              }
+            </span>
+            <a
+              href="https://docs.docker.com/get-docker/"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-slate-700/80 px-2 py-0.5 hover:border-slate-500 hover:text-slate-200"
             >
-              <Current
-                dockerDown={dockerDown}
-                onNavigate={navigate}
-                navPayload={navPayload}
-                benchmark={benchmark}
-              />
-            </Suspense>
-          </ViewErrorBoundary>
-        </main>
+              {t("app.installDocker")}
+            </a>
+          </div>
+        )}
+        <div className="flex flex-1 overflow-hidden">
+          <aside className="flex w-60 flex-col border-r border-slate-800 bg-gradient-to-b from-slate-950 to-slate-950/80">
+            <div className="border-b border-slate-800 px-5 py-5">
+              <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-900/40">
+                  <Activity size={14} />
+                </div>
+                Infer<span className="text-indigo-400">Bench</span>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    health.status === "ok"
+                      ? "bg-emerald-400 shadow shadow-emerald-500/50"
+                      : health.status === "checking"
+                      ? "bg-amber-400"
+                      : "bg-rose-500"
+                  }`}
+                />
+                <span className="text-slate-500">
+                  {t("app.backendStatus")} {health.status === "ok" ? `v${health.version}` : health.status}
+                </span>
+              </div>
+            </div>
+
+            <nav className="flex-1 overflow-y-auto p-2">
+              {navGroups.map((group) => (
+                <div key={group.labelKey} className="mb-3">
+                  <div className="px-3 pb-1 pt-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                    {t(group.labelKey)}
+                  </div>
+                  {group.items.map(({ id, labelKey, icon: Icon }) => {
+                    const isActive = active === id;
+                    const isRunning = id === "benchmark" && !!benchmark.running;
+                    const badge =
+                      id === "history" && counts.history > 0
+                        ? counts.history
+                        : id === "models" && counts.models > 0
+                        ? counts.models
+                        : null;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => navigate(id)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                          isActive
+                            ? "bg-gradient-to-r from-indigo-500/15 to-transparent text-indigo-200"
+                            : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-100"
+                        }`}
+                      >
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-indigo-400" />
+                        )}
+                        <Icon size={15} className={isActive ? "text-indigo-300" : ""} />
+                        <span className="flex-1 text-left">{t(labelKey)}</span>
+                        {isRunning && (
+                          <span
+                            className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow shadow-emerald-500/50"
+                            title={t("app.benchmarkRunning")}
+                          />
+                        )}
+                        {badge != null && (
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
+                              isActive
+                                ? "bg-indigo-500/20 text-indigo-200"
+                                : "bg-slate-800/60 text-slate-500"
+                            }`}
+                          >
+                            {badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
+
+            <div className="border-t border-slate-800 px-4 py-3 text-[10px] text-slate-600">
+              <div className="font-mono">localhost:7777</div>
+              <div className="mt-0.5 truncate">
+                {health.docker?.available ? t("app.docker", { version: health.docker.version }) : t("app.noDocker")}
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex-1 overflow-y-auto bg-slate-950 text-slate-100">
+            <ViewErrorBoundary key={active} t={t}>
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center text-slate-500">
+                    <Spinner className="text-indigo-400" />
+                  </div>
+                }
+              >
+                <Current
+                  dockerDown={dockerDown}
+                  onNavigate={navigate}
+                  navPayload={navPayload}
+                  benchmark={benchmark}
+                />
+              </Suspense>
+            </ViewErrorBoundary>
+          </main>
+        </div>
       </div>
-    </div>
     </ToastProvider>
   );
 }

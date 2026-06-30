@@ -499,6 +499,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                           onClick={() => !infeasible && toggleSweepQuant(q)}
                           disabled={!!running || infeasible}
                           title={st ? t(statusLabelKey(st)) : undefined}
+                          aria-pressed={selected}
                           className={`rounded-md border px-2 py-1 text-xs transition-opacity ${
                             infeasible
                               ? "cursor-not-allowed border-slate-800 text-slate-600 opacity-40"
@@ -602,6 +603,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                       onClick={() => togglePrompt(p.id)}
                       disabled={!!running || blocked}
                       title={blocked ? t("benchmark.prompts.blocked") : undefined}
+                      aria-pressed={prompts.includes(p.id)}
                       className={`inline-flex items-center gap-1 rounded-md border px-3 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 ${
                         prompts.includes(p.id)
                           ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
@@ -730,7 +732,9 @@ function PowerByCompression({ engine, contextLen, selected }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const t = setTimeout(() => {
+    // Variable renombrada (no "t") para no sombrear el t() de i18n del componente —
+    // confundía la lectura y era frágil ante futuros cambios dentro del efecto.
+    const debounceId = setTimeout(() => {
       api
         .getByCompression(engine, contextLen)
         .then((r) => !cancelled && setRows(r))
@@ -739,7 +743,7 @@ function PowerByCompression({ engine, contextLen, selected }) {
     }, 300);
     return () => {
       cancelled = true;
-      clearTimeout(t);
+      clearTimeout(debounceId);
     };
   }, [engine, contextLen]);
 
@@ -888,6 +892,7 @@ function CompressionField({ value, onChange, running, model, localModel, customC
               onClick={() => onChange(p.id)}
               disabled={running}
               title={`${t(p.labelKey)} — ${t(p.descKey)}`}
+              aria-pressed={value === p.id}
               className={`rounded px-2 py-1.5 text-[11px] font-medium transition ${
                 value === p.id
                   ? p.id === "quality"
@@ -1076,6 +1081,15 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
               <tr
                 key={r.engine_id}
                 onClick={() => clickable && onSelect(r.engine_id)}
+                onKeyDown={(e) => {
+                  if (clickable && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    onSelect(r.engine_id);
+                  }
+                }}
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                aria-pressed={clickable ? isSelected : undefined}
                 title={
                   !r.model_available
                     ? t("benchmark.engineMatrix.titleModelUnavailable")
@@ -1089,7 +1103,7 @@ function EngineMatrix({ recs, loading, selectedEngine, onSelect }) {
                   isSelected
                     ? "bg-indigo-900/20"
                     : clickable
-                    ? "cursor-pointer hover:bg-slate-800/40"
+                    ? "cursor-pointer hover:bg-slate-800/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
                     : "cursor-default opacity-50"
                 }`}
               >

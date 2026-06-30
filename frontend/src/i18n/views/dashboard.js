@@ -69,10 +69,14 @@ export const dashboard = {
       "title": "Engines ({count})",
       "running": "running",
       "ready": "ready",
-      "off": "off"
+      "off": "off",
+      "api": "API"
     },
     "rec": {
       "ctx": "ctx {ctx}"
+    },
+    "toast": {
+      "loadError": "Could not load dashboard data"
     }
   },
   es: {
@@ -144,10 +148,14 @@ export const dashboard = {
       "title": "Motores ({count})",
       "running": "running",
       "ready": "listo",
-      "off": "off"
+      "off": "off",
+      "api": "API"
     },
     "rec": {
       "ctx": "ctx {ctx}"
+    },
+    "toast": {
+      "loadError": "No se pudieron cargar los datos del dashboard"
     }
   },
 };

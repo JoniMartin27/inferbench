@@ -17,6 +17,12 @@ import { useT } from "../i18n/index.jsx";
 import { exportRunsCsv, exportRunsJson, kvLabel } from "../lib/exportResults.js";
 
 const PROMPT_ORDER = ["reasoning", "code", "summary", "chat"];
+// Claves i18n para el estado de una run (run.status del backend: running | done | error).
+const STATUS_LABEL_KEY = {
+  done: "history.list.status.done",
+  error: "history.list.status.error",
+  running: "history.list.status.running",
+};
 
 export default function HistoryView({ onNavigate }) {
   const t = useT();
@@ -36,14 +42,24 @@ export default function HistoryView({ onNavigate }) {
       .finally(() => setLoading(false));
   useEffect(() => {
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Evita una condición de carrera al cambiar rápido de run seleccionada: si la respuesta
+  // de una selección anterior llega después que la de la actual, no debe pisar el detail.
   useEffect(() => {
     if (!selected) {
       setDetail(null);
       return;
     }
-    api.getHistory(selected).then(setDetail).catch(() => setDetail(null));
+    let cancelled = false;
+    api
+      .getHistory(selected)
+      .then((d) => { if (!cancelled) setDetail(d); })
+      .catch(() => { if (!cancelled) setDetail(null); });
+    return () => {
+      cancelled = true;
+    };
   }, [selected]);
 
   const remove = async (id) => {
@@ -132,11 +148,13 @@ export default function HistoryView({ onNavigate }) {
                     onClick={() => setSelected(r.id)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{opts.model || r.engine}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate font-medium" title={opts.model || r.engine}>
+                        {opts.model || r.engine}
+                      </span>
                       {opts.quant && <Badge tone="indigo">{opts.quant}</Badge>}
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="truncate text-xs text-slate-500">
                       {r.engine} · {new Date(r.ts * 1000).toLocaleString()} ·{" "}
                       <span className="opacity-60">{r.id}</span>
                     </div>
@@ -149,7 +167,7 @@ export default function HistoryView({ onNavigate }) {
                       r.status === "done" ? "emerald" : r.status === "error" ? "rose" : "amber"
                     }
                   >
-                    {r.status}
+                    {STATUS_LABEL_KEY[r.status] ? t(STATUS_LABEL_KEY[r.status]) : r.status}
                   </Badge>
                   <button
                     onClick={() => remove(r.id)}
@@ -337,6 +355,10 @@ function RunDetail({ detail }) {
             label={t("history.detail.stats.vramPeak")}
             value={`${Math.max(...(ok.map((r) => r.vram_gb || 0).concat([0]))).toFixed(2)} GB`}
           />
+          <Stat
+            label={t("history.detail.stats.ramPeak")}
+            value={`${Math.max(...(ok.map((r) => r.ram_gb || 0).concat([0]))).toFixed(2)} GB`}
+          />
         </div>
         {opts.engine_opts && Object.keys(opts.engine_opts).length > 0 && (
           <div className="mt-4 flex flex-wrap gap-1 border-t border-slate-800 pt-3">
@@ -382,6 +404,7 @@ function RunDetail({ detail }) {
                 <th className="py-2 pr-3">{t("history.detail.table.decodeTps")}</th>
                 <th className="py-2 pr-3">{t("history.detail.table.prefillTps")}</th>
                 <th className="py-2 pr-3">{t("history.detail.table.vram")}</th>
+                <th className="py-2 pr-3">{t("history.detail.table.ram")}</th>
                 <th className="py-2 pr-3">{t("history.detail.table.quality")}</th>
                 <th className="py-2 pr-3">{t("history.detail.table.tokens")}</th>
                 <th className="py-2 pr-3">{t("history.detail.table.error")}</th>
@@ -405,6 +428,7 @@ function RunDetail({ detail }) {
                   </td>
                   <td className="py-2 pr-3 tabular-nums">{r.prefill_tps || "—"}</td>
                   <td className="py-2 pr-3 tabular-nums">{r.vram_gb} GB</td>
+                  <td className="py-2 pr-3 tabular-nums">{r.ram_gb} GB</td>
                   <td className="py-2 pr-3 tabular-nums">{r.quality}</td>
                   <td className="py-2 pr-3 tabular-nums">{r.ctx_used}</td>
                   <td className="py-2 pr-3 text-xs text-rose-300">{r.error || "—"}</td>

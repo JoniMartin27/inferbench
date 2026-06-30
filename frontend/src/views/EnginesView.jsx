@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Square, RefreshCw, Download } from "lucide-react";
-import { api, installEngine } from "../api";
-import { PageHeader, Card, Button, Badge, Field, Input, Spinner } from "../components/ui.jsx";
+import { Play, Square, RefreshCw, Download, Server } from "lucide-react";
+import { api, installEngine, humanizeError } from "../api";
+import { PageHeader, Card, Button, Badge, Field, Input, Select, Spinner, Empty, Skeleton } from "../components/ui.jsx";
 import { useT } from "../i18n/index.jsx";
 
 export default function EnginesView({ dockerDown }) {
@@ -11,9 +11,15 @@ export default function EnginesView({ dockerDown }) {
   const [error, setError] = useState(null);
   const [forms, setForms] = useState({});
   const [installing, setInstalling] = useState({}); // id → progress
+  const [loading, setLoading] = useState(true);
   const installAbortRef = useRef({}); // id → AbortController (uno por motor)
 
-  const refresh = () => api.listEngines().then(setEngines).catch((e) => setError(e.message));
+  const refresh = () =>
+    api
+      .listEngines()
+      .then(setEngines)
+      .catch((e) => setError(humanizeError(e, t("engines.toast.listError"))))
+      .finally(() => setLoading(false));
   useEffect(() => {
     refresh();
     const id = setInterval(refresh, 4000);
@@ -66,7 +72,7 @@ export default function EnginesView({ dockerDown }) {
       await api.startEngine(id, body);
       await refresh();
     } catch (e) {
-      if (e.name !== "AbortError") setError(e.message); // abort = vista desmontada, no error
+      if (e.name !== "AbortError") setError(humanizeError(e)); // abort = vista desmontada, no error
       setInstalling((s) => ({ ...s, [id]: null }));
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
@@ -79,41 +85,14 @@ export default function EnginesView({ dockerDown }) {
       await api.stopEngine(id);
       await refresh();
     } catch (e) {
-      setError(e.message);
+      setError(humanizeError(e));
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }
   };
 
-  const install = async (id) => {
-    setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
-    setError(null);
-    const ctrl = new AbortController();
-    installAbortRef.current[id] = ctrl;
-    try {
-      await installEngine(
-        id,
-        (evt) => setInstalling((s) => ({ ...s, [id]: evt })),
-        ctrl.signal
-      );
-      await refresh();
-    } catch (e) {
-      if (e.name !== "AbortError") setError(e.message); // abort = vista desmontada, no error
-    } finally {
-      delete installAbortRef.current[id];
-      setTimeout(() => setInstalling((s) => ({ ...s, [id]: null })), 1500);
-    }
-  };
-
   const setForm = (id, patch) =>
     setForms((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
-
-  const anyNativeReady = engines.some((e) =>
-    e.runtimes?.some((r) => r.runtime === "native" && r.ready)
-  );
-  const anyNativeAvailable = engines.some((e) =>
-    e.runtimes?.some((r) => r.runtime === "native")
-  );
 
   return (
     <>
@@ -142,27 +121,42 @@ export default function EnginesView({ dockerDown }) {
             {error}
           </div>
         )}
-        <div className="grid gap-4 lg:grid-cols-2">
-          {engines.map((e) => (
-            <EngineCard
-              key={e.meta.id}
-              engine={e}
-              form={forms[e.meta.id] || {}}
-              onForm={(patch) => setForm(e.meta.id, patch)}
-              onStart={() => start(e.meta.id)}
-              onStop={() => stop(e.meta.id)}
-              onInstall={() => install(e.meta.id)}
-              busy={!!busy[e.meta.id]}
-              installProgress={installing[e.meta.id]}
-            />
-          ))}
-        </div>
+        {loading && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {[0, 1].map((i) => (
+              <Skeleton key={i} className="h-48 w-full" />
+            ))}
+          </div>
+        )}
+        {!loading && engines.length === 0 && !error && (
+          <Empty
+            icon={Server}
+            title={t("engines.empty.title")}
+            body={t("engines.empty.body")}
+          />
+        )}
+        {!loading && engines.length > 0 && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {engines.map((e) => (
+              <EngineCard
+                key={e.meta.id}
+                engine={e}
+                form={forms[e.meta.id] || {}}
+                onForm={(patch) => setForm(e.meta.id, patch)}
+                onStart={() => start(e.meta.id)}
+                onStop={() => stop(e.meta.id)}
+                busy={!!busy[e.meta.id]}
+                installProgress={installing[e.meta.id]}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </>
   );
 }
 
-function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, installProgress }) {
+function EngineCard({ engine, form, onForm, onStart, onStop, busy, installProgress }) {
   const t = useT();
   const { meta, status, runtimes = [] } = engine;
   const isApi = meta.type === "api";
@@ -201,18 +195,17 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
         <div className="mt-4 grid grid-cols-2 gap-3">
           {meta.runtimes.length > 1 && (
             <Field label={t("engines.field.runtime")}>
-              <select
+              <Select
                 value={wantedRuntime}
                 onChange={(e) => onForm({ runtime: e.target.value })}
                 disabled={isRunning}
-                className="w-full rounded-md border border-slate-700 bg-slate-900/40 px-3 py-1.5 text-sm text-slate-100"
               >
                 {meta.runtimes.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )}
           <Field label={t("engines.field.modelPath")}>
@@ -248,7 +241,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
                 onChange={(e) => onForm({ flashAttn: e.target.checked })}
                 disabled={isRunning}
               />
-              flash-attn
+              {t("engines.field.flashAttn")}
             </label>
             <label className="flex items-center gap-2 text-xs text-slate-400">
               <input
@@ -257,7 +250,7 @@ function EngineCard({ engine, form, onForm, onStart, onStop, onInstall, busy, in
                 onChange={(e) => onForm({ mlock: e.target.checked })}
                 disabled={isRunning}
               />
-              mlock
+              {t("engines.field.mlock")}
             </label>
           </div>
         </div>

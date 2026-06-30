@@ -1,6 +1,7 @@
 export const serve = {
   en: {
     header: {
+      eyebrow: "Serve / MCP",
       title: "Serve / MCP",
       subtitle: "Serve a quantized model residently and expose it to any app over MCP",
     },
@@ -107,8 +108,9 @@ export const serve = {
   },
   es: {
     header: {
+      eyebrow: "Serve / MCP",
       title: "Serve / MCP",
-      subtitle: "Sirve un modelo cuantizado de forma residente y exponlo a cualquier app por MCP",
+      subtitle: "Sirve un modelo cuantizado de forma residente y expónlo a cualquier app por MCP",
     },
     config: {
       title: "Modelo a servir",
@@ -153,12 +155,12 @@ export const serve = {
       ready: "El modelo está listo y sirviendo",
       copyEndpoint: "Copiar endpoint",
       copied: "Copiado al portapapeles",
-      stop: "Parar",
-      stopping: "Parando…",
-      stopped: "Modelo parado",
+      stop: "Detener",
+      stopping: "Deteniendo…",
+      stopped: "Modelo detenido",
       loadStarted: "Servicio iniciado — preparando el modelo…",
       loadError: "No se pudo iniciar el servicio",
-      stopError: "No se pudo parar el modelo",
+      stopError: "No se pudo detener el modelo",
     },
     chat: {
       title: "Chat de prueba",

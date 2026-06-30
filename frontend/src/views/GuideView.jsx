@@ -14,7 +14,7 @@ import {
   Download,
 } from "lucide-react";
 import { api } from "../api";
-import { PageHeader, Card, Button, Badge } from "../components/ui.jsx";
+import { PageHeader, Card, Button, Badge, Skeleton } from "../components/ui.jsx";
 import { useT } from "../i18n/index.jsx";
 
 export default function GuideView({ onNavigate }) {
@@ -28,14 +28,18 @@ export default function GuideView({ onNavigate }) {
   });
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       api.hardware().catch(() => null),
       api.listEngines().catch(() => []),
       api.listLocalModels().catch(() => []),
       api.listHistory().catch(() => []),
     ]).then(([hw, engines, localModels, history]) => {
-      setState({ hw, engines, localModels, history, loading: false });
+      if (!cancelled) setState({ hw, engines, localModels, history, loading: false });
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const { hw, engines, localModels, history, loading } = state;
@@ -152,7 +156,14 @@ export default function GuideView({ onNavigate }) {
               <div className="text-xs text-slate-500">{t("guide.progress.ofFlow")}</div>
             </div>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded bg-slate-800">
+          <div
+            role="progressbar"
+            aria-label={t("guide.progress.label")}
+            aria-valuenow={progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="mt-3 h-2 overflow-hidden rounded bg-slate-800"
+          >
             <div
               className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all"
               style={{ width: `${progress}%` }}
@@ -160,7 +171,13 @@ export default function GuideView({ onNavigate }) {
           </div>
         </Card>
 
-        {loading && <p className="text-slate-500">{t("guide.loading")}</p>}
+        {loading && (
+          <div className="space-y-4">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        )}
 
         {!loading && (
           <div className="space-y-4">
@@ -258,15 +275,18 @@ function Tips() {
   return (
     <Card title={t("guide.tips.heading")}>
       <div className="grid gap-3 md:grid-cols-2">
-        {items.map((t, i) => (
-          <div key={i} className="flex gap-3 rounded border border-slate-800 p-3">
-            <t.icon size={16} className="mt-0.5 shrink-0 text-indigo-300" />
-            <div>
-              <div className="text-sm font-medium">{t.title}</div>
-              <div className="mt-0.5 text-xs text-slate-400">{t.body}</div>
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <div key={i} className="flex gap-3 rounded border border-slate-800 p-3">
+              <Icon size={16} className="mt-0.5 shrink-0 text-indigo-300" />
+              <div>
+                <div className="text-sm font-medium">{item.title}</div>
+                <div className="mt-0.5 text-xs text-slate-400">{item.body}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Card>
   );

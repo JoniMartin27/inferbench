@@ -36,6 +36,7 @@ export const settings = {
       vram: "{gb} GB VRAM",
       cpuOnly: "CPU-only",
       os: "OS",
+      loadError: "Could not detect hardware",
     },
     gpus: {
       title: "Detected GPUs",
@@ -55,6 +56,7 @@ export const settings = {
       deleted: "{provider} key deleted",
       saveError: "Could not save the key",
       deleteError: "Could not delete the key",
+      inputLabel: "{provider} API key",
     },
   },
   es: {
@@ -72,7 +74,7 @@ export const settings = {
       benchmark: "Benchmark",
       benchmarkHint: "Descarga, arranca y benchmarkea motores de inferencia locales.",
       serve: "Serve / MCP",
-      serveHint: "Sirve un modelo de forma residente y exponlo a cualquier app por MCP.",
+      serveHint: "Sirve un modelo de forma residente y expónlo a cualquier app por MCP.",
       atLeastOne: "Al menos un modo debe quedar activo.",
     },
     language: {
@@ -94,6 +96,7 @@ export const settings = {
       vram: "{gb} GB VRAM",
       cpuOnly: "CPU-only",
       os: "OS",
+      loadError: "No se pudo detectar el hardware",
     },
     gpus: {
       title: "GPUs detectadas",
@@ -113,6 +116,7 @@ export const settings = {
       deleted: "Key de {provider} borrada",
       saveError: "No se pudo guardar la key",
       deleteError: "No se pudo borrar la key",
+      inputLabel: "API key de {provider}",
     },
   },
 };

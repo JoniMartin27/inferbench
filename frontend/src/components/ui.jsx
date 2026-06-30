@@ -228,6 +228,7 @@ export function compatIcon(status) {
     moe: "bg-purple-400",
     partial: "bg-amber-400",
     cpu: "bg-amber-400",
+    disk: "bg-rose-400",
     fail: "bg-rose-400",
     api: "bg-indigo-400",
   };

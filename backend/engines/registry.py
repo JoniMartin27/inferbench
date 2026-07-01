@@ -1,7 +1,10 @@
 """Registro central de motores disponibles."""
+
 from __future__ import annotations
 
-from .base import Engine, EngineMeta
+from core.optimizer import ENGINE_QUANTS
+
+from .base import Engine, EngineMeta, StartRequest
 from .llamacpp import LlamaCppEngine
 from .ollama import OllamaEngine
 from .sglang import SglangEngine
@@ -13,7 +16,7 @@ from .vllm import VllmEngine
 class _ApiOnlyEngine(Engine):
     """Stub para motores cloud — no se arrancan por Docker."""
 
-    def build_command(self, req):  # type: ignore[override]
+    def build_command(self, req: StartRequest) -> list[str]:
         raise NotImplementedError("Motor API no usa Docker")
 
 
@@ -50,8 +53,6 @@ _register(StableDiffusionEngine())
 # en la metadata para que la UI ofrezca los quants correctos por motor (GGUF en llama.cpp,
 # awq/gptq/fp8 en los Docker). Ollama va por tag pre-cuantizado y las APIs no cuantizan → [].
 def _attach_quants() -> None:
-    from core.optimizer import ENGINE_QUANTS
-
     _NO_QUANT_UI = {"ollama"}  # el quant lo fija el tag de Ollama
     for engine in _REGISTRY.values():
         if engine.meta.type == "api" or engine.meta.id in _NO_QUANT_UI:

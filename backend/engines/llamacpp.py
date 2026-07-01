@@ -1,4 +1,5 @@
 """Adaptador para llama.cpp — soporta runtime nativo (subprocess) y Docker."""
+
 from __future__ import annotations
 
 from pathlib import Path

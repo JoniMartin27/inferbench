@@ -1,4 +1,5 @@
 """Adaptador para vLLM (Docker only, requiere GPU NVIDIA)."""
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,7 @@ class VllmEngine(Engine):
 
         hf_id = opts.get("hf_model_id") or opts.get("model")
         if hf_id:
-            cmd += ["--model", hf_id]
+            cmd += ["--model", str(hf_id)]
 
         cmd += ["--port", str(req.port or self.meta.default_port)]
         cmd += ["--host", "0.0.0.0"]
@@ -39,12 +40,12 @@ class VllmEngine(Engine):
             cmd += ["--max-model-len", str(int(opts["contextLen"]))]
 
         quant = opts.get("quant") or opts.get("quantization")
-        if quant and quant.lower() not in ("none", "f16", "fp16"):
-            cmd += ["--quantization", quant.lower()]
+        if quant and str(quant).lower() not in ("none", "f16", "fp16"):
+            cmd += ["--quantization", str(quant).lower()]
 
         kv = opts.get("kvCache")
         if kv and kv != "auto":
-            cmd += ["--kv-cache-dtype", kv]
+            cmd += ["--kv-cache-dtype", str(kv)]
 
         # Tope de VRAM SIEMPRE aplicado (default de vLLM 0.9) para no ahogar el display.
         cmd += ["--gpu-memory-utilization", str(capped_gpu_fraction(opts.get("gpuMemUtil")))]
@@ -63,11 +64,16 @@ class VllmEngine(Engine):
         spec_method = opts.get("specMethod")
         spec_draft = opts.get("specDraftModel")
         if spec_method and spec_draft:
-            cmd += ["--speculative-config", json.dumps({
-                "method": str(spec_method).lower(),
-                "model": spec_draft,
-                "num_speculative_tokens": int(opts.get("specNumTokens") or 5),
-            })]
+            cmd += [
+                "--speculative-config",
+                json.dumps(
+                    {
+                        "method": str(spec_method).lower(),
+                        "model": spec_draft,
+                        "num_speculative_tokens": int(opts.get("specNumTokens") or 5),
+                    }
+                ),
+            ]
             if str(spec_method).lower() == "dflash":
                 cmd += ["--attention-backend", "flash_attn"]
 

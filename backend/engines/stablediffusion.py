@@ -10,6 +10,7 @@ Modelos single-file (SD1.x/SDXL/SD-Turbo) cargan con `-m`. Modelos multi-archivo
 necesitan `--diffusion-model` + auxiliares (`--vae`, `--clip_l`, `--t5xxl`), que el
 ServeManager pasa por `engine_opts`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

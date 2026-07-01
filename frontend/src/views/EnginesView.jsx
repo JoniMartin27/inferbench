@@ -40,8 +40,16 @@ export default function EnginesView({ dockerDown }) {
       const wanted = f.runtime || engine?.meta?.default_runtime;
       const rt = engine?.runtimes?.find((r) => r.runtime === wanted);
 
-      // Auto-instalar si el runtime nativo aún no está listo
+      // Auto-instalar si el runtime nativo aún no está listo.
+      // Solo llamacpp tiene instalador nativo por SSE (POST /install). El resto de motores
+      // nativos (ollama, stablediffusion) no se descargan desde aquí: si traen install_url
+      // (p.ej. ollama) hay que instalarlos manualmente desde ese enlace; surfaceamos un
+      // error claro en vez de disparar un /install que el backend rechaza con HTTP 400.
       if (wanted === "native" && rt && !rt.ready) {
+        if (id !== "llamacpp") {
+          const where = rt.install_url ? ` Instálalo desde ${rt.install_url}` : "";
+          throw new Error(`${engine?.meta?.name || id} no está instalado.${where}`);
+        }
         setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
         const ctrl = new AbortController();
         installAbortRef.current[id] = ctrl;

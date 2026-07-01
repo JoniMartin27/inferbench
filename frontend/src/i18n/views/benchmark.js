@@ -44,7 +44,8 @@ export const benchmark = {
       "hint": "Tick several to compare (runs sequentially)",
       "starting": "Sweep: {quants}",
       "started": "Sweep started: {id}",
-      "finished": "Sweep finished ({count|run|runs})"
+      "finished": "Sweep finished ({count|run|runs})",
+      "cancelled": "Sweep cancelled"
     },
     "notes": {
       "local": "local: {filename} · {compression}",
@@ -53,7 +54,8 @@ export const benchmark = {
     },
     "toast": {
       "launchFailed": "Could not launch the benchmark",
-      "sweepFailed": "Could not launch the sweep"
+      "sweepFailed": "Could not launch the sweep",
+      "sweepCancelFailed": "Could not cancel the sweep"
     },
     "dflash": {
       "label": "Speculative decoding (DFLASH)",
@@ -100,6 +102,7 @@ export const benchmark = {
     "actions": {
       "launch": "Launch benchmark",
       "sweep": "Sweep ({count} quants)",
+      "cancelSweep": "Cancel sweep",
       "stop": "Stop"
     },
     "runLabel": "run {id}",
@@ -276,7 +279,8 @@ export const benchmark = {
       "hint": "Marca varias para comparar (corre secuencial)",
       "starting": "Sweep: {quants}",
       "started": "Sweep arrancado: {id}",
-      "finished": "Sweep terminado ({count|run|runs})"
+      "finished": "Sweep terminado ({count|run|runs})",
+      "cancelled": "Sweep cancelado"
     },
     "notes": {
       "local": "local: {filename} · {compression}",
@@ -285,7 +289,8 @@ export const benchmark = {
     },
     "toast": {
       "launchFailed": "No se pudo lanzar el benchmark",
-      "sweepFailed": "No se pudo lanzar el sweep"
+      "sweepFailed": "No se pudo lanzar el sweep",
+      "sweepCancelFailed": "No se pudo cancelar el sweep"
     },
     "dflash": {
       "label": "Speculative decoding (DFLASH)",
@@ -332,6 +337,7 @@ export const benchmark = {
     "actions": {
       "launch": "Lanzar benchmark",
       "sweep": "Sweep ({count} quants)",
+      "cancelSweep": "Cancelar sweep",
       "stop": "Detener"
     },
     "runLabel": "run {id}",

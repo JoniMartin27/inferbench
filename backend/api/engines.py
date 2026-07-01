@@ -93,18 +93,20 @@ def _engine_status(
         return native_runtime.status(engine.meta.id)
 
 
+def _summarize(engine) -> EngineSummary:
+    # `_engine_status`/`_runtime_avail` hacen I/O de Docker BLOQUEANTE (from_env+ping+version).
+    # Se llaman desde handlers async y EnginesView pollea cada 4s: hay que sacarlo del event loop.
+    return EngineSummary(
+        meta=engine.meta,
+        status=_engine_status(engine),
+        runtimes=_runtime_avail(engine.meta),
+    )
+
+
 @router.get("", response_model=list[EngineSummary])
 async def list_engines() -> list[EngineSummary]:
-    out: list[EngineSummary] = []
-    for engine in registry.list_engines():
-        out.append(
-            EngineSummary(
-                meta=engine.meta,
-                status=_engine_status(engine),
-                runtimes=_runtime_avail(engine.meta),
-            )
-        )
-    return out
+    engines = registry.list_engines()
+    return await asyncio.to_thread(lambda: [_summarize(e) for e in engines])
 
 
 @router.get("/{engine_id}", response_model=EngineSummary)
@@ -113,11 +115,7 @@ async def get_engine(engine_id: str) -> EngineSummary:
         engine = registry.get_engine(engine_id)
     except KeyError as e:
         raise HTTPException(404, f"Unknown engine: {engine_id}") from e
-    return EngineSummary(
-        meta=engine.meta,
-        status=_engine_status(engine),
-        runtimes=_runtime_avail(engine.meta),
-    )
+    return await asyncio.to_thread(_summarize, engine)
 
 
 @router.post("/{engine_id}/start")

@@ -347,7 +347,10 @@ export default function ServeView() {
 
 function StatusCard({ status, t, toast }) {
   const phase = status?.phase || "idle";
-  const idle = phase === "idle" || (!status?.served && phase !== "error");
+  // Solo "idle" cuando de verdad no hay nada cargándose: las fases de trabajo
+  // (downloading/starting/ready/error) deben pintar el detalle (barra de progreso,
+  // mensaje, fase). Antes `!served` ocultaba el progreso durante la descarga/arranque.
+  const idle = phase === "idle";
 
   const copyEndpoint = async () => {
     try {

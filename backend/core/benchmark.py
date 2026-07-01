@@ -1107,7 +1107,14 @@ class BenchmarkRunner:
         """Asegura: binario nativo + modelo GGUF + motor corriendo."""
         model = get_model(self.req.model)
         if model is None:
-            raise RuntimeError(f"Unknown model: {self.req.model}")
+            # GGUF local descubierto por el usuario: su `model` es un id sintético
+            # ("<arch>-local") que NO está en el catálogo. No es un error: derivamos un
+            # Model sintético de la metadata del propio GGUF para que el optimizer/plan
+            # puedan calcular ctx/ngl. Sin local_path sí es un fallo real.
+            if self.req.local_path:
+                model = self._synthetic_local_model(Path(self.req.local_path))
+            else:
+                raise RuntimeError(f"Unknown model: {self.req.model}")
 
         # 1. Binario nativo + DLLs CUDA si aplica
         # install_llamacpp es idempotente: descarga solo lo que falte (binario y/o cudart)
@@ -1188,6 +1195,44 @@ class BenchmarkRunner:
         mmproj_path = await self._ensure_mmproj(model)
 
         await self._start_engine_with_path(model, gguf_path, binary, mmproj_path)
+
+    def _synthetic_local_model(self, gguf_path: Path):
+        """Construye un `Model` mínimo a partir de la metadata del GGUF local.
+
+        Para GGUFs descubiertos por el usuario (fuera del catálogo): leemos arch, capas y
+        dims del header del propio fichero para que el optimizer/`plan_llamacpp_run` calculen
+        ctx/ngl con datos reales (no inventados). Si el header no se puede leer, caemos a
+        valores conservadores. NO simula métricas — solo describe el modelo para el arranque.
+        """
+        from . import gguf_reader
+        from .models_catalog import Model
+
+        meta: dict[str, Any] = {}
+        params = None
+        try:
+            raw = gguf_reader.read_gguf_metadata(gguf_path)
+            meta = gguf_reader.summarize(raw)
+            params = gguf_reader.estimate_param_count(raw)
+        except Exception as e:  # header ilegible/corrupto: arranca con defaults conservadores
+            logger.warning(f"No se pudo leer metadata del GGUF local {gguf_path.name}: {e}")
+        params_b = round(params / 1e9, 2) if params else 7.0  # fallback prudente
+
+        arch = meta.get("architecture") or "local"
+        max_ctx = int(meta.get("context_length") or 8192)
+        return Model(
+            id=self.req.model,
+            name=gguf_path.stem,
+            family=arch,
+            params_b=params_b,
+            active_b=params_b,
+            is_moe=False,
+            size_base_gb=round(params_b * 2.0, 2) if params_b else 14.0,
+            max_ctx=max_ctx,
+            n_layer=meta.get("n_layer"),
+            n_head=meta.get("n_head"),
+            n_head_kv=meta.get("n_head_kv"),
+            head_dim=meta.get("head_dim"),
+        )
 
     async def _ensure_mmproj(self, model: Model) -> Path | None:
         """Descarga el mmproj (projector de visión) si el modelo lo necesita. Ruta o None.

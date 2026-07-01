@@ -5,6 +5,7 @@ Sintaxis tomada de los docs oficiales (no inventada):
           --attention-backend flash_attn
   SGLang: --speculative-algorithm DFLASH --speculative-draft-model-path ... --speculative-num-draft-tokens N
 """
+
 import json
 
 from engines.base import StartRequest
@@ -14,10 +15,17 @@ from engines.vllm import VllmEngine
 
 def test_vllm_dflash_config_and_attn_backend():
     eng = VllmEngine()
-    cmd = eng.build_command(StartRequest(runtime="docker", engine_opts={
-        "hf_model_id": "Qwen/Qwen3.5-27B", "specMethod": "dflash",
-        "specDraftModel": "z-lab/Qwen3.5-27B-DFlash", "specNumTokens": 15,
-    }))
+    cmd = eng.build_command(
+        StartRequest(
+            runtime="docker",
+            engine_opts={
+                "hf_model_id": "Qwen/Qwen3.5-27B",
+                "specMethod": "dflash",
+                "specDraftModel": "z-lab/Qwen3.5-27B-DFlash",
+                "specNumTokens": 15,
+            },
+        )
+    )
     cfg = json.loads(cmd[cmd.index("--speculative-config") + 1])
     assert cfg == {
         "method": "dflash",
@@ -25,7 +33,9 @@ def test_vllm_dflash_config_and_attn_backend():
         "num_speculative_tokens": 15,
     }
     # DFLASH exige flash_attn en vLLM
-    assert "--attention-backend" in cmd and cmd[cmd.index("--attention-backend") + 1] == "flash_attn"
+    assert (
+        "--attention-backend" in cmd and cmd[cmd.index("--attention-backend") + 1] == "flash_attn"
+    )
 
 
 def test_vllm_no_spec_without_draft_model():
@@ -36,11 +46,20 @@ def test_vllm_no_spec_without_draft_model():
 
 def test_sglang_dflash_flags():
     eng = SglangEngine()
-    cmd = eng.build_command(StartRequest(runtime="docker", engine_opts={
-        "hf_model_id": "Qwen/Qwen3.5-35B-A3B", "specMethod": "dflash",
-        "specDraftModel": "z-lab/Qwen3.5-35B-A3B-DFlash", "specNumTokens": 16,
-    }))
-    assert cmd[cmd.index("--speculative-algorithm") + 1] == "DFLASH"  # SGLang lo quiere en mayúsculas
+    cmd = eng.build_command(
+        StartRequest(
+            runtime="docker",
+            engine_opts={
+                "hf_model_id": "Qwen/Qwen3.5-35B-A3B",
+                "specMethod": "dflash",
+                "specDraftModel": "z-lab/Qwen3.5-35B-A3B-DFlash",
+                "specNumTokens": 16,
+            },
+        )
+    )
+    assert (
+        cmd[cmd.index("--speculative-algorithm") + 1] == "DFLASH"
+    )  # SGLang lo quiere en mayúsculas
     assert cmd[cmd.index("--speculative-draft-model-path") + 1] == "z-lab/Qwen3.5-35B-A3B-DFlash"
     assert cmd[cmd.index("--speculative-num-draft-tokens") + 1] == "16"
 

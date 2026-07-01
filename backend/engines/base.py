@@ -1,4 +1,5 @@
 """Interfaz abstracta de motor de inferencia (Docker o nativo)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +8,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from core import docker_mgr, hardware, native_runtime
@@ -81,8 +83,6 @@ class Engine(ABC):
     def container_model_path(self, req: StartRequest) -> str | None:
         if not req.model_path:
             return None
-        import os
-
         return f"/models/{os.path.basename(req.model_path)}"
 
     def native_model_path(self, req: StartRequest) -> str | None:
@@ -93,7 +93,10 @@ class Engine(ABC):
         pero los motores pueden sobrescribir si la sintaxis difiere de Docker."""
         return self.build_command(req)
 
-    def native_exe(self) -> Any:  # Path | Awaitable[Path]
+    def native_exe(self) -> Any:
+        """Resuelve el ejecutable nativo. Los motores con runtime nativo devuelven un
+        callable `(progress) -> Path | Awaitable[Path]` (para reportar progreso de
+        descarga/instalación); `_start_native` normaliza cualquiera de las tres formas."""
         raise NotImplementedError(f"{self.meta.id} no tiene runtime nativo")
 
     def resolve_runtime(self, req: StartRequest) -> RuntimeKind:
@@ -105,7 +108,9 @@ class Engine(ABC):
             )
         return wanted
 
-    async def start(self, req: StartRequest, progress: ProgressCb = None):
+    async def start(
+        self, req: StartRequest, progress: ProgressCb = None
+    ) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
         if self.is_api:
             raise ValueError(f"Motor {self.meta.id} es API, no se arranca")
         runtime = self.resolve_runtime(req)
@@ -115,7 +120,7 @@ class Engine(ABC):
             return await asyncio.to_thread(self._start_docker, req)
         return await self._start_native(req, progress)
 
-    def _start_docker(self, req: StartRequest):
+    def _start_docker(self, req: StartRequest) -> docker_mgr.ContainerStatus:
         if not self.meta.image:
             raise ValueError(f"Motor {self.meta.id} no tiene imagen Docker")
         port = req.port or self.meta.default_port
@@ -137,7 +142,7 @@ class Engine(ABC):
         # publicar host:port → container:port. Clavarlo a default_port dejaba el motor
         # inalcanzable si el llamador pasaba un req.port distinto.
         ports = {f"{port}/tcp": port}
-        st = docker_mgr.start(
+        return docker_mgr.start(
             self.meta.id,
             image=self.meta.image,
             command=self.build_command(req),
@@ -146,9 +151,10 @@ class Engine(ABC):
             volumes=self.build_volumes(req),
             gpu=req.gpu,
         )
-        return st
 
-    async def _start_native(self, req: StartRequest, progress: ProgressCb):
+    async def _start_native(
+        self, req: StartRequest, progress: ProgressCb
+    ) -> native_runtime.ProcessStatus:
         exe = self.native_exe()
         if hasattr(exe, "__await__"):
             exe = await exe  # type: ignore
@@ -165,20 +171,17 @@ class Engine(ABC):
             port=port,
         )
 
-    def stop(self):
+    def stop(self) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
         # Probar ambos runtimes — el que esté activo
-        try:
-            n = native_runtime.status(self.meta.id)
-            if n.state == "running":
-                return native_runtime.stop(self.meta.id)
-        except Exception:
-            pass
+        n = native_runtime.status(self.meta.id)
+        if n.state == "running":
+            return native_runtime.stop(self.meta.id)
         try:
             return docker_mgr.stop(self.meta.id)
         except docker_mgr.DockerUnavailableError:
             return native_runtime.stop(self.meta.id)
 
-    def status(self):
+    def status(self) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
         # Si hay proceso nativo activo, ese gana
         n = native_runtime.status(self.meta.id)
         if n.state == "running":
@@ -187,6 +190,8 @@ class Engine(ABC):
             d = docker_mgr.status(self.meta.id)
             if d.state in ("running", "exited", "created", "paused", "restarting", "dead"):
                 return d
-        except Exception:
+        except docker_mgr.DockerUnavailableError:
             pass
+        except Exception as e:
+            logger.warning(f"docker status({self.meta.id}) falló: {e}")
         return n

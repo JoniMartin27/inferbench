@@ -1,5 +1,6 @@
 """Entry point del backend FastAPI de InferBench."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
@@ -16,6 +17,7 @@ from api.history import router as history_router
 from api.keys import router as keys_router
 from api.optimize import router as optimize_router
 from api.serve import router as serve_router
+from core.docker_mgr import availability as docker_availability
 from db import init_db
 
 
@@ -85,9 +87,10 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    from core.docker_mgr import availability
-
-    return {"status": "ok", "version": __version__, "docker": availability()}
+    # docker_availability() hace ping/version por el socket de Docker (bloqueante) — se
+    # descarga a un hilo para no bloquear el event loop en cada chequeo de salud.
+    docker_status = await asyncio.to_thread(docker_availability)
+    return {"status": "ok", "version": __version__, "docker": docker_status}
 
 
 app.include_router(hardware_router)

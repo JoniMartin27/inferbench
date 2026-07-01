@@ -1,4 +1,5 @@
 """Adaptador para HuggingFace TGI (text-generation-inference)."""
+
 from __future__ import annotations
 
 from core.hardware import capped_gpu_fraction
@@ -28,7 +29,7 @@ class TgiEngine(Engine):
 
         hf_id = opts.get("hf_model_id") or opts.get("model")
         if hf_id:
-            cmd += ["--model-id", hf_id]
+            cmd += ["--model-id", str(hf_id)]
 
         cmd += ["--port", str(req.port or self.meta.default_port), "--hostname", "0.0.0.0"]
 
@@ -39,12 +40,15 @@ class TgiEngine(Engine):
             # ventana: input = contextLen − out_budget, total = contextLen.
             ctx = int(opts["contextLen"])
             out_budget = min(1024, max(256, ctx // 4))
-            cmd += ["--max-input-tokens", str(max(256, ctx - out_budget))]
+            # TGI exige max-input-tokens < max-total-tokens (hueco para al menos 1 token de
+            # salida); en ventanas muy pequeñas el suelo de 256 podía dejarlos iguales.
+            max_input = min(ctx - 1, max(256, ctx - out_budget))
+            cmd += ["--max-input-tokens", str(max(1, max_input))]
             cmd += ["--max-total-tokens", str(ctx)]
 
         quant = opts.get("quant") or opts.get("quantization")
-        if quant and quant.lower() not in ("none", "f16", "fp16"):
-            cmd += ["--quantize", quant.lower()]
+        if quant and str(quant).lower() not in ("none", "f16", "fp16"):
+            cmd += ["--quantize", str(quant).lower()]
 
         if opts.get("numShard"):
             cmd += ["--num-shard", str(int(opts["numShard"]))]

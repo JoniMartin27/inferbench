@@ -1,4 +1,5 @@
 """Endpoints /api/models."""
+
 from __future__ import annotations
 
 import asyncio
@@ -37,23 +38,33 @@ async def list_local_models(refresh: bool = False) -> list[local_models.LocalMod
     return await asyncio.to_thread(local_models.discover, read_metadata=True)
 
 
-@router.get("/local/dirs")
-async def list_search_dirs() -> dict:
-    return {
-        "known": [str(d) for d in local_models.KNOWN_DIRS],
-        "extra": [str(d) for d in local_models.get_extra_dirs()],
-        "extra_dirs_file": str(local_models.get_extra_dirs_file()),
-    }
+class SearchDirs(BaseModel):
+    known: list[str]
+    extra: list[str]
+    extra_dirs_file: str
+
+
+@router.get("/local/dirs", response_model=SearchDirs)
+async def list_search_dirs() -> SearchDirs:
+    return SearchDirs(
+        known=[str(d) for d in local_models.KNOWN_DIRS],
+        extra=[str(d) for d in local_models.get_extra_dirs()],
+        extra_dirs_file=str(local_models.get_extra_dirs_file()),
+    )
 
 
 class ExtraDirs(BaseModel):
     dirs: list[str]
 
 
-@router.post("/local/dirs")
-async def update_search_dirs(body: ExtraDirs) -> dict:
+class SavedDirs(BaseModel):
+    saved: list[str]
+
+
+@router.post("/local/dirs", response_model=SavedDirs)
+async def update_search_dirs(body: ExtraDirs) -> SavedDirs:
     saved = local_models.set_extra_dirs(body.dirs)
-    return {"saved": [str(d) for d in saved]}
+    return SavedDirs(saved=[str(d) for d in saved])
 
 
 @router.get("/{model_id}", response_model=Model)
@@ -86,20 +97,16 @@ async def compat_all(
     rows: list[CompatRow] = []
     for m in load_models():
         size = compat.get_model_size_gb(m, opts.quant)
-        kv_kb = compat.get_kv_per_token_mb(m, opts.kv_cache) * 1024  # MB→KB
-        total = size + opts.context_len * compat.get_kv_per_token_gb(m, opts.kv_cache) + 0.6
-        status = compat.check_compat(
-            m, hw, opts, engine_id=eng.meta.id, is_api=eng.is_api
-        )
-        max_ctx = compat.compute_max_context(
-            m, hw, opts, engine_id=eng.meta.id, is_api=eng.is_api
-        )
+        kv_mb = compat.get_kv_per_token_mb(m, opts.kv_cache)
+        total = size + opts.context_len * (kv_mb / 1024.0) + 0.6
+        status = compat.check_compat(m, hw, opts, engine_id=eng.meta.id, is_api=eng.is_api)
+        max_ctx = compat.compute_max_context(m, hw, opts, engine_id=eng.meta.id, is_api=eng.is_api)
         rows.append(
             CompatRow(
                 model=m,
                 status=status,
                 model_size_gb=round(size, 2),
-                kv_per_token_kb=round(kv_kb, 2),
+                kv_per_token_kb=round(kv_mb * 1024, 2),
                 estimated_total_gb=round(total, 2),
                 max_context=max_ctx,
             )

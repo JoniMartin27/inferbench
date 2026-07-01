@@ -1,4 +1,5 @@
 """Carga del catálogo de modelos desde data/models.json."""
+
 from __future__ import annotations
 
 import json
@@ -27,10 +28,10 @@ class HfGguf(BaseModel):
     # Si `diffusion_model` está presente, el server sd.cpp carga con --diffusion-model en
     # vez de -m, y los auxiliares con sus flags (--vae/--clip_l/--clip_g/--t5xxl).
     diffusion_model: str | None = None  # filename del diffusion-model GGUF/safetensors
-    vae: str | None = None              # filename del VAE
-    clip_l: str | None = None           # filename del encoder CLIP-L
-    clip_g: str | None = None           # filename del encoder CLIP-G (SDXL)
-    t5xxl: str | None = None            # filename del encoder T5-XXL (FLUX)
+    vae: str | None = None  # filename del VAE
+    clip_l: str | None = None  # filename del encoder CLIP-L
+    clip_g: str | None = None  # filename del encoder CLIP-G (SDXL)
+    t5xxl: str | None = None  # filename del encoder T5-XXL (FLUX)
 
     @property
     def aux_files(self) -> dict[str, str]:
@@ -58,10 +59,10 @@ class Model(BaseModel):
     id: str
     name: str
     family: str
-    params_b: float           # parámetros totales en miles de millones
-    active_b: float           # activos por token (igual a params_b si no es MoE)
+    params_b: float  # parámetros totales en miles de millones
+    active_b: float  # activos por token (igual a params_b si no es MoE)
     is_moe: bool
-    size_base_gb: float       # tamaño sin cuantizar (~ FP16) en GB
+    size_base_gb: float  # tamaño sin cuantizar (~ FP16) en GB
     max_ctx: int
     license: str = ""
     tags: list[str] = []
@@ -71,11 +72,11 @@ class Model(BaseModel):
     modality: Modality = "text"
     hf_gguf: HfGguf | None = None  # fuente para auto-descarga (llama.cpp / sd.cpp)
     ollama_tag: str | None = None  # tag en el registro de Ollama (ej. "llama3.2:1b")
-    hf_repo: str | None = None     # repo HF del modelo no-cuantizado (vLLM/SGLang/TGI)
-    n_layer: int | None = None     # número de capas (para ngl partial y KV exacta)
-    n_head: int | None = None      # cabezas de atención (query)
-    n_head_kv: int | None = None   # cabezas de KV (GQA/MQA); fija el tamaño de KV-cache
-    head_dim: int | None = None    # dimensión por cabeza (para KV-cache exacta)
+    hf_repo: str | None = None  # repo HF del modelo no-cuantizado (vLLM/SGLang/TGI)
+    n_layer: int | None = None  # número de capas (para ngl partial y KV exacta)
+    n_head: int | None = None  # cabezas de atención (query)
+    n_head_kv: int | None = None  # cabezas de KV (GQA/MQA); fija el tamaño de KV-cache
+    head_dim: int | None = None  # dimensión por cabeza (para KV-cache exacta)
     image: ImageSpec | None = None  # defaults de generación (solo modality="image")
 
     @property

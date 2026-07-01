@@ -1,4 +1,5 @@
 """Runtime nativo: arranca motores como subprocess en lugar de contenedores Docker."""
+
 from __future__ import annotations
 
 import os
@@ -10,6 +11,7 @@ from typing import IO, Optional
 
 from loguru import logger
 from pydantic import BaseModel
+
 
 # Reutilizamos el mismo schema de ContainerStatus para uniformidad con docker_mgr
 class ProcessStatus(BaseModel):
@@ -55,10 +57,11 @@ def status(engine_id: str) -> ProcessStatus:
         return ProcessStatus(name=name, state="missing")
     rc = proc.poll()
     if rc is None:
-        return ProcessStatus(
-            name=name, state="running", pid=proc.pid, container_id=str(proc.pid)
-        )
+        return ProcessStatus(name=name, state="running", pid=proc.pid, container_id=str(proc.pid))
+    # Proceso murió por su cuenta (crash/OOM-kill), no vía stop(): limpiar también
+    # _LOADED para que get_loaded() no reporte un modelo "cargado" que ya no corre.
     _PROCS.pop(engine_id, None)
+    _LOADED.pop(engine_id, None)
     return ProcessStatus(name=name, state="exited", pid=proc.pid)
 
 
@@ -89,7 +92,10 @@ def start(
             cwd=str(exe.parent),
         )
     except Exception:
+        # Popen falló: no dejar el fd abierto ni una entrada de _LOG_FILES apuntando a
+        # un intento que nunca llegó a tener proceso (_PROCS/_LOG_FDS nunca se poblaron).
         log_fd.close()
+        _LOG_FILES.pop(engine_id, None)
         raise
     _LOG_FDS[engine_id] = log_fd
     _PROCS[engine_id] = proc

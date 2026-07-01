@@ -1,4 +1,5 @@
 """Tests de endurecimiento: host confiable de descargas + defensa DNS-rebinding."""
+
 import pytest
 
 from core.binary_manager import _is_trusted_dl_host, _parse_sha256_digest
@@ -49,12 +50,16 @@ def test_judge_base_url_ssrf_rejected():
 
     with pytest.raises(ValueError):
         BenchmarkRequest(
-            model="m", engine="openai",
+            model="m",
+            engine="openai",
             judge={"mode": "api", "engine": "openai", "base_url": "http://169.254.169.254/latest"},
         )
     # Loopback y una API cloud conocida sí se aceptan; sin base_url cae al default seguro.
-    BenchmarkRequest(model="m", engine="openai",
-                     judge={"mode": "api", "engine": "openai", "base_url": "http://localhost:8080"})
+    BenchmarkRequest(
+        model="m",
+        engine="openai",
+        judge={"mode": "api", "engine": "openai", "base_url": "http://localhost:8080"},
+    )
     BenchmarkRequest(model="m", engine="openai", judge={"mode": "api", "engine": "openai"})
 
 

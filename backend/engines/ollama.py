@@ -1,4 +1,5 @@
 """Adaptador para Ollama — soporta runtime nativo (binario `ollama`) y Docker."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,10 +33,10 @@ class OllamaEngine(Engine):
         return ["serve"]
 
     def build_environment(self, req: StartRequest) -> dict[str, str]:
-        env = dict(req.extra_env)
+        env = super().build_environment(req)
         opts = req.engine_opts or {}
         # Optimizaciones documentadas de Ollama
-        if opts.get("flashAttn") is True:
+        if opts.get("flashAttn"):
             env["OLLAMA_FLASH_ATTENTION"] = "1"
         if opts.get("kvCache"):
             env["OLLAMA_KV_CACHE_TYPE"] = str(opts["kvCache"])

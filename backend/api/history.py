@@ -1,4 +1,5 @@
 """Endpoints /api/history — listar/leer/borrar runs."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -44,7 +45,9 @@ async def get_run(run_id: str) -> RunDetail:
         run = s.get(BenchmarkRun, run_id)
         if not run:
             raise HTTPException(404, f"Unknown run: {run_id}")
-        results = list(s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all())
+        results = list(
+            s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all()
+        )
         return RunDetail(run=run, results=results)
 
 
@@ -54,7 +57,9 @@ async def delete_run(run_id: str) -> dict[str, str]:
         run = s.get(BenchmarkRun, run_id)
         if not run:
             raise HTTPException(404, f"Unknown run: {run_id}")
-        results = list(s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all())
+        results = list(
+            s.exec(select(BenchmarkResult).where(BenchmarkResult.run_id == run_id)).all()
+        )
         for r in results:
             s.delete(r)
         s.delete(run)

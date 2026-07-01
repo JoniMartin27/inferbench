@@ -4,6 +4,7 @@ Las keys NUNCA se guardan en SQLite ni en archivos de config en plano (regla del
 van al gestor de credenciales del sistema (Windows Credential Manager, macOS Keychain,
 Secret Service en Linux). Este módulo es la única puerta de entrada/salida.
 """
+
 from __future__ import annotations
 
 import keyring
@@ -44,10 +45,14 @@ def get_key(provider: str) -> str | None:
 
 
 def delete_key(provider: str) -> None:
+    """Borra la key guardada de un proveedor. No-op si no existía o el backend no está disponible."""
     try:
         keyring.delete_password(_SERVICE, provider)
-    except KeyringError:
-        pass  # no existía o backend no disponible
+    except KeyringError as e:
+        # PasswordDeleteError cubre tanto "no existía" como fallos reales del backend (algunos
+        # backends, incl. Windows, no los distinguen) — no hay forma fiable de diferenciarlos,
+        # así que solo logueamos en debug para no ensuciar logs con el caso común de "no existía".
+        logger.debug(f"keyring delete '{provider}': {e}")
 
 
 def has_keys() -> dict[str, bool]:

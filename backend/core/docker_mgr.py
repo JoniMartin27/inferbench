@@ -1,17 +1,17 @@
 """Wrapper sobre Docker SDK: start, stop, status, logs de contenedores de motores."""
+
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel
 
 try:
     import docker
-    from docker.errors import APIError, DockerException, NotFound
+    from docker.errors import APIError, NotFound
 except ImportError:  # docker SDK no instalado
     docker = None  # type: ignore
-    DockerException = Exception  # type: ignore
     NotFound = Exception  # type: ignore
     APIError = Exception  # type: ignore
 
@@ -29,6 +29,7 @@ class ContainerStatus(BaseModel):
     image: str | None = None
     ports: dict[str, Any] = {}
     container_id: str | None = None
+    gpu: bool | None = None  # True/False si se conoce (start()); None si no aplica (status/stop)
 
 
 def _client():
@@ -75,11 +76,7 @@ def availability() -> dict:
             "available": False,
             "installed": cli_installed,
             "reason": msg,
-            "hint": (
-                "Arranca Docker Desktop"
-                if cli_installed
-                else "Instalar Docker Desktop"
-            ),
+            "hint": ("Arranca Docker Desktop" if cli_installed else "Instalar Docker Desktop"),
         }
 
 
@@ -147,32 +144,30 @@ def start(
         # Petición GPU NVIDIA — si no hay runtime nvidia, Docker fallará con APIError
         device_requests = [docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
+    run_kwargs = dict(
+        image=image,
+        command=command,
+        name=name,
+        detach=True,
+        ports=ports or {},
+        environment=environment or {},
+        volumes=volumes or {},
+        restart_policy={"Name": "no"},
+    )
+    got_gpu = gpu
     try:
-        cnt = c.containers.run(
-            image=image,
-            command=command,
-            name=name,
-            detach=True,
-            ports=ports or {},
-            environment=environment or {},
-            volumes=volumes or {},
-            device_requests=device_requests,
-            restart_policy={"Name": "no"},
-        )
+        cnt = c.containers.run(device_requests=device_requests, **run_kwargs)
     except APIError as e:
-        # Si falla por GPU, reintentar sin GPU
+        # Si falla por GPU, reintentar sin GPU. El motor construyó su comando/flags
+        # asumiendo GPU (ver engines/*): el caller debe poder distinguir este caso vía
+        # el campo `gpu` de la respuesta, no solo por el log.
         if gpu and "could not select device driver" in str(e).lower():
-            logger.warning("GPU runtime no disponible, reintentando en CPU")
-            cnt = c.containers.run(
-                image=image,
-                command=command,
-                name=name,
-                detach=True,
-                ports=ports or {},
-                environment=environment or {},
-                volumes=volumes or {},
-                restart_policy={"Name": "no"},
+            logger.warning(
+                f"GPU runtime no disponible para {name}, arrancando en CPU "
+                f"(el motor podría no funcionar bien sin flags de CPU dedicados)"
             )
+            got_gpu = False
+            cnt = c.containers.run(**run_kwargs)
         else:
             raise
     cnt.reload()
@@ -182,6 +177,7 @@ def start(
         image=image,
         ports=cnt.attrs.get("NetworkSettings", {}).get("Ports") or {},
         container_id=cnt.short_id,
+        gpu=got_gpu,
     )
 
 
@@ -215,15 +211,3 @@ def logs(engine_id: str, *, tail: int = 200) -> str:
         return ""
     out = cnt.logs(tail=tail, stdout=True, stderr=True)
     return out.decode("utf-8", errors="replace") if isinstance(out, bytes) else str(out)
-
-
-def stream_logs(engine_id: str) -> Iterator[str]:
-    """Generador que cede líneas de log en tiempo real."""
-    name = container_name(engine_id)
-    c = _client()
-    cnt = c.containers.get(name)
-    for chunk in cnt.logs(stream=True, follow=True, stdout=True, stderr=True):
-        if isinstance(chunk, bytes):
-            yield chunk.decode("utf-8", errors="replace")
-        else:
-            yield str(chunk)

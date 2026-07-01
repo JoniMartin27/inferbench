@@ -154,3 +154,89 @@ def test_load_validates_model_without_gguf_source(monkeypatch):
     r = client.post("/api/serve/load", json={"model_id": "fake-no-gguf"})
     assert r.status_code == 400
     assert "gguf" in r.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+async def test_load_cancels_orphaned_pending_task():
+    """Regresión: una load() mientras otra sigue 'downloading' no debe dejar la tarea
+    anterior huérfana corriendo en background (issue real: sustituía self._task sin
+    cancelar la previa, que podía arrancar su motor DESPUÉS de la nueva)."""
+    import asyncio
+
+    mgr = serve_core.get_manager()
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def _never_finishes():
+        try:
+            started.set()
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    mgr.phase = "downloading"
+    mgr._task = asyncio.create_task(_never_finishes())
+    await asyncio.wait_for(started.wait(), timeout=5)
+    assert not mgr._task.done()
+
+    await mgr._cancel_pending_task()
+
+    await asyncio.wait_for(cancelled.wait(), timeout=5)
+    assert mgr._task.done()
+    assert mgr._task.cancelled()
+
+
+@pytest.mark.anyio
+async def test_load_does_not_reuse_when_context_differs(monkeypatch):
+    """Regresión: si el modelo/engine/quant ya están 'ready' pero el caller pide un
+    `context` explícito distinto del servido, load() NO debe reusar el motor viejo en
+    silencio — debe relanzar la carga para honrar el nuevo context."""
+    import asyncio
+
+    mgr = serve_core.get_manager()
+    mgr.model_id = "smollm2-360m"
+    mgr.engine = "llamacpp"
+    mgr.quant = "Q4_K_M"
+    mgr.context = 4096
+    mgr.phase = "ready"
+    monkeypatch.setattr(mgr, "_engine_running", lambda: True)
+
+    # Evita tocar de verdad binarios/red: _run_load se sustituye por un no-op que no
+    # completa (basta con comprobar que load() intentó relanzar, no que termine).
+    async def _fake_run_load(*args, **kwargs):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(mgr, "_run_load", _fake_run_load)
+
+    # Mismo quant explícito, pero context distinto del ya servido (4096) → no reusa.
+    result = await mgr.load("smollm2-360m", engine="llamacpp", quant="Q4_K_M", context=8192)
+
+    assert result["phase"] == "downloading"
+    assert mgr.context == 8192
+    # Limpieza: cancela la tarea en background para no dejarla huérfana entre tests.
+    await mgr._cancel_pending_task()
+
+
+@pytest.mark.anyio
+async def test_load_reuses_when_context_matches_or_unset(monkeypatch):
+    """Mismo escenario pero sin pedir context (o pidiendo el mismo ya servido): sigue
+    reusando el motor sin relanzar, como antes."""
+    mgr = serve_core.get_manager()
+    mgr.model_id = "smollm2-360m"
+    mgr.engine = "llamacpp"
+    mgr.quant = "Q4_K_M"
+    mgr.context = 4096
+    mgr.phase = "ready"
+    monkeypatch.setattr(mgr, "_engine_running", lambda: True)
+
+    async def _fail_if_called(*args, **kwargs):
+        raise AssertionError("_run_load no debería llamarse cuando se reusa el motor")
+
+    monkeypatch.setattr(mgr, "_run_load", _fail_if_called)
+
+    result = await mgr.load("smollm2-360m", engine="llamacpp", quant="Q4_K_M")
+    assert result["phase"] == "ready"
+
+    result2 = await mgr.load("smollm2-360m", engine="llamacpp", quant="Q4_K_M", context=4096)
+    assert result2["phase"] == "ready"

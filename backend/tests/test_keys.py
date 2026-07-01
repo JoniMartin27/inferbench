@@ -1,4 +1,5 @@
 """Tests de core/secrets.py y /api/keys con keyring mockeado (no toca el del SO)."""
+
 import pytest
 
 from core import secrets
@@ -7,7 +8,9 @@ from core import secrets
 @pytest.fixture
 def fake_keyring(monkeypatch):
     store: dict = {}
-    monkeypatch.setattr(secrets.keyring, "set_password", lambda s, p, k: store.__setitem__((s, p), k))
+    monkeypatch.setattr(
+        secrets.keyring, "set_password", lambda s, p, k: store.__setitem__((s, p), k)
+    )
     monkeypatch.setattr(secrets.keyring, "get_password", lambda s, p: store.get((s, p)))
     monkeypatch.setattr(secrets.keyring, "delete_password", lambda s, p: store.pop((s, p), None))
     return store

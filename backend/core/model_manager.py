@@ -1,4 +1,5 @@
 """Descarga y caché de modelos GGUF desde Hugging Face."""
+
 from __future__ import annotations
 
 import asyncio
@@ -116,6 +117,7 @@ async def ollama_model_exists(tag: str) -> bool:
     logger.debug(f"Ollama registry {tag} → exists={exists}")
     return exists
 
+
 ProgressCb = Callable[[dict], Awaitable[None]] | None
 
 
@@ -161,8 +163,13 @@ def _multipart_installed(model: Model, quant: str) -> bool:
 
 
 def _filter_shards(rfilenames: list[str], base: str) -> list[str]:
-    """De una lista de rfilenames, los shards `<base>-NNNNN-of-NNNNN.gguf`, ordenados."""
-    pat = re.compile(re.escape(base) + r"-\d{5}-of-\d{5}\.gguf$")
+    """De una lista de rfilenames, los shards `<base>-NNNNN-of-NNNNN.gguf`, ordenados.
+
+    Ancla también el inicio del nombre de fichero (tras el último '/'): sin esto, un
+    `base` que sea sufijo de otro modelo del mismo repo (ej. 'Model-Q4_K_M' dentro de
+    'Big-Model-Q4_K_M-00001-of-00002.gguf') colaría shards de un modelo distinto.
+    """
+    pat = re.compile(r"(?:^|/)" + re.escape(base) + r"-\d{5}-of-\d{5}\.gguf$")
     return sorted(f for f in rfilenames if pat.search(f))
 
 
@@ -191,9 +198,23 @@ def _quants_from_filenames(file_template: str, filenames: list[str]) -> list[str
         if m:
             found.add(m.group(1))
     # Orden aproximado por calidad descendente (Q8 mejor que Q4 mejor que IQ2…).
-    order = {"Q8_0": 0, "Q6_K": 1, "Q5_K_M": 2, "Q5_K_S": 3, "Q4_K_M": 4, "Q4_K_S": 5,
-             "IQ4_XS": 6, "Q3_K_M": 7, "IQ3_M": 8, "Q2_K": 9, "IQ2_M": 10, "IQ2_XS": 11,
-             "IQ2_XXS": 12, "IQ1_M": 13, "IQ1_S": 14}
+    order = {
+        "Q8_0": 0,
+        "Q6_K": 1,
+        "Q5_K_M": 2,
+        "Q5_K_S": 3,
+        "Q4_K_M": 4,
+        "Q4_K_S": 5,
+        "IQ4_XS": 6,
+        "Q3_K_M": 7,
+        "IQ3_M": 8,
+        "Q2_K": 9,
+        "IQ2_M": 10,
+        "IQ2_XS": 11,
+        "IQ2_XXS": 12,
+        "IQ1_M": 13,
+        "IQ1_S": 14,
+    }
     return sorted(found, key=lambda q: order.get(q, 99))
 
 
@@ -268,8 +289,16 @@ async def _download_resilient(
         accept_ranges = head.headers.get("accept-ranges", "").lower() == "bytes"
 
         if progress:
-            await progress({"phase": "model.download", "name": filename,
-                            "size": total, "downloaded": 0, "pct": 0, **meta})
+            await progress(
+                {
+                    "phase": "model.download",
+                    "name": filename,
+                    "size": total,
+                    "downloaded": 0,
+                    "pct": 0,
+                    **meta,
+                }
+            )
 
         last_err: Exception | None = None
         for attempt in range(_MAX_DL_RETRIES):
@@ -299,9 +328,15 @@ async def _download_resilient(
                             if progress and total:
                                 pct = round(downloaded / total * 100, 1)
                                 if pct - last_pct >= 0.5:
-                                    await progress({"phase": "model.download",
-                                                    "downloaded": downloaded, "size": total,
-                                                    "pct": pct, **meta})
+                                    await progress(
+                                        {
+                                            "phase": "model.download",
+                                            "downloaded": downloaded,
+                                            "size": total,
+                                            "pct": pct,
+                                            **meta,
+                                        }
+                                    )
                                     last_pct = pct
                 # Validar que la descarga está completa antes del rename atómico.
                 if total and tmp.stat().st_size < total:
@@ -324,14 +359,21 @@ async def _download_resilient(
                 last_err = e
 
             if attempt < _MAX_DL_RETRIES - 1:
-                delay = _DL_BACKOFF_BASE * (2 ** attempt)
+                delay = _DL_BACKOFF_BASE * (2**attempt)
                 logger.warning(
                     f"Descarga de {filename} falló (intento {attempt + 1}/{_MAX_DL_RETRIES}): "
                     f"{last_err}. Reintento en {delay:.0f}s"
                 )
                 if progress:
-                    await progress({"phase": "model.retry", "attempt": attempt + 1,
-                                    "max": _MAX_DL_RETRIES, "delay": delay, **meta})
+                    await progress(
+                        {
+                            "phase": "model.retry",
+                            "attempt": attempt + 1,
+                            "max": _MAX_DL_RETRIES,
+                            "delay": delay,
+                            **meta,
+                        }
+                    )
                 await asyncio.sleep(delay)
 
         # Agotados los reintentos: limpiar el .part parcial y abortar con error claro.
@@ -351,8 +393,9 @@ async def _ensure_gguf_multipart(
     repo = model.hf_gguf.repo
     base = _shard_base(model, quant)
     if progress:
-        await progress({"phase": "model.lookup", "model": model.id, "quant": quant,
-                        "multipart": True})
+        await progress(
+            {"phase": "model.lookup", "model": model.id, "quant": quant, "multipart": True}
+        )
     shards = await _fetch_shard_files(repo, base)
     if not shards:
         raise RuntimeError(
@@ -365,7 +408,8 @@ async def _ensure_gguf_multipart(
         await _download_resilient(
             f"https://huggingface.co/{repo}/resolve/main/{rf}",
             repo_dir / rf,  # preserva el subdir → los shards quedan juntos
-            progress, cancel_event,
+            progress,
+            cancel_event,
             label=f"shard {idx}/{len(shards)} de {model.id} {quant}",
             progress_meta={"model": model.id, "shard": idx, "shards": len(shards)},
         )
@@ -384,9 +428,7 @@ async def ensure_gguf(
     Si el modelo es multi-parte (`hf_gguf.multipart`), descarga todos los shards.
     """
     if not model.hf_gguf:
-        raise RuntimeError(
-            f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo"
-        )
+        raise RuntimeError(f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo")
     if model.hf_gguf.multipart:
         return await _ensure_gguf_multipart(model, quant, progress, cancel_event)
     target = _model_file(model, quant)
@@ -400,7 +442,10 @@ async def ensure_gguf(
     not_found = f"Cuantización {quant} no disponible para {model.id} en {repo}."
     try:
         return await _download_resilient(
-            url, target, progress, cancel_event,
+            url,
+            target,
+            progress,
+            cancel_event,
             label=f"GGUF {quant} de {model.id}",
             progress_meta={"model": model.id},
             not_found_msg=not_found,
@@ -460,7 +505,10 @@ async def ensure_single_file(
     if progress:
         await progress({"phase": "model.lookup", "model": model.id, "file": fn, "url": url})
     return await _download_resilient(
-        url, target, progress, cancel_event,
+        url,
+        target,
+        progress,
+        cancel_event,
         label=f"checkpoint de {model.id}",
         progress_meta={"model": model.id, "kind": "checkpoint"},
         not_found_msg=f"Checkpoint {fn} no disponible para {model.id} en {repo}.",
@@ -509,7 +557,10 @@ async def ensure_aux(
     if progress:
         await progress({"phase": "model.lookup", "model": model.id, "aux": kind, "url": url})
     return await _download_resilient(
-        url, target, progress, cancel_event,
+        url,
+        target,
+        progress,
+        cancel_event,
         label=f"{kind} de {model.id}",
         progress_meta={"model": model.id, "kind": kind},
         not_found_msg=f"Auxiliar {fn} ({kind}) no disponible para {model.id} en {repo}.",
@@ -536,7 +587,7 @@ def mmproj_path(model: Model) -> Path | None:
     """Ruta local del projector multimodal (mmproj), o None si el modelo no es de visión."""
     if not (model.hf_gguf and model.hf_gguf.mmproj):
         return None
-    return MODELS_ROOT / model.hf_gguf.repo.replace("/", "__") / model.hf_gguf.mmproj
+    return _repo_dir(model) / model.hf_gguf.mmproj
 
 
 def mmproj_installed(model: Model) -> bool:
@@ -566,7 +617,10 @@ async def ensure_mmproj(
     if progress:
         await progress({"phase": "model.lookup", "model": model.id, "mmproj": fn, "url": url})
     return await _download_resilient(
-        url, target, progress, cancel_event,
+        url,
+        target,
+        progress,
+        cancel_event,
         label=f"mmproj de {model.id}",
         progress_meta={"model": model.id, "kind": "mmproj"},
     )

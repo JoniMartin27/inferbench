@@ -1,4 +1,5 @@
 """Adaptador para SGLang (Docker only, requiere GPU NVIDIA)."""
+
 from __future__ import annotations
 
 from core.hardware import capped_gpu_fraction
@@ -28,7 +29,7 @@ class SglangEngine(Engine):
 
         hf_id = opts.get("hf_model_id") or opts.get("model")
         if hf_id:
-            cmd += ["--model-path", hf_id]
+            cmd += ["--model-path", str(hf_id)]
 
         cmd += ["--host", "0.0.0.0", "--port", str(req.port or self.meta.default_port)]
 
@@ -36,8 +37,8 @@ class SglangEngine(Engine):
             cmd += ["--context-length", str(int(opts["contextLen"]))]
 
         quant = opts.get("quant") or opts.get("quantization")
-        if quant and quant.lower() not in ("none", "f16", "fp16"):
-            cmd += ["--quantization", quant.lower()]
+        if quant and str(quant).lower() not in ("none", "f16", "fp16"):
+            cmd += ["--quantization", str(quant).lower()]
 
         # Tope de VRAM SIEMPRE aplicado (default de SGLang ~0.88) para no ahogar el display.
         cmd += ["--mem-fraction-static", str(capped_gpu_fraction(opts.get("memFraction")))]
@@ -53,9 +54,12 @@ class SglangEngine(Engine):
         spec_draft = opts.get("specDraftModel")
         if spec_method and spec_draft:
             cmd += [
-                "--speculative-algorithm", str(spec_method).upper(),
-                "--speculative-draft-model-path", spec_draft,
-                "--speculative-num-draft-tokens", str(int(opts.get("specNumTokens") or 16)),
+                "--speculative-algorithm",
+                str(spec_method).upper(),
+                "--speculative-draft-model-path",
+                str(spec_draft),
+                "--speculative-num-draft-tokens",
+                str(int(opts.get("specNumTokens") or 16)),
             ]
 
         return cmd

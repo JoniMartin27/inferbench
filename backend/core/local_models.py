@@ -1,4 +1,5 @@
 """Descubrimiento de modelos GGUF locales: escanea carpetas habituales y lee metadata."""
+
 from __future__ import annotations
 
 import os
@@ -24,7 +25,9 @@ def _init_dirs() -> None:
     home = Path.home()
     appdata = Path(os.environ["APPDATA"]) if os.name == "nt" and "APPDATA" in os.environ else None
     localappdata = (
-        Path(os.environ["LOCALAPPDATA"]) if os.name == "nt" and "LOCALAPPDATA" in os.environ else None
+        Path(os.environ["LOCALAPPDATA"])
+        if os.name == "nt" and "LOCALAPPDATA" in os.environ
+        else None
     )
 
     # InferBench propio
@@ -66,14 +69,36 @@ _init_dirs()
 
 # Heurística para detectar quantización por nombre de fichero
 _QUANT_PATTERNS = [
-    "Q2_K", "Q3_K_S", "Q3_K_M", "Q3_K_L",
-    "Q4_0", "Q4_1", "Q4_K_S", "Q4_K_M",
-    "Q5_0", "Q5_1", "Q5_K_S", "Q5_K_M",
-    "Q6_K", "Q8_0",
-    "IQ1_S", "IQ1_M", "IQ2_XXS", "IQ2_XS", "IQ2_S", "IQ2_M",
-    "IQ3_XXS", "IQ3_S", "IQ3_M", "IQ3_XS",
-    "IQ4_XS", "IQ4_NL",
-    "F16", "FP16", "BF16", "F32",
+    "Q2_K",
+    "Q3_K_S",
+    "Q3_K_M",
+    "Q3_K_L",
+    "Q4_0",
+    "Q4_1",
+    "Q4_K_S",
+    "Q4_K_M",
+    "Q5_0",
+    "Q5_1",
+    "Q5_K_S",
+    "Q5_K_M",
+    "Q6_K",
+    "Q8_0",
+    "IQ1_S",
+    "IQ1_M",
+    "IQ2_XXS",
+    "IQ2_XS",
+    "IQ2_S",
+    "IQ2_M",
+    "IQ3_XXS",
+    "IQ3_S",
+    "IQ3_M",
+    "IQ3_XS",
+    "IQ4_XS",
+    "IQ4_NL",
+    "F16",
+    "FP16",
+    "BF16",
+    "F32",
 ]
 
 
@@ -86,11 +111,29 @@ def _detect_quant(filename: str) -> str | None:
 
 
 _QUANT_FACTOR = {
-    "Q2_K": 0.32, "Q3_K_S": 0.40, "Q3_K_M": 0.42, "Q3_K_L": 0.46,
-    "Q4_0": 0.52, "Q4_1": 0.55, "Q4_K_S": 0.53, "Q4_K_M": 0.55,
-    "Q5_0": 0.65, "Q5_1": 0.68, "Q5_K_S": 0.65, "Q5_K_M": 0.67,
-    "Q6_K": 0.81, "Q8_0": 1.0, "F16": 2.0, "FP16": 2.0, "BF16": 2.0, "F32": 4.0,
-    "IQ4_XS": 0.50, "IQ4_NL": 0.52, "IQ3_M": 0.40, "IQ3_S": 0.38, "IQ2_M": 0.30,
+    "Q2_K": 0.32,
+    "Q3_K_S": 0.40,
+    "Q3_K_M": 0.42,
+    "Q3_K_L": 0.46,
+    "Q4_0": 0.52,
+    "Q4_1": 0.55,
+    "Q4_K_S": 0.53,
+    "Q4_K_M": 0.55,
+    "Q5_0": 0.65,
+    "Q5_1": 0.68,
+    "Q5_K_S": 0.65,
+    "Q5_K_M": 0.67,
+    "Q6_K": 0.81,
+    "Q8_0": 1.0,
+    "F16": 2.0,
+    "FP16": 2.0,
+    "BF16": 2.0,
+    "F32": 4.0,
+    "IQ4_XS": 0.50,
+    "IQ4_NL": 0.52,
+    "IQ3_M": 0.40,
+    "IQ3_S": 0.38,
+    "IQ2_M": 0.30,
 }
 
 

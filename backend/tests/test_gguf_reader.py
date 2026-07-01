@@ -1,4 +1,5 @@
 """Tests de core/gguf_reader.py: parseo de metadata y cuenta de parámetros."""
+
 from core import gguf_reader as g
 
 
@@ -71,6 +72,6 @@ def test_param_count_gemma_tied_uses_token_array_vocab():
 
 def test_param_count_missing_dims_returns_none_or_label():
     assert g.estimate_param_count({"general.architecture": "llama"}) is None
-    assert g.estimate_param_count(
-        {"general.architecture": "llama", "general.size_label": "7B"}
-    ) == 7e9
+    assert (
+        g.estimate_param_count({"general.architecture": "llama", "general.size_label": "7B"}) == 7e9
+    )

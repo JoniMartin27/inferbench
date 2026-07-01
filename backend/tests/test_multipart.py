@@ -1,12 +1,19 @@
 """Tests de la descarga de GGUF multi-parte (modelos enormes partidos en shards)."""
+
 from core import model_manager
 from core.models_catalog import HfGguf, Model
 
 
 def _model(multipart: bool = True) -> Model:
     return Model(
-        id="big", name="Big", family="x", params_b=70.0, active_b=70.0, is_moe=False,
-        size_base_gb=140.0, max_ctx=8192,
+        id="big",
+        name="Big",
+        family="x",
+        params_b=70.0,
+        active_b=70.0,
+        is_moe=False,
+        size_base_gb=140.0,
+        max_ctx=8192,
         hf_gguf=HfGguf(repo="bart/Big-GGUF", file_template="Big-{quant}.gguf", multipart=multipart),
     )
 
@@ -28,6 +35,21 @@ def test_filter_shards_picks_quant_and_sorts():
 
 def test_filter_shards_empty_when_single_file():
     assert model_manager._filter_shards(["Model-Q4_K_M.gguf", "x.txt"], "Model-Q4_K_M") == []
+
+
+def test_filter_shards_does_not_leak_across_models_with_suffix_overlap():
+    # Regresión: sin anclar el inicio del nombre de fichero, un `base` que sea sufijo
+    # del nombre de OTRO modelo del mismo repo (ej. 'Model-Q4_K_M' dentro de
+    # 'Big-Model-Q4_K_M-...') colaba shards ajenos porque el regex solo anclaba el final.
+    base = "Model-Q4_K_M"
+    files = [
+        "Big-Model-Q4_K_M-00001-of-00002.gguf",  # otro modelo, mismo sufijo — NO debe colar
+        "Big-Model-Q4_K_M-00002-of-00002.gguf",
+        f"{base}-00001-of-00002.gguf",  # el modelo correcto
+        f"{base}-00002-of-00002.gguf",
+    ]
+    got = model_manager._filter_shards(files, base)
+    assert got == [f"{base}-00001-of-00002.gguf", f"{base}-00002-of-00002.gguf"]
 
 
 def test_multipart_installed_and_path(tmp_path, monkeypatch):

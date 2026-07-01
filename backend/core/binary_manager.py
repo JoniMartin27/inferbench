@@ -4,6 +4,7 @@ Por ahora soporta llama.cpp: descarga el zip pre-built de la release oficial de 
 lo extrae a `%APPDATA%/InferBench/binaries/llamacpp/` (o ~/.inferbench/ en Linux/Mac)
 y devuelve la ruta a `llama-server[.exe]`.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -79,7 +80,8 @@ def _llamacpp_variant_terms() -> list[str]:
             from .hardware import detect_hardware
 
             has_nvidia = any(g.vendor == "nvidia" for g in detect_hardware().gpus)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"detect_hardware() falló, asumiendo sin NVIDIA: {e}")
             has_nvidia = False
         base = ["win", "x64"]
         return base + (["cuda"] if has_nvidia else [])
@@ -159,9 +161,27 @@ def _has_cudart_dlls(directory: Path) -> bool:
     return any(directory.glob("cudart64_*.dll")) or any(directory.glob("cublas64_*.dll"))
 
 
-async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
-                        progress: ProgressCb, label: str,
-                        cancel_event: asyncio.Event | None = None) -> None:
+def _flatten_nested_dir(found: Path, target: Path) -> None:
+    """Si el binario quedó anidado (ej. `bin/`) tras extraer, sube sus hermanos (DLLs
+    incluidas) al directorio raíz del motor. No pisa archivos ya presentes en `target`.
+    """
+    if found.parent == target:
+        return
+    for item in found.parent.iterdir():
+        dest = target / item.name
+        if dest.exists():
+            continue
+        item.rename(dest)
+
+
+async def _download_zip(
+    client: httpx.AsyncClient,
+    asset: dict,
+    dest_dir: Path,
+    progress: ProgressCb,
+    label: str,
+    cancel_event: asyncio.Event | None = None,
+) -> None:
     """Descarga un asset zip y lo extrae en `dest_dir`. Borra el zip al terminar.
 
     Si `cancel_event` se setea durante la descarga, aborta con CancelledError y
@@ -178,8 +198,9 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     expected_digest = _parse_sha256_digest(asset.get("digest"))
     logger.info(f"Descargando {label}: {name} ({size / 1e6:.1f} MB)")
     if progress:
-        await progress({"phase": "download", "name": name, "size": size, "downloaded": 0,
-                        "label": label})
+        await progress(
+            {"phase": "download", "name": name, "size": size, "downloaded": 0, "label": label}
+        )
 
     zip_path = dest_dir / name
     downloaded = 0
@@ -191,27 +212,31 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
                 resp.raise_for_status()
                 # Tras seguir redirects, el host final también debe ser de GitHub.
                 if not _is_trusted_dl_host(str(resp.url)):
-                    raise RuntimeError(
-                        f"Redirect de descarga a host no confiable: {resp.url}"
-                    )
+                    raise RuntimeError(f"Redirect de descarga a host no confiable: {resp.url}")
                 async for chunk in resp.aiter_bytes(chunk_size=131072):
                     if cancel_event is not None and cancel_event.is_set():
-                        raise asyncio.CancelledError(
-                            f"Descarga de {name} cancelada por el usuario"
-                        )
+                        raise asyncio.CancelledError(f"Descarga de {name} cancelada por el usuario")
                     f.write(chunk)
                     hasher.update(chunk)
                     downloaded += len(chunk)
                     if progress and size:
                         pct = round(downloaded / size * 100, 1)
                         if pct - last_pct >= 0.5:
-                            await progress({
-                                "phase": "download", "label": label, "name": name,
-                                "downloaded": downloaded, "size": size, "pct": pct,
-                            })
+                            await progress(
+                                {
+                                    "phase": "download",
+                                    "label": label,
+                                    "name": name,
+                                    "downloaded": downloaded,
+                                    "size": size,
+                                    "pct": pct,
+                                }
+                            )
                             last_pct = pct
-    except asyncio.CancelledError:
-        # Limpiar zip parcial para no dejar basura ni interferir con un retry
+    except BaseException:
+        # Limpiar zip parcial para no dejar basura ni interferir con un retry, sea la
+        # descarga cancelada por el usuario o cortada por cualquier otro error (red,
+        # host no confiable, HTTP no-2xx).
         try:
             zip_path.unlink(missing_ok=True)
         except Exception:
@@ -244,8 +269,9 @@ async def _download_zip(client: httpx.AsyncClient, asset: dict, dest_dir: Path,
     zip_path.unlink()
 
 
-async def install_llamacpp(progress: ProgressCb = None,
-                           cancel_event: asyncio.Event | None = None) -> Path:
+async def install_llamacpp(
+    progress: ProgressCb = None, cancel_event: asyncio.Event | None = None
+) -> Path:
     """Descarga y extrae llama.cpp si no existe. Devuelve ruta al binario.
 
     Para builds CUDA, descarga ADEMÁS el zip cudart con las DLLs del runtime CUDA.
@@ -263,7 +289,9 @@ async def install_llamacpp(progress: ProgressCb = None,
     if not need_main and not need_cudart:
         return exe
 
-    logger.info(f"Buscando llama.cpp release: terms={terms} need_main={need_main} need_cudart={need_cudart}")
+    logger.info(
+        f"Buscando llama.cpp release: terms={terms} need_main={need_main} need_cudart={need_cudart}"
+    )
     if progress:
         await progress({"phase": "lookup", "message": "Buscando última release…"})
 
@@ -285,20 +313,33 @@ async def install_llamacpp(progress: ProgressCb = None,
 
         cudart_asset = None
         if need_cudart:
-            ref_name = main_asset["name"] if main_asset else (
-                next((a["name"] for a in assets if all(t in a["name"].lower() for t in terms)
-                      and "cudart" not in a["name"].lower()), "")
+            ref_name = (
+                main_asset["name"]
+                if main_asset
+                else (
+                    next(
+                        (
+                            a["name"]
+                            for a in assets
+                            if all(t in a["name"].lower() for t in terms)
+                            and "cudart" not in a["name"].lower()
+                        ),
+                        "",
+                    )
+                )
             )
             cudart_asset = _match_cudart_asset(assets, ref_name)
             if not cudart_asset:
                 logger.warning("No se encontró asset cudart; CUDA podría no inicializarse")
 
         if main_asset:
-            await _download_zip(client, main_asset, target, progress, "main",
-                                cancel_event=cancel_event)
+            await _download_zip(
+                client, main_asset, target, progress, "main", cancel_event=cancel_event
+            )
         if cudart_asset:
-            await _download_zip(client, cudart_asset, target, progress, "cudart",
-                                cancel_event=cancel_event)
+            await _download_zip(
+                client, cudart_asset, target, progress, "cudart", cancel_event=cancel_event
+            )
 
     # Localizar el binario (algunos releases lo nombran "server.exe")
     candidates = [_exe_name(), "server.exe" if os.name == "nt" else "server"]
@@ -311,8 +352,7 @@ async def install_llamacpp(progress: ProgressCb = None,
     if not found:
         contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:30]
         raise RuntimeError(
-            f"{_exe_name()} no encontrado tras extraer. "
-            f"Contenido: {contents or '(vacío)'}"
+            f"{_exe_name()} no encontrado tras extraer. Contenido: {contents or '(vacío)'}"
         )
 
     if found.name != _exe_name():
@@ -320,13 +360,7 @@ async def install_llamacpp(progress: ProgressCb = None,
         found.rename(renamed)
         found = renamed
 
-    # Mover binarios al directorio raíz si están anidados
-    if found.parent != target:
-        for item in found.parent.iterdir():
-            dest = target / item.name
-            if dest.exists():
-                continue
-            item.rename(dest)
+    _flatten_nested_dir(found, target)
     if progress:
         await progress({"phase": "done", "path": str(exe)})
     return exe
@@ -398,7 +432,8 @@ def _stablediffusion_variant_terms() -> list[str]:
             from .hardware import detect_hardware
 
             has_nvidia = any(g.vendor == "nvidia" for g in detect_hardware().gpus)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"detect_hardware() falló, asumiendo sin NVIDIA: {e}")
             has_nvidia = False
         if has_nvidia:
             return ["win", "cuda12", "x64"]
@@ -423,15 +458,17 @@ def _match_sd_asset(assets: list[dict], terms: list[str]) -> dict | None:
             return a
     # Fallback: si pedíamos CUDA y no hay, intenta la build CPU AVX2 en la misma máquina.
     if any("cuda" in t for t in terms):
-        cpu_terms = ["win", "avx2", "x64"] if "win" in terms else [t for t in terms
-                                                                    if "cuda" not in t]
+        cpu_terms = (
+            ["win", "avx2", "x64"] if "win" in terms else [t for t in terms if "cuda" not in t]
+        )
         if cpu_terms != terms:
             return _match_sd_asset(assets, cpu_terms)
     return None
 
 
-async def install_stablediffusion(progress: ProgressCb = None,
-                                  cancel_event: asyncio.Event | None = None) -> Path:
+async def install_stablediffusion(
+    progress: ProgressCb = None, cancel_event: asyncio.Event | None = None
+) -> Path:
     """Descarga y extrae stable-diffusion.cpp si no existe. Devuelve ruta a `sd-server`.
 
     Para builds CUDA descarga ADEMÁS el zip cudart con las DLLs del runtime CUDA (igual
@@ -479,11 +516,13 @@ async def install_stablediffusion(progress: ProgressCb = None,
                 logger.warning("No se encontró cudart de sd.cpp; CUDA podría no inicializarse")
 
         if main_asset:
-            await _download_zip(client, main_asset, target, progress, "sd-main",
-                                cancel_event=cancel_event)
+            await _download_zip(
+                client, main_asset, target, progress, "sd-main", cancel_event=cancel_event
+            )
         if cudart_asset:
-            await _download_zip(client, cudart_asset, target, progress, "sd-cudart",
-                                cancel_event=cancel_event)
+            await _download_zip(
+                client, cudart_asset, target, progress, "sd-cudart", cancel_event=cancel_event
+            )
 
     # Localizar el binario del server (puede quedar anidado en bin/ tras extraer).
     found = next(target.rglob(_sd_server_exe_name()), None)
@@ -495,13 +534,7 @@ async def install_stablediffusion(progress: ProgressCb = None,
         )
 
     # Aplanar: mover el binario y sus DLLs hermanas al directorio raíz del motor.
-    if found.parent != target:
-        for item in found.parent.iterdir():
-            dest = target / item.name
-            if dest.exists():
-                continue
-            item.rename(dest)
-        found = target / found.name
+    _flatten_nested_dir(found, target)
 
     if progress:
         await progress({"phase": "done", "path": str(exe)})

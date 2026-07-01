@@ -1,4 +1,5 @@
 """Gestión del runtime nativo de Ollama: detección, daemon, pull, listado."""
+
 from __future__ import annotations
 
 import asyncio
@@ -84,8 +85,9 @@ async def list_local_models() -> list[dict]:
         return []
 
 
-async def pull_model(tag: str, progress: ProgressCb = None,
-                     cancel_event: asyncio.Event | None = None) -> None:
+async def pull_model(
+    tag: str, progress: ProgressCb = None, cancel_event: asyncio.Event | None = None
+) -> None:
     """Pull con stream de progreso. Si `cancel_event` se setea, aborta con CancelledError.
 
     Nota: Ollama sigue descargando en su daemon en background; abortar aquí solo cierra
@@ -108,6 +110,11 @@ async def pull_model(tag: str, progress: ProgressCb = None,
                     evt = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                # Ollama reporta fallos (tag inexistente, etc.) como una línea
+                # {"error": "..."} con HTTP 200 dentro del stream, no como status HTTP de
+                # error. Si no se comprueba aquí, un pull fallido parece haber tenido éxito.
+                if evt.get("error"):
+                    raise RuntimeError(f"Pull de {tag} falló: {evt['error']}")
                 # evt típico: {"status": "downloading", "digest":..., "total":..., "completed":...}
                 if progress:
                     pct = None
@@ -127,13 +134,14 @@ async def pull_model(tag: str, progress: ProgressCb = None,
 
 
 async def has_model(tag: str) -> bool:
+    """¿Está `tag` (con su versión exacta) ya descargado? Sin versión, asume ':latest'.
+
+    Compara el tag completo (no solo el nombre base): un `llama3.2:1b` instalado NO
+    debe contar como "ya tengo" `llama3.2:8b` — son pulls distintos.
+    """
     models = await list_local_models()
-    target = tag.split(":")[0]
     target_full = tag if ":" in tag else f"{tag}:latest"
-    return any(
-        m.get("name") == target_full or m.get("name", "").split(":")[0] == target
-        for m in models
-    )
+    return any(m.get("name") == target_full for m in models)
 
 
 def start_daemon() -> int:
@@ -164,13 +172,12 @@ async def ensure_running(timeout: float = 30.0) -> None:
     if await is_running():
         return
     if not is_installed():
-        raise RuntimeError(
-            "Ollama no instalado. Descárgalo desde https://ollama.com/download"
-        )
+        raise RuntimeError("Ollama no instalado. Descárgalo desde https://ollama.com/download")
     logger.info("Arrancando Ollama daemon…")
     start_daemon()
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
         if await is_running():
             return
         await asyncio.sleep(1)

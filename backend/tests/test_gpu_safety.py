@@ -1,4 +1,5 @@
 """Tests del tope de VRAM que protege el display (no saturar la GPU → no congelar pantalla)."""
+
 import pytest
 
 from core import hardware

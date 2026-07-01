@@ -1,4 +1,5 @@
 """Endpoints /api/engines."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from core import binary_manager, docker_mgr, native_runtime, ollama_manager
 from engines import registry
-from engines.base import EngineMeta, StartRequest
+from engines.base import Engine, EngineMeta, StartRequest
 
 router = APIRouter(prefix="/api/engines", tags=["engines"])
 
@@ -43,9 +44,7 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                     detail = "Binario sin DLLs CUDA — descarga pendiente"
                 else:
                     detail = "Listo para descargar"
-                out.append(
-                    RuntimeAvailability(runtime="native", ready=fully, detail=detail)
-                )
+                out.append(RuntimeAvailability(runtime="native", ready=fully, detail=detail))
             elif meta.id == "ollama":
                 if ollama_manager.is_installed():
                     out.append(
@@ -61,11 +60,14 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                             runtime="native",
                             ready=False,
                             detail="No instalado",
-                            install_url=ollama_manager.installer_url() or "https://ollama.com/download",
+                            install_url=ollama_manager.installer_url()
+                            or "https://ollama.com/download",
                         )
                     )
             else:
-                out.append(RuntimeAvailability(runtime="native", ready=False, detail="No implementado"))
+                out.append(
+                    RuntimeAvailability(runtime="native", ready=False, detail="No implementado")
+                )
         elif rt == "docker":
             d = docker_mgr.availability()
             out.append(
@@ -78,7 +80,9 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
     return out
 
 
-def _engine_status(engine):
+def _engine_status(
+    engine: Engine,
+) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus | None:
     if engine.is_api:
         return None
     try:
@@ -105,8 +109,8 @@ async def list_engines() -> list[EngineSummary]:
 async def get_engine(engine_id: str) -> EngineSummary:
     try:
         engine = registry.get_engine(engine_id)
-    except KeyError:
-        raise HTTPException(404, f"Unknown engine: {engine_id}")
+    except KeyError as e:
+        raise HTTPException(404, f"Unknown engine: {engine_id}") from e
     return EngineSummary(
         meta=engine.meta,
         status=_engine_status(engine),
@@ -115,11 +119,13 @@ async def get_engine(engine_id: str) -> EngineSummary:
 
 
 @router.post("/{engine_id}/start")
-async def start_engine(engine_id: str, req: StartRequest):
+async def start_engine(
+    engine_id: str, req: StartRequest
+) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
     try:
         engine = registry.get_engine(engine_id)
-    except KeyError:
-        raise HTTPException(404, f"Unknown engine: {engine_id}")
+    except KeyError as e:
+        raise HTTPException(404, f"Unknown engine: {engine_id}") from e
     if engine.is_api:
         raise HTTPException(400, f"Engine {engine_id} is an API, it can't be started")
     try:
@@ -134,11 +140,13 @@ async def start_engine(engine_id: str, req: StartRequest):
 
 
 @router.post("/{engine_id}/stop")
-async def stop_engine(engine_id: str):
+async def stop_engine(
+    engine_id: str,
+) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
     try:
         engine = registry.get_engine(engine_id)
-    except KeyError:
-        raise HTTPException(404, f"Unknown engine: {engine_id}")
+    except KeyError as e:
+        raise HTTPException(404, f"Unknown engine: {engine_id}") from e
     if engine.is_api:
         raise HTTPException(400, f"Engine {engine_id} is an API")
     try:
@@ -154,12 +162,12 @@ async def install_engine(engine_id: str) -> EventSourceResponse:
     if engine_id != "llamacpp":
         raise HTTPException(400, f"No native installer for {engine_id}")
 
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue[dict] = asyncio.Queue()
 
-    async def progress(evt: dict):
+    async def progress(evt: dict) -> None:
         await queue.put(evt)
 
-    async def runner():
+    async def runner() -> None:
         try:
             path = await binary_manager.install_llamacpp(progress=progress)
             await queue.put({"phase": "ready", "path": str(path)})
@@ -182,12 +190,18 @@ async def install_engine(engine_id: str) -> EventSourceResponse:
     return EventSourceResponse(event_gen())
 
 
-@router.get("/{engine_id}/logs")
-async def engine_logs(engine_id: str, tail: int = Query(200, ge=1, le=5_000)) -> dict:
+class EngineLogs(BaseModel):
+    engine: str
+    tail: int
+    logs: str
+
+
+@router.get("/{engine_id}/logs", response_model=EngineLogs)
+async def engine_logs(engine_id: str, tail: int = Query(200, ge=1, le=5_000)) -> EngineLogs:
     try:
         registry.get_engine(engine_id)  # valida que el motor existe
-    except KeyError:
-        raise HTTPException(404, f"Unknown engine: {engine_id}")
+    except KeyError as e:
+        raise HTTPException(404, f"Unknown engine: {engine_id}") from e
     # Probar logs nativos primero, luego Docker
     text = native_runtime.logs(engine_id, tail=tail)
     if not text:
@@ -197,4 +211,4 @@ async def engine_logs(engine_id: str, tail: int = Query(200, ge=1, le=5_000)) ->
             # No es fatal: puede ser un motor nativo sin contenedor, o Docker apagado.
             # No rompemos la respuesta, pero dejamos rastro en vez de tragarlo en silencio.
             logger.debug(f"logs de {engine_id}: Docker no disponible ({e})")
-    return {"engine": engine_id, "tail": tail, "logs": text}
+    return EngineLogs(engine=engine_id, tail=tail, logs=text)

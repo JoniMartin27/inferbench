@@ -199,7 +199,7 @@ export default function App() {
           <aside className="flex w-60 flex-col border-r border-slate-800 bg-gradient-to-b from-slate-950 to-slate-950/80">
             <div className="border-b border-slate-800 px-5 py-5">
               <div className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-900/40">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-accent text-[#2A1402] shadow-lg shadow-orange-900/40">
                   <Activity size={14} />
                 </div>
                 Infer<span className="text-indigo-400">Bench</span>
@@ -280,6 +280,14 @@ export default function App() {
               <div className="mt-0.5 truncate">
                 {health.docker?.available ? t("app.docker", { version: health.docker.version }) : t("app.noDocker")}
               </div>
+              <a
+                href="https://fervon.dev"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1.5 inline-block text-slate-500 transition hover:text-accent"
+              >
+                Forged red-hot · part of Fervon
+              </a>
             </div>
           </aside>
 

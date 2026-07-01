@@ -1,8 +1,8 @@
 """SQLite + SQLModel: persistencia de runs y resultados de benchmark."""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from sqlalchemy import text
 from sqlmodel import Field, Session, SQLModel, create_engine
@@ -24,7 +24,7 @@ class BenchmarkRun(SQLModel, table=True):
 
 class BenchmarkResult(SQLModel, table=True):
     __tablename__ = "benchmark_results"
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     run_id: str = Field(index=True, foreign_key="benchmark_runs.id")
     model_id: str
     prompt_id: str
@@ -38,10 +38,12 @@ class BenchmarkResult(SQLModel, table=True):
     raw_output: str = ""
     error: str = ""
     # Rigor estadístico: cada métrica es la MEDIANA de N muestras (tras descartar un warmup).
-    prefill_tps: float | None = None   # tok/s de procesamiento de prompt (prefill), separado del decode
-    tps_std: float | None = None       # desviación estándar del decode tok/s entre muestras
-    ttft_std: float | None = None      # desviación estándar del TTFT (ms) entre muestras
-    n_samples: int | None = None       # nº de muestras medidas que respaldan estas cifras
+    prefill_tps: float | None = (
+        None  # tok/s de procesamiento de prompt (prefill), separado del decode
+    )
+    tps_std: float | None = None  # desviación estándar del decode tok/s entre muestras
+    ttft_std: float | None = None  # desviación estándar del TTFT (ms) entre muestras
+    n_samples: int | None = None  # nº de muestras medidas que respaldan estas cifras
 
 
 # Columnas añadidas tras la v0 de la tabla. create_all no altera tablas existentes, así que

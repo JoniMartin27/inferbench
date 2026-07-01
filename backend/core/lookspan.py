@@ -13,6 +13,7 @@ sentAt}; cada span necesita traceId/spanId/type/name/startedAt/status/framework 
 no vacíos; type ∈ {agent_step, llm_call, tool_call, error, custom}; status ∈ {ok, error,
 cancelled}. El `framework` no se valida contra un enum → usamos "inferbench".
 """
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,7 @@ from loguru import logger
 
 def endpoint() -> str | None:
     """URL de ingest de lookspan, o None si la observabilidad está desactivada (opt-in)."""
-    ep = os.environ.get("LOOKSPAN_ENDPOINT")
+    ep = (os.environ.get("LOOKSPAN_ENDPOINT") or "").strip()
     if not ep:
         return None
     ep = ep.rstrip("/")
@@ -72,7 +73,11 @@ def build_spans(
         "attributes": {
             "quant": quant,
             "prompts": len(results),
-            **{k: v for k, v in (engine_opts or {}).items() if isinstance(v, (str, int, float, bool))},
+            **{
+                k: v
+                for k, v in (engine_opts or {}).items()
+                if isinstance(v, (str, int, float, bool))
+            },
         },
     }
     spans: list[dict] = [root]
@@ -82,43 +87,46 @@ def build_spans(
     def _dur(r) -> float:
         tps = getattr(r, "tps", 0) or 0
         toks = getattr(r, "ctx_used", 0) or 0
-        return max(getattr(r, "ttft_ms", 0) / 1000.0 + (toks / tps if tps else 0.0), 0.01)
+        ttft_ms = getattr(r, "ttft_ms", 0) or 0  # `or 0` también cubre ttft_ms=None
+        return max(ttft_ms / 1000.0 + (toks / tps if tps else 0.0), 0.01)
 
     total = sum(_dur(r) for r in results)
     cursor = max(started_ts, ended_ts - total)
     for r in results:
         d = _dur(r)
         err = getattr(r, "error", "") or ""
-        spans.append({
-            "traceId": run_id,
-            "spanId": _sid(),
-            "parentSpanId": root_id,
-            "type": "llm_call",
-            "name": f"{getattr(r, 'prompt_id', '?')} · {model}",
-            "startedAt": _iso(cursor),
-            "endedAt": _iso(cursor + d),
-            "status": "error" if err else "ok",
-            "framework": "inferbench",
-            "model": getattr(r, "model_id", model) or model,
-            "provider": engine,
-            "input": {"prompt_id": getattr(r, "prompt_id", None)},
-            "output": (getattr(r, "raw_output", "") or "")[:2000] or None,
-            "error": {"message": err} if err else None,
-            "usage": {
-                "inputTokens": 0,
-                "outputTokens": int(getattr(r, "ctx_used", 0) or 0),
-                "costUsd": float(getattr(r, "cost", 0.0) or 0.0),
-            },
-            "attributes": {
-                "ttft_ms": getattr(r, "ttft_ms", None),
-                "tps": getattr(r, "tps", None),
-                "vram_gb": getattr(r, "vram_gb", None),
-                "ram_gb": getattr(r, "ram_gb", None),
-                "quality": getattr(r, "quality", None),
-                "prompt_id": getattr(r, "prompt_id", None),
-                "quant": quant,
-            },
-        })
+        spans.append(
+            {
+                "traceId": run_id,
+                "spanId": _sid(),
+                "parentSpanId": root_id,
+                "type": "llm_call",
+                "name": f"{getattr(r, 'prompt_id', '?')} · {model}",
+                "startedAt": _iso(cursor),
+                "endedAt": _iso(cursor + d),
+                "status": "error" if err else "ok",
+                "framework": "inferbench",
+                "model": getattr(r, "model_id", model) or model,
+                "provider": engine,
+                "input": {"prompt_id": getattr(r, "prompt_id", None)},
+                "output": (getattr(r, "raw_output", "") or "")[:2000] or None,
+                "error": {"message": err} if err else None,
+                "usage": {
+                    "inputTokens": 0,
+                    "outputTokens": int(getattr(r, "ctx_used", 0) or 0),
+                    "costUsd": float(getattr(r, "cost", 0.0) or 0.0),
+                },
+                "attributes": {
+                    "ttft_ms": getattr(r, "ttft_ms", None),
+                    "tps": getattr(r, "tps", None),
+                    "vram_gb": getattr(r, "vram_gb", None),
+                    "ram_gb": getattr(r, "ram_gb", None),
+                    "quality": getattr(r, "quality", None),
+                    "prompt_id": getattr(r, "prompt_id", None),
+                    "quant": quant,
+                },
+            }
+        )
     return spans
 
 
@@ -132,16 +140,20 @@ async def export_run(
     ended_ts: float,
     engine_opts: dict | None = None,
 ) -> None:
-    """Exporta el run a lookspan si hay endpoint. Fire-and-forget (no lanza)."""
+    """Exporta el run a lookspan si hay endpoint. Fire-and-forget (no lanza nunca)."""
     ep = endpoint()
     if not ep or not results:
         return
-    payload = {
-        "spans": build_spans(run_id, engine, model, quant, results, started_ts, ended_ts, engine_opts),
-        "source": "inferbench",
-        "sentAt": _iso(datetime.now(tz=timezone.utc).timestamp()),
-    }
+    # Todo el trabajo (incl. construir los spans) va dentro del try: un dato inesperado en
+    # `results` no debe poder propagar y romper el benchmark, igual que un fallo de red.
     try:
+        payload = {
+            "spans": build_spans(
+                run_id, engine, model, quant, results, started_ts, ended_ts, engine_opts
+            ),
+            "source": "inferbench",
+            "sentAt": _iso(datetime.now(tz=timezone.utc).timestamp()),
+        }
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
             resp = await client.post(ep, json=payload)
         if resp.status_code >= 400:

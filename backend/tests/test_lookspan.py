@@ -1,4 +1,5 @@
 """Tests del exporter de spans a lookspan (construcción + contrato de ingest, sin red)."""
+
 from types import SimpleNamespace
 
 from core import lookspan
@@ -6,8 +7,17 @@ from core import lookspan
 
 def _result(**kw):
     base = dict(
-        model_id="m", prompt_id="reasoning", tps=100.0, ttft_ms=200, vram_gb=4.0,
-        ram_gb=8.0, quality=80.0, cost=0.0, ctx_used=256, raw_output="hola", error="",
+        model_id="m",
+        prompt_id="reasoning",
+        tps=100.0,
+        ttft_ms=200,
+        vram_gb=4.0,
+        ram_gb=8.0,
+        quality=80.0,
+        cost=0.0,
+        ctx_used=256,
+        raw_output="hola",
+        error="",
     )
     base.update(kw)
     return SimpleNamespace(**base)
@@ -60,3 +70,26 @@ def test_build_spans_match_ingest_contract():
         assert sp["type"] in valid_types
         assert sp["status"] in valid_status
         assert sp["parentSpanId"] is None or isinstance(sp["parentSpanId"], str)
+
+
+def test_build_spans_handles_none_ttft():
+    # ttft_ms=None es válido en el modelo de DB (BenchmarkResult.ttft_ms: int | None); build_spans
+    # no debe reventar con TypeError al dividir None entre 1000.0 (regresión).
+    spans = lookspan.build_spans(
+        "r", "llamacpp", "m", "Q4_K_M", [_result(ttft_ms=None, tps=None, ctx_used=None)], 1.0, 2.0
+    )
+    assert len(spans) == 2
+
+
+async def test_export_run_never_raises_on_bad_result(monkeypatch):
+    # Si build_spans lanzase por un dato inesperado en `results`, el contrato de export_run
+    # ("fire-and-forget, nunca rompe el benchmark") exige que se trague igual que un fallo de
+    # red — antes la construcción del payload quedaba FUERA del try/except.
+    monkeypatch.setenv("LOOKSPAN_ENDPOINT", "http://127.0.0.1:3100")
+
+    class _Evil:
+        @property
+        def error(self):
+            raise RuntimeError("boom: dato inesperado")
+
+    await lookspan.export_run("r", "llamacpp", "m", "Q4_K_M", [_Evil()], 1.0, 2.0)  # no debe lanzar

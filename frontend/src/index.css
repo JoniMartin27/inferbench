@@ -2,13 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tema Fervon (forja) — tokens canónicos carbon + ember. */
+:root {
+  --bg: #0e0b0a; /* carbon */
+  --surface-1: #16110e; /* panel */
+  --surface-2: #1a1310; /* panel-2 / card */
+  --line: #2c211b; /* border */
+  --text: #efe7dc; /* bone */
+  --muted: #a89a8e; /* ash */
+  --accent: #ff6a00; /* ember */
+  --accent-rgb: 255, 106, 0;
+  --accent-dim: #e0480f; /* brasa */
+  --accent-2: #ffb02e; /* ámbar */
+  --accent-2-rgb: 255, 176, 46;
+  --link: #ffb86b; /* link cálido */
+  --gold: #ffd76a;
+  --on-accent: #2a1402; /* texto sobre acento */
+}
+
 html, body, #root {
   height: 100%;
   margin: 0;
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, Roboto,
     "Helvetica Neue", Arial, sans-serif;
 }
 

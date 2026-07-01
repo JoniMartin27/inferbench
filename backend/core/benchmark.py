@@ -9,8 +9,9 @@ El modelo se obtiene de:
 Eventos SSE emitidos:
   start, log, phase
   engine.install (con pct), model.download (con pct), engine.start, engine.ready
-  phase (load|warmup|ttft|generate|quality), tokens, result, done
+  phase (load|warmup|sample|ttft|generate|judging|quality), tokens, result, done
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,7 +43,7 @@ from . import (
     secrets,
 )
 from .hardware import detect_hardware, gpu_used_gb
-from .models_catalog import get_model
+from .models_catalog import Model, get_model
 from .optimizer import _estimate_moe_offload, get_optimal_config, plan_llamacpp_run
 
 PROMPTS_FILE = Path(__file__).resolve().parent.parent / "data" / "prompts.json"
@@ -114,7 +115,9 @@ def _find_local_mmproj(folder: Path) -> Path | None:
     return None
 
 
-def _build_chat_body(model_id_for_engine: str, prompt: Prompt, sampling: dict[str, Any]) -> dict:
+def _build_chat_body(
+    model_id_for_engine: str, prompt: Prompt, sampling: dict[str, Any]
+) -> dict[str, Any]:
     """Construye el body de /v1/chat/completions. Si el prompt lleva imagen, el content
     del usuario es un array texto+imagen (formato OpenAI vision, que llama-server acepta
     arrancado con --mmproj). Extraído para poder testearlo sin red."""
@@ -154,7 +157,9 @@ def get_prompt(prompt_id: str) -> Prompt | None:
 
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _ALLOWED_CLOUD_HOSTS = {
-    "api.openai.com", "api.anthropic.com", "openrouter.ai",
+    "api.openai.com",
+    "api.anthropic.com",
+    "openrouter.ai",
     "integrate.api.nvidia.com",
 }
 
@@ -169,6 +174,7 @@ def _validate_base_url(url: str | None) -> None:
     if url is None:
         return
     from urllib.parse import urlparse
+
     host = (urlparse(url).hostname or "").lower()
     if host in _LOOPBACK_HOSTS or host in _ALLOWED_CLOUD_HOSTS:
         return
@@ -193,7 +199,7 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 API_ENGINES = {"openai", "anthropic", "openrouter", "nvidia"}
 
 
-def supports_vision(engine: str, model: Any) -> bool:
+def supports_vision(engine: str, model: Model | None) -> bool:
     """¿Puede este (motor, modelo) procesar imágenes?
 
     - APIs cloud: sí (gpt-4o, claude… son multimodales; el usuario elige el modelo).
@@ -208,9 +214,9 @@ class BenchmarkRequest(BaseModel):
     model: str
     quant: str = "Q4_K_M"
     prompts: list[str] = Field(default_factory=lambda: ["reasoning", "code", "summary", "chat"])
-    auto: bool = True              # bootstrap automático del motor + descarga del modelo
-    keep_alive: bool = False       # si True, no detiene el motor al terminar
-    base_url: str | None = None    # override manual (si auto=false)
+    auto: bool = True  # bootstrap automático del motor + descarga del modelo
+    keep_alive: bool = False  # si True, no detiene el motor al terminar
+    base_url: str | None = None  # override manual (si auto=false)
     api_key: str | None = None
     sampling: dict[str, Any] = Field(default_factory=lambda: {"temperature": 0.7, "top_p": 0.95})
     engine_opts: dict[str, Any] = Field(default_factory=dict)
@@ -249,8 +255,8 @@ class BenchmarkRequest(BaseModel):
                 raise ValueError(f"engine_opts.{key}={val!r} invalid. Allowed values: {_KV_VALID}")
         _INT_BOUNDS = {
             "contextLen": (256, 131_072),
-            "threads":    (1, 512),
-            "batchSize":  (64, 32_768),
+            "threads": (1, 512),
+            "batchSize": (64, 32_768),
             "ubatchSize": (64, 8_192),
             "moeOffload": (0, 1_000),
             "cacheReuse": (0, 131_072),
@@ -279,8 +285,8 @@ class BenchmarkRequest(BaseModel):
 class ResultPayload(BaseModel):
     model_id: str
     prompt_id: str
-    tps: float                 # decode tok/s — MEDIANA de n_samples (no una sola muestra)
-    ttft_ms: int               # TTFT ms — MEDIANA de n_samples
+    tps: float  # decode tok/s — MEDIANA de n_samples (no una sola muestra)
+    ttft_ms: int  # TTFT ms — MEDIANA de n_samples
     vram_gb: float
     ram_gb: float
     quality: float
@@ -288,10 +294,10 @@ class ResultPayload(BaseModel):
     ctx_used: int
     raw_output: str
     error: str = ""
-    prefill_tps: float = 0.0   # tok/s de prefill (procesamiento de prompt), mediana
-    tps_std: float = 0.0       # desviación estándar del decode tok/s entre muestras
-    ttft_std: float = 0.0      # desviación estándar del TTFT (ms) entre muestras
-    n_samples: int = 1         # nº de muestras medidas (warmup excluido)
+    prefill_tps: float = 0.0  # tok/s de prefill (procesamiento de prompt), mediana
+    tps_std: float = 0.0  # desviación estándar del decode tok/s entre muestras
+    ttft_std: float = 0.0  # desviación estándar del TTFT (ms) entre muestras
+    n_samples: int = 1  # nº de muestras medidas (warmup excluido)
 
 
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
@@ -300,11 +306,60 @@ class ResultPayload(BaseModel):
 # por defecto porque funciona en todo tipo de ordenadores; el LLM-judge es la mejora opcional.
 
 _QUALITY_STOP = {
-    "de", "la", "el", "en", "y", "a", "los", "las", "un", "una", "que", "es", "por",
-    "con", "para", "su", "se", "del", "al", "lo", "como", "más", "o", "pero", "sus",
-    "le", "ya", "este", "esta", "son", "cada", "paga", "total",
-    "the", "a", "an", "of", "to", "and", "in", "is", "for", "on", "with", "as", "by",
-    "that", "this", "are", "be", "it", "or", "from", "at",
+    "de",
+    "la",
+    "el",
+    "en",
+    "y",
+    "a",
+    "los",
+    "las",
+    "un",
+    "una",
+    "que",
+    "es",
+    "por",
+    "con",
+    "para",
+    "su",
+    "se",
+    "del",
+    "al",
+    "lo",
+    "como",
+    "más",
+    "o",
+    "pero",
+    "sus",
+    "le",
+    "ya",
+    "este",
+    "esta",
+    "son",
+    "cada",
+    "paga",
+    "total",
+    "the",
+    "a",
+    "an",
+    "of",
+    "to",
+    "and",
+    "in",
+    "is",
+    "for",
+    "on",
+    "with",
+    "as",
+    "by",
+    "that",
+    "this",
+    "are",
+    "be",
+    "it",
+    "or",
+    "from",
+    "at",
 }
 
 
@@ -389,7 +444,10 @@ def code_exec_enabled() -> bool:
     """¿Se evalúa el prompt de código ejecutándolo? ACTIVADO por defecto (con sandbox);
     se desactiva explícitamente con INFERBENCH_CODE_EXEC ∈ {0,false,no,off}."""
     return os.environ.get("INFERBENCH_CODE_EXEC", "1").strip().lower() not in (
-        "0", "false", "no", "off",
+        "0",
+        "false",
+        "no",
+        "off",
     )
 
 
@@ -468,8 +526,7 @@ async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) ->
     if not code.strip() or not tests:
         return 0.0
     runner = (
-        _SANDBOX_PREAMBLE
-        + "\n" + code + "\n\n__tests = " + repr(list(tests)) + "\n"
+        _SANDBOX_PREAMBLE + "\n" + code + "\n\n__tests = " + repr(list(tests)) + "\n"
         "__p = 0\n"
         "for __t in __tests:\n"
         "    try:\n"
@@ -478,6 +535,7 @@ async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) ->
         "        pass\n"
         "print('__RESULT__', __p, len(__tests))\n"
     )
+
     def _run() -> str:
         # subprocess.run en un HILO (vía asyncio.to_thread): no usa la maquinaria de
         # subprocesos del event loop, que falla en el SelectorEventLoop de Windows. Así el
@@ -485,8 +543,11 @@ async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) ->
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             try:
                 r = subprocess.run(
-                    [sys.executable, "-I", "-c", runner], cwd=td,
-                    capture_output=True, text=True, timeout=timeout,
+                    [sys.executable, "-I", "-c", runner],
+                    cwd=td,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
                 )
                 return r.stdout
             except (subprocess.SubprocessError, OSError):
@@ -494,7 +555,11 @@ async def _quality_code(output: str, tests: list[str], timeout: float = 10.0) ->
 
     try:
         out = await asyncio.to_thread(_run)
-    except Exception:
+    except Exception as e:
+        # Inesperado (subprocess.run ya atrapa sus propios fallos arriba): no tirar el
+        # benchmark por esto, pero dejar rastro — un 0 silencioso aquí parecería código
+        # incorrecto del modelo en vez de un fallo de infraestructura del scorer.
+        logger.warning(f"Code-exec scorer failed unexpectedly: {e}")
         return 0.0
     for line in reversed(out.splitlines()):
         if line.startswith("__RESULT__"):
@@ -651,7 +716,9 @@ async def _stream_openai_chat(
     yield ("done", None)
 
 
-def _build_anthropic_body(model_id: str, prompt: Prompt, sampling: dict[str, Any]) -> dict:
+def _build_anthropic_body(
+    model_id: str, prompt: Prompt, sampling: dict[str, Any]
+) -> dict[str, Any]:
     """Body para la API NATIVA de Anthropic (/v1/messages): `system` va aparte (no como
     rol), `max_tokens` es obligatorio, y las imágenes son bloques {type:image, source:base64}.
     NO es OpenAI-compatible. Extraído para testearlo sin red."""
@@ -694,7 +761,9 @@ async def _stream_anthropic_chat(
         async with client.stream("POST", url, json=body, headers=headers) as resp:
             if resp.status_code >= 400:
                 text = await resp.aread()
-                raise RuntimeError(f"HTTP {resp.status_code}: {text.decode(errors='replace')[:500]}")
+                raise RuntimeError(
+                    f"HTTP {resp.status_code}: {text.decode(errors='replace')[:500]}"
+                )
             async for line in resp.aiter_lines():
                 if not line.startswith("data:"):
                     continue
@@ -782,19 +851,29 @@ class BenchmarkRunner:
             kept: list[Prompt] = []
             for p in prompts:
                 if p.image and not can_vision:
-                    await self.emit({"type": "log", "level": "warn",
-                                     "text": f"Prompt '{p.id}' (image) skipped: "
-                                             f"{self.req.model} is not a vision model"})
+                    await self.emit(
+                        {
+                            "type": "log",
+                            "level": "warn",
+                            "text": f"Prompt '{p.id}' (image) skipped: "
+                            f"{self.req.model} is not a vision model",
+                        }
+                    )
                     continue
                 # Estado honesto: si la ejecución de código está desactivada, OMITIMOS el
                 # prompt de código en vez de puntuarlo 0 (un 0 falso se confundiría con un
                 # fallo del modelo). El default es ON (con sandbox); esto solo aplica si el
                 # usuario puso INFERBENCH_CODE_EXEC=0.
                 if p.code_tests and not code_exec:
-                    await self.emit({"type": "log", "level": "warn",
-                                     "text": f"Prompt '{p.id}' (code) skipped: code execution "
-                                             f"disabled (INFERBENCH_CODE_EXEC=0). Not scored as 0 "
-                                             f"to avoid confusing it with a failure."})
+                    await self.emit(
+                        {
+                            "type": "log",
+                            "level": "warn",
+                            "text": f"Prompt '{p.id}' (code) skipped: code execution "
+                            f"disabled (INFERBENCH_CODE_EXEC=0). Not scored as 0 "
+                            f"to avoid confusing it with a failure.",
+                        }
+                    )
                     continue
                 kept.append(p)
             prompts = kept
@@ -804,8 +883,13 @@ class BenchmarkRunner:
                 try:
                     await self._bootstrap()
                 except asyncio.CancelledError:
-                    await self.emit({"type": "log", "level": "warn",
-                                     "text": "Download/installation cancelled by the user"})
+                    await self.emit(
+                        {
+                            "type": "log",
+                            "level": "warn",
+                            "text": "Download/installation cancelled by the user",
+                        }
+                    )
                     await self.emit({"type": "done", "run_id": self.run_id, "cancelled": True})
                     return
                 except Exception as e:
@@ -815,7 +899,9 @@ class BenchmarkRunner:
                     return
 
             if self.cancelled.is_set():
-                await self.emit({"type": "log", "level": "warn", "text": "Cancelled before starting"})
+                await self.emit(
+                    {"type": "log", "level": "warn", "text": "Cancelled before starting"}
+                )
                 await self.emit({"type": "done", "run_id": self.run_id, "cancelled": True})
                 return
 
@@ -837,11 +923,13 @@ class BenchmarkRunner:
                     break
                 await self._run_one(prompt, headers)
 
-            await self.emit({
-                "type": "done",
-                "run_id": self.run_id,
-                "cancelled": self.cancelled.is_set(),
-            })
+            await self.emit(
+                {
+                    "type": "done",
+                    "run_id": self.run_id,
+                    "cancelled": self.cancelled.is_set(),
+                }
+            )
         except Exception as e:
             logger.exception("benchmark failed")
             await self.emit({"type": "log", "level": "error", "text": f"Fatal: {e}"})
@@ -859,8 +947,10 @@ class BenchmarkRunner:
                     # el event loop justo en la cancelación/teardown.
                     await asyncio.to_thread(registry.get_engine(self.req.engine).stop)
                     native_runtime.set_loaded(self.req.engine, None)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # No relanzar: el run ya terminó y este teardown es best-effort, pero
+                    # silenciarlo del todo escondería un motor/contenedor zombi ocupando GPU.
+                    logger.warning(f"Failed to stop engine {self.req.engine} after run: {e}")
             await self.queue.put({"type": "_eof"})
 
     async def _bootstrap(self) -> None:
@@ -878,9 +968,7 @@ class BenchmarkRunner:
         """Asegura Ollama instalado, daemon corriendo, modelo descargado."""
         if not ollama_manager.is_installed():
             url = ollama_manager.installer_url() or "https://ollama.com/download"
-            raise RuntimeError(
-                f"Ollama is not installed. Download it from {url} and try again."
-            )
+            raise RuntimeError(f"Ollama is not installed. Download it from {url} and try again.")
 
         # Daemon
         if not await ollama_manager.is_running():
@@ -888,18 +976,20 @@ class BenchmarkRunner:
             await ollama_manager.ensure_running(timeout=30.0)
             await self.emit({"type": "log", "level": "success", "text": "Ollama daemon running"})
         else:
-            await self.emit({"type": "log", "level": "info", "text": "Reusing already-running Ollama"})
+            await self.emit(
+                {"type": "log", "level": "info", "text": "Reusing already-running Ollama"}
+            )
 
         # Modelo
         model = get_model(self.req.model)
         tag = (model and model.ollama_tag) or self.req.model
         if not tag or ":" not in tag and not (model and model.ollama_tag):
-            raise RuntimeError(
-                f"No Ollama tag for {self.req.model}. Use a tag like 'llama3.2:1b'."
-            )
+            raise RuntimeError(f"No Ollama tag for {self.req.model}. Use a tag like 'llama3.2:1b'.")
 
         if not await ollama_manager.has_model(tag):
-            await self.emit({"type": "log", "level": "info", "text": f"Downloading Ollama model: {tag}"})
+            await self.emit(
+                {"type": "log", "level": "info", "text": f"Downloading Ollama model: {tag}"}
+            )
 
             async def progress(evt):
                 await self.emit({"type": "model.download", **evt})
@@ -907,7 +997,9 @@ class BenchmarkRunner:
             await ollama_manager.pull_model(tag, progress=progress, cancel_event=self.cancelled)
             await self.emit({"type": "log", "level": "success", "text": f"Model ready: {tag}"})
         else:
-            await self.emit({"type": "log", "level": "info", "text": f"Model already downloaded: {tag}"})
+            await self.emit(
+                {"type": "log", "level": "info", "text": f"Model already downloaded: {tag}"}
+            )
 
         # Reescribir el campo model con el tag para que /v1/chat/completions lo acepte
         self.req.model = tag
@@ -919,7 +1011,7 @@ class BenchmarkRunner:
         from engines import registry
 
         engine = registry.get_engine(self.req.engine)
-        port = self.meta_port = engine.meta.default_port
+        port = engine.meta.default_port
 
         d = docker_mgr.availability()
         if not d.get("available"):
@@ -937,11 +1029,13 @@ class BenchmarkRunner:
         loaded = native_runtime.get_loaded(self.req.engine)
         st = engine.status()
         if st and st.state == "running" and loaded and loaded.get("model") == hf_id:
-            await self.emit({
-                "type": "log",
-                "level": "info",
-                "text": f"Reusing {self.req.engine} with {hf_id}",
-            })
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": f"Reusing {self.req.engine} with {hf_id}",
+                }
+            )
         else:
             if st and st.state == "running":
                 await self.emit({"type": "log", "level": "info", "text": "Restarting container…"})
@@ -974,12 +1068,20 @@ class BenchmarkRunner:
                     **user_opts,
                 },
             )
-            await self.emit({
-                "type": "log",
-                "level": "info",
-                "text": f"Starting container {engine.meta.image} with model {hf_id}…",
-            })
-            await self.emit({"type": "engine.start", "binary": engine.meta.image, "args": engine.build_command(ereq)})
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": f"Starting container {engine.meta.image} with model {hf_id}…",
+                }
+            )
+            await self.emit(
+                {
+                    "type": "engine.start",
+                    "binary": engine.meta.image,
+                    "args": engine.build_command(ereq),
+                }
+            )
             await engine.start(ereq)
             native_runtime.set_loaded(
                 self.req.engine,
@@ -991,7 +1093,13 @@ class BenchmarkRunner:
         # Para vLLM y similares, el field "model" en el request DEBE ser el hf_id
         self.req.model = hf_id
 
-        await self.emit({"type": "log", "level": "info", "text": "Waiting for engine to be ready (may take several minutes on first start)…"})
+        await self.emit(
+            {
+                "type": "log",
+                "level": "info",
+                "text": "Waiting for engine to be ready (may take several minutes on first start)…",
+            }
+        )
         await _wait_engine_ready(self.base_url, timeout=600.0)
         await self.emit({"type": "engine.ready", "base_url": self.base_url})
 
@@ -1008,7 +1116,9 @@ class BenchmarkRunner:
 
         if not binary_manager.llamacpp_fully_installed():
             await self.emit({"type": "log", "level": "info", "text": "Preparing llama.cpp…"})
-            await binary_manager.install_llamacpp(progress=bin_progress, cancel_event=self.cancelled)
+            await binary_manager.install_llamacpp(
+                progress=bin_progress, cancel_event=self.cancelled
+            )
             await self.emit({"type": "log", "level": "success", "text": "Binary ready"})
         binary = binary_manager.llamacpp_binary_path()
 
@@ -1018,12 +1128,19 @@ class BenchmarkRunner:
             if not local.exists():
                 raise RuntimeError(f"Local path does not exist: {local}")
             gguf_path = local
-            await self.emit({"type": "log", "level": "success", "text": f"Local model: {local.name}"})
+            await self.emit(
+                {"type": "log", "level": "success", "text": f"Local model: {local.name}"}
+            )
             # Visión: busca un mmproj hermano en la misma carpeta (no se descarga para locales)
             mmproj_local = _find_local_mmproj(local.parent)
             if model.is_vision and not mmproj_local:
-                await self.emit({"type": "log", "level": "warn",
-                                 "text": "Vision model without mmproj in the folder; will run as text"})
+                await self.emit(
+                    {
+                        "type": "log",
+                        "level": "warn",
+                        "text": "Vision model without mmproj in the folder; will run as text",
+                    }
+                )
             await self._start_engine_with_path(model, gguf_path, binary, mmproj_local)
             return
         # Opción B: descarga desde HF
@@ -1033,29 +1150,35 @@ class BenchmarkRunner:
             )
         if not model_manager.gguf_installed(model, self.req.quant):
             size_hint_gb = model.size_base_gb * 0.55 / 2.0  # estimación Q4_K_M
-            await self.emit({
-                "type": "log",
-                "level": "info",
-                "text": f"Downloading GGUF {self.req.quant} (~{size_hint_gb:.1f}GB)…",
-            })
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": f"Downloading GGUF {self.req.quant} (~{size_hint_gb:.1f}GB)…",
+                }
+            )
 
             async def model_progress(evt):
                 await self.emit({"type": "model.download", **evt})
 
             try:
-                await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress,
-                                                cancel_event=self.cancelled)
+                await model_manager.ensure_gguf(
+                    model, self.req.quant, progress=model_progress, cancel_event=self.cancelled
+                )
             except RuntimeError as e:
                 # Probable: cuantización inexistente. Reintentar con Q4_K_M.
                 if self.req.quant != "Q4_K_M":
-                    await self.emit({
-                        "type": "log",
-                        "level": "warn",
-                        "text": f"{e} — falling back to Q4_K_M",
-                    })
+                    await self.emit(
+                        {
+                            "type": "log",
+                            "level": "warn",
+                            "text": f"{e} — falling back to Q4_K_M",
+                        }
+                    )
                     self.req.quant = "Q4_K_M"
-                    await model_manager.ensure_gguf(model, self.req.quant, progress=model_progress,
-                                                    cancel_event=self.cancelled)
+                    await model_manager.ensure_gguf(
+                        model, self.req.quant, progress=model_progress, cancel_event=self.cancelled
+                    )
                 else:
                     raise
         gguf_path = model_manager.gguf_path(model, self.req.quant)
@@ -1066,7 +1189,7 @@ class BenchmarkRunner:
 
         await self._start_engine_with_path(model, gguf_path, binary, mmproj_path)
 
-    async def _ensure_mmproj(self, model):
+    async def _ensure_mmproj(self, model: Model) -> Path | None:
         """Descarga el mmproj (projector de visión) si el modelo lo necesita. Ruta o None.
 
         Falla suave: si la descarga del mmproj falla, se loguea y el modelo corre como
@@ -1076,8 +1199,9 @@ class BenchmarkRunner:
             return None
         if model_manager.mmproj_installed(model):
             return model_manager.mmproj_path(model)
-        await self.emit({"type": "log", "level": "info",
-                         "text": "Downloading vision projector (mmproj)…"})
+        await self.emit(
+            {"type": "log", "level": "info", "text": "Downloading vision projector (mmproj)…"}
+        )
 
         async def mm_progress(evt):
             await self.emit({"type": "model.download", **evt})
@@ -1087,17 +1211,29 @@ class BenchmarkRunner:
                 model, progress=mm_progress, cancel_event=self.cancelled
             )
             if path:
-                await self.emit({"type": "log", "level": "success",
-                                 "text": f"mmproj ready: {path.name} (vision enabled)"})
+                await self.emit(
+                    {
+                        "type": "log",
+                        "level": "success",
+                        "text": f"mmproj ready: {path.name} (vision enabled)",
+                    }
+                )
             return path
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            await self.emit({"type": "log", "level": "warn",
-                             "text": f"mmproj failed ({e}); the model will run as text"})
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "warn",
+                    "text": f"mmproj failed ({e}); the model will run as text",
+                }
+            )
             return None
 
-    async def _start_engine_with_path(self, model, gguf_path, binary, mmproj_path=None):
+    async def _start_engine_with_path(
+        self, model: Model, gguf_path: Path, binary: Path, mmproj_path: Path | None = None
+    ) -> None:
         """Arranca llama-server con el GGUF dado (ruta local) si no está ya corriendo.
 
         `mmproj_path` (opcional): projector de visión → arranca con --mmproj.
@@ -1112,23 +1248,27 @@ class BenchmarkRunner:
             and loaded.get("mmproj", False) == bool(mmproj_path)
         )
         if st.state == "running" and not same_model:
-            await self.emit({
-                "type": "log",
-                "level": "info",
-                "text": (
-                    f"Restarting engine: loaded={loaded or 'unknown'} "
-                    f"→ requested={self.req.model}/{self.req.quant}"
-                ),
-            })
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": (
+                        f"Restarting engine: loaded={loaded or 'unknown'} "
+                        f"→ requested={self.req.model}/{self.req.quant}"
+                    ),
+                }
+            )
             native_runtime.stop("llamacpp")
             st = native_runtime.status("llamacpp")
 
         if st.state == "running" and same_model:
-            await self.emit({
-                "type": "log",
-                "level": "info",
-                "text": f"Reusing engine with {loaded['model']}/{loaded['quant']}",
-            })
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": f"Reusing engine with {loaded['model']}/{loaded['quant']}",
+                }
+            )
         else:
             # Config base del optimizer (para flags/MoE heurísticos)…
             optimal = get_optimal_config("llamacpp", model.id, self.hw)
@@ -1149,8 +1289,13 @@ class BenchmarkRunner:
                 moe = _estimate_moe_offload(model, snap, self.req.quant) or moe
 
             ctx, ngl, ngl_mode = plan_llamacpp_run(
-                model, snap, quant=self.req.quant, kv_k=kv_k, kv_v=kv_v,
-                kv_in_ram=kv_in_ram, moe_offload=moe,
+                model,
+                snap,
+                quant=self.req.quant,
+                kv_k=kv_k,
+                kv_v=kv_v,
+                kv_in_ram=kv_in_ram,
+                moe_offload=moe,
             )
             if req_opts.get("contextLen"):  # el contexto manual del usuario manda
                 ctx = max(256, int(req_opts["contextLen"]))
@@ -1158,7 +1303,10 @@ class BenchmarkRunner:
             # Flags efectivas: base del optimizer, sobreescritas por engine_opts (sin duplicar).
             # KV cuantizada (≠ f16) REQUIERE flash attention en llama.cpp → forzar -fa on.
             kv_quantized = (kv_k != "f16") or (kv_v != "f16")
-            fa = bool(req_opts.get("flashAttn", optimal.flags.get("flashAttn", True))) or kv_quantized
+            fa = (
+                bool(req_opts.get("flashAttn", optimal.flags.get("flashAttn", True)))
+                or kv_quantized
+            )
             mlock = bool(req_opts.get("mlock", optimal.flags.get("mlock", False)))
             no_mmap = bool(req_opts.get("noMmap", optimal.flags.get("noMmap", False)))
             cache_reuse = req_opts.get("cacheReuse", optimal.flags.get("cacheReuse"))
@@ -1166,21 +1314,43 @@ class BenchmarkRunner:
             batch = int(req_opts.get("batchSize", 2048))
             ubatch = int(req_opts.get("ubatchSize", 512))
 
-            await self.emit({
-                "type": "log", "level": "info",
-                "text": (f"Plan: quant={self.req.quant} ctx={ctx} ngl={ngl} ({ngl_mode}) "
-                         f"KV={kv_k}/{kv_v}{' en RAM' if kv_in_ram else ''} "
-                         f"fa={'on' if fa else 'off'}"),
-            })
+            await self.emit(
+                {
+                    "type": "log",
+                    "level": "info",
+                    "text": (
+                        f"Plan: quant={self.req.quant} ctx={ctx} ngl={ngl} ({ngl_mode}) "
+                        f"KV={kv_k}/{kv_v}{' en RAM' if kv_in_ram else ''} "
+                        f"fa={'on' if fa else 'off'}"
+                    ),
+                }
+            )
 
             args = [
-                "--host", "0.0.0.0", "--port", "8080",
-                "-m", str(gguf_path), "--alias", model.id,
-                "-c", str(ctx), "-ngl", str(ngl),
-                "-ctk", kv_k, "-ctv", kv_v,
-                "-t", str(n_threads),
-                "--batch-size", str(batch), "--ubatch-size", str(ubatch),
-                "-fa", "on" if fa else "off",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "-m",
+                str(gguf_path),
+                "--alias",
+                model.id,
+                "-c",
+                str(ctx),
+                "-ngl",
+                str(ngl),
+                "-ctk",
+                kv_k,
+                "-ctv",
+                kv_v,
+                "-t",
+                str(n_threads),
+                "--batch-size",
+                str(batch),
+                "--ubatch-size",
+                str(ubatch),
+                "-fa",
+                "on" if fa else "off",
             ]
             if mmproj_path:
                 args += ["--mmproj", str(mmproj_path)]
@@ -1201,12 +1371,19 @@ class BenchmarkRunner:
             native_runtime.start("llamacpp", exe=binary, args=args, port=8080)
             native_runtime.set_loaded(
                 "llamacpp",
-                {"model": model.id, "quant": self.req.quant, "ctx": ctx,
-                 "kv": f"{kv_k}/{kv_v}", "mmproj": bool(mmproj_path)},
+                {
+                    "model": model.id,
+                    "quant": self.req.quant,
+                    "ctx": ctx,
+                    "kv": f"{kv_k}/{kv_v}",
+                    "mmproj": bool(mmproj_path),
+                },
             )
             self._owns_engine = True
 
-            await self.emit({"type": "log", "level": "info", "text": "Esperando motor listo…"})
+            await self.emit(
+                {"type": "log", "level": "info", "text": "Waiting for engine to be ready…"}
+            )
             await _wait_engine_ready(self.base_url, timeout=120.0)
             await self.emit({"type": "engine.ready", "base_url": self.base_url})
 
@@ -1230,7 +1407,9 @@ class BenchmarkRunner:
         error = ""
 
         # Anthropic tiene API propia (no OpenAI-compatible); el resto van por /v1/chat/completions
-        stream_fn = _stream_anthropic_chat if self.req.engine == "anthropic" else _stream_openai_chat
+        stream_fn = (
+            _stream_anthropic_chat if self.req.engine == "anthropic" else _stream_openai_chat
+        )
         try:
             async for kind, data in stream_fn(
                 self.base_url, model_for_engine, prompt, self.req.sampling, headers
@@ -1253,13 +1432,19 @@ class BenchmarkRunner:
                         vram_peak = max(vram_peak, gpu_used_gb())
                         if measure:
                             elapsed = now - t0 - (ttft_ms or 0) / 1000.0
-                            tps_now = (token_count - 1) / elapsed if elapsed > 0 and token_count > 1 else 0.0
-                            await self.emit({
-                                "type": "tokens",
-                                "current": token_count,
-                                "target": prompt.target_tokens,
-                                "tps_current": round(tps_now, 2),
-                            })
+                            tps_now = (
+                                (token_count - 1) / elapsed
+                                if elapsed > 0 and token_count > 1
+                                else 0.0
+                            )
+                            await self.emit(
+                                {
+                                    "type": "tokens",
+                                    "current": token_count,
+                                    "target": prompt.target_tokens,
+                                    "tps_current": round(tps_now, 2),
+                                }
+                            )
                 elif kind == "timings":
                     # Medición interna del motor: predicted = decode, prompt = prefill.
                     if isinstance(data, dict):
@@ -1290,17 +1475,19 @@ class BenchmarkRunner:
         }
 
     async def _run_one(self, prompt: Prompt, headers: dict[str, str]) -> None:
-        await self.emit({
-            "type": "phase",
-            "model": self.req.model,
-            "prompt": prompt.id,
-            "phase": "load",
-        })
+        await self.emit(
+            {
+                "type": "phase",
+                "model": self.req.model,
+                "prompt": prompt.id,
+                "phase": "load",
+            }
+        )
 
         if not self.base_url:
             err = f"No base_url para motor {self.req.engine}"
             await self.emit({"type": "log", "level": "error", "text": err})
-            self._record_error(prompt, err)
+            await self._record_error(prompt, err)
             return
 
         # Para motores OpenAI-compatible locales el `model` que pasamos en el body suele
@@ -1320,8 +1507,9 @@ class BenchmarkRunner:
             if self.cancelled.is_set():
                 break
             if MEASURE_ITERS > 1:
-                await self.emit({"type": "phase", "phase": "sample", "iter": i + 1,
-                                 "iters": MEASURE_ITERS})
+                await self.emit(
+                    {"type": "phase", "phase": "sample", "iter": i + 1, "iters": MEASURE_ITERS}
+                )
             res = await self._one_pass(prompt, headers, model_for_engine, measure=True)
             last = res
             if res["error"]:
@@ -1352,12 +1540,12 @@ class BenchmarkRunner:
             output = (last or {}).get("output", "")
             error = (last or {}).get("error", "")
             if self.cancelled.is_set() and not error:
-                error = "cancelado"
+                error = "cancelled"
 
         # Surfacing honesto: si el modelo no generó NADA y no hubo error/cancelación, suele
         # ser una KV demasiado agresiva (q4_0) que rompe la generación. No es un 0 silencioso.
         if not output.strip() and not error and not self.cancelled.is_set():
-            error = "el modelo no generó tokens (¿KV demasiado comprimida para este modelo?)"
+            error = "the model produced no tokens (KV cache too compressed for this model?)"
             await self.emit({"type": "log", "level": "warn", "text": f"{prompt.id}: {error}"})
 
         if prompt.code_tests and code_exec_enabled():
@@ -1384,10 +1572,13 @@ class BenchmarkRunner:
                     quality = score
                     method = f"llm:{judge_mode}"
                 else:
-                    await self.emit({
-                        "type": "log", "level": "warn",
-                        "text": f"{prompt.id}: LLM-judge no respondió, uso heurística",
-                    })
+                    await self.emit(
+                        {
+                            "type": "log",
+                            "level": "warn",
+                            "text": f"{prompt.id}: LLM-judge did not respond, falling back to heuristic",
+                        }
+                    )
 
         await self.emit({"type": "phase", "phase": "quality", "score": quality, "method": method})
 
@@ -1436,19 +1627,23 @@ class BenchmarkRunner:
             return base_url, model, headers
         return None, None, engine_headers
 
-    def _record_error(self, prompt: Prompt, err: str) -> None:
-        self.results.append(
-            ResultPayload(
-                model_id=self.req.model,
-                prompt_id=prompt.id,
-                tps=0.0,
-                ttft_ms=0,
-                vram_gb=0.0,
-                ram_gb=0.0,
-                quality=0.0,
-                cost=0.0,
-                ctx_used=0,
-                raw_output="",
-                error=err,
-            )
+    async def _record_error(self, prompt: Prompt, err: str) -> None:
+        """Registra un resultado de error para `prompt` y lo emite como evento `result`
+        (igual que el camino normal de `_run_one`) para que el panel en vivo lo muestre,
+        no solo el log — si no, este prompt desaparecía de la UI en vivo aunque sí quedara
+        persistido en la DB al terminar la run."""
+        result = ResultPayload(
+            model_id=self.req.model,
+            prompt_id=prompt.id,
+            tps=0.0,
+            ttft_ms=0,
+            vram_gb=0.0,
+            ram_gb=0.0,
+            quality=0.0,
+            cost=0.0,
+            ctx_used=0,
+            raw_output="",
+            error=err,
         )
+        self.results.append(result)
+        await self.emit({"type": "result", "result": result.model_dump()})

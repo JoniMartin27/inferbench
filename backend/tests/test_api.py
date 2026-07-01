@@ -4,6 +4,7 @@ Anthropic NO es OpenAI-compatible: endpoint /v1/messages, `system` aparte, `max_
 obligatorio, imágenes como bloque base64. El resto (OpenAI/OpenRouter/NVIDIA) usan
 /v1/chat/completions. Estos tests fijan ambas formas sin tocar la red.
 """
+
 from core.benchmark import Prompt, _build_anthropic_body, _build_chat_body
 
 

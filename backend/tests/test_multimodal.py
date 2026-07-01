@@ -1,4 +1,5 @@
 """Tests del soporte multimodal (visión): catálogo, mmproj, payload y scorer de calidad."""
+
 import base64
 
 from core import benchmark, model_manager

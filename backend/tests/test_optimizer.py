@@ -1,4 +1,5 @@
 """Tests de core/optimizer.py: config óptima y modelos por compresión (hardware sintético)."""
+
 from core import compat, optimizer
 from core.hardware import CPUInfo, GPUInfo, HardwareInfo
 from core.models_catalog import get_model
@@ -6,7 +7,10 @@ from core.models_catalog import get_model
 
 def _hw(vram_gb: float, ram_gb: float = 32.0) -> HardwareInfo:
     return HardwareInfo(
-        os="Test", os_version="0", ram_gb=ram_gb, ram_available_gb=ram_gb * 0.8,
+        os="Test",
+        os_version="0",
+        ram_gb=ram_gb,
+        ram_available_gb=ram_gb * 0.8,
         cpu=CPUInfo(name="Test CPU", arch="x86_64", physical_cores=8, logical_cores=16),
         gpus=[GPUInfo(vendor="nvidia", name="Test GPU", vram_gb=vram_gb)] if vram_gb else [],
         primary_vram_gb=vram_gb,
@@ -34,6 +38,29 @@ def test_optimal_config_api_engine():
     assert cfg.status == "api"
 
 
+def test_optimal_config_moe_offload_scales_with_chosen_quant():
+    # Regresión: --n-cpu-moe se estimaba UNA vez con el quant por defecto (Q4_K_M) y
+    # se reusaba para todos los quants probados en el bucle (Q8_0, Q6_K, ...). Un
+    # Q8_0 ocupa ~2x un Q4_K_M y necesita más capas offloaded a CPU; reusar el valor
+    # de Q4_K_M para un Q8_0 subestima el offload necesario -> riesgo de OOM real.
+    m = get_model("qwen3-30b-a3b")
+    assert m is not None and m.is_moe
+    hw = _hw(8.0)
+    snap = compat.HardwareSnapshot(vram_gb=hw.primary_vram_gb, ram_gb=hw.ram_gb)
+
+    off_q4 = optimizer._estimate_moe_offload(m, snap, "Q4_K_M")
+    off_q8 = optimizer._estimate_moe_offload(m, snap, "Q8_0")
+    assert off_q8 > off_q4  # Q8_0 exige offloadear más capas que Q4_K_M
+
+    # Con 8GB de VRAM el optimizer elige Q8_0 (mayor calidad que cabe) -> el offload
+    # usado DEBE ser el estimado para Q8_0, no el de Q4_K_M reusado del cálculo previo.
+    cfg = optimizer.get_optimal_config("llamacpp", "qwen3-30b-a3b", hw=hw)
+    assert cfg.feasible
+    assert cfg.quant == "Q8_0"
+    assert cfg.moe_offload == off_q8
+    assert cfg.moe_offload != off_q4
+
+
 def test_by_compression_structure_and_monotonicity():
     rows = optimizer.most_powerful_per_compression(hw=_hw(8.0), context_len=8192)
     assert len(rows) == 5
@@ -51,7 +78,9 @@ def test_by_compression_structure_and_monotonicity():
 
 def test_by_compression_more_context_shrinks_or_equal_top():
     """A más contexto, el top 100% GPU del modo Calidad (KV f16) no crece."""
-    small = optimizer.most_powerful_per_compression(hw=_hw(8.0), context_len=4096)[0]["top_full_gpu"]
+    small = optimizer.most_powerful_per_compression(hw=_hw(8.0), context_len=4096)[0][
+        "top_full_gpu"
+    ]
     big = optimizer.most_powerful_per_compression(hw=_hw(8.0), context_len=32768)[0]["top_full_gpu"]
     if small and big:
         assert big["params_b"] <= small["params_b"]

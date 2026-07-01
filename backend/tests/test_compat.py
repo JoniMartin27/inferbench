@@ -1,12 +1,19 @@
 """Tests de core/compat.py: tamaños, KV, compatibilidad y contexto máximo."""
+
 from core import compat
 from core.models_catalog import Model
 
 
 def _model(**kw) -> Model:
     base = dict(
-        id="t", name="T", family="llama", params_b=7.0, active_b=7.0,
-        is_moe=False, size_base_gb=14.0, max_ctx=8192,
+        id="t",
+        name="T",
+        family="llama",
+        params_b=7.0,
+        active_b=7.0,
+        is_moe=False,
+        size_base_gb=14.0,
+        max_ctx=8192,
     )
     base.update(kw)
     return Model(**base)
@@ -40,8 +47,9 @@ def test_kv_exact_from_arch_dims():
     assert abs(compat.kv_per_token_mb_f16(m) - expected) < 1e-9
     assert abs(compat.kv_per_token_mb_f16(m) - 0.125) < 1e-6
     # No depende de params_b cuando hay metadata
-    assert compat.kv_per_token_mb_f16(_model(params_b=70.0, n_layer=32, n_head_kv=8, head_dim=128)) == \
-        compat.kv_per_token_mb_f16(m)
+    assert compat.kv_per_token_mb_f16(
+        _model(params_b=70.0, n_layer=32, n_head_kv=8, head_dim=128)
+    ) == compat.kv_per_token_mb_f16(m)
 
 
 def test_kv_exact_captures_gqa():
@@ -61,16 +69,18 @@ def test_kv_falls_back_to_heuristic_without_dims():
 def test_check_compat_fits_on_big_gpu():
     hw = compat.HardwareSnapshot(vram_gb=24.0, ram_gb=64.0)
     opts = compat.EngineOpts(quant="Q4_K_M", kv_cache="q8_0", context_len=4096)
-    st = compat.check_compat(_model(params_b=7.0, size_base_gb=14.0), hw, opts,
-                             engine_id="llamacpp", is_api=False)
+    st = compat.check_compat(
+        _model(params_b=7.0, size_base_gb=14.0), hw, opts, engine_id="llamacpp", is_api=False
+    )
     assert st == "ok"
 
 
 def test_check_compat_huge_model_tiny_gpu_not_ok():
     hw = compat.HardwareSnapshot(vram_gb=4.0, ram_gb=8.0)
     opts = compat.EngineOpts(quant="Q4_K_M", kv_cache="q8_0", context_len=4096)
-    st = compat.check_compat(_model(params_b=70.0, size_base_gb=140.0), hw, opts,
-                             engine_id="llamacpp", is_api=False)
+    st = compat.check_compat(
+        _model(params_b=70.0, size_base_gb=140.0), hw, opts, engine_id="llamacpp", is_api=False
+    )
     assert st in {"partial", "cpu", "disk", "fail"}
     assert st != "ok"
 

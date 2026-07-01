@@ -1,6 +1,8 @@
 """Detección de hardware: CPU, RAM, GPU (NVIDIA / AMD / Apple / CPU-only)."""
+
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -119,8 +121,6 @@ def _detect_amd() -> list[GPUInfo]:
         )
         if out.returncode != 0:
             return []
-        import json
-
         data = json.loads(out.stdout)
         gpus: list[GPUInfo] = []
         for idx, (_card, info) in enumerate(data.items()):

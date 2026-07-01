@@ -6,6 +6,7 @@ Algoritmo del PROJECT_BRIEF:
 3. Calcular contexto máximo automático con esa cuantización
 4. Activar todas las flags compatibles (flashAttn, mlock, MoE offload si aplica)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,9 +20,19 @@ from .models_catalog import Model, get_model, load_models
 # Cuantizaciones por motor (de mayor a menor calidad)
 ENGINE_QUANTS: dict[str, list[str]] = {
     "llamacpp": [
-        "Q8_0", "Q6_K", "Q5_K_M", "Q4_K_M", "IQ4_XS",
-        "Q3_K_M", "IQ3_M", "Q2_K", "IQ2_M", "IQ2_XS", "IQ2_XXS",
-        "IQ1_M", "IQ1_S",
+        "Q8_0",
+        "Q6_K",
+        "Q5_K_M",
+        "Q4_K_M",
+        "IQ4_XS",
+        "Q3_K_M",
+        "IQ3_M",
+        "Q2_K",
+        "IQ2_M",
+        "IQ2_XS",
+        "IQ2_XXS",
+        "IQ1_M",
+        "IQ1_S",
     ],
     "ollama": ["q8_0", "q6_K", "q5_K_M", "q4_K_M", "q3_K_M", "q2_K"],
     "vllm": ["fp8", "awq", "gptq", "bitsandbytes"],
@@ -39,6 +50,9 @@ ENGINE_KV_PREFERENCE: dict[str, list[str]] = {
 }
 
 MIN_CONTEXT = 4096
+
+# Orden de preferencia de status: 'ok'/'moe' (todo en GPU) > 'partial' > 'cpu' > 'disk'.
+_STATUS_RANK: dict[str, int] = {"ok": 0, "moe": 1, "partial": 2, "cpu": 3, "disk": 4}
 
 
 class OptimizeRequest(BaseModel):
@@ -64,17 +78,25 @@ def _is_api(engine_id: str) -> bool:
     return engine_id in {"openai", "anthropic", "openrouter", "nvidia"}
 
 
-def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = None) -> OptimalConfig:
+def get_optimal_config(
+    engine_id: str, model_id: str, hw: HardwareInfo | None = None
+) -> OptimalConfig:
     model = get_model(model_id)
     if model is None:
         return OptimalConfig(
-            engine=engine_id, model_id=model_id, feasible=False, status="fail",
+            engine=engine_id,
+            model_id=model_id,
+            feasible=False,
+            status="fail",
             rationale=[f"Modelo desconocido: {model_id}"],
         )
 
     if _is_api(engine_id):
         return OptimalConfig(
-            engine=engine_id, model_id=model_id, feasible=True, status="api",
+            engine=engine_id,
+            model_id=model_id,
+            feasible=True,
+            status="api",
             context_len=model.max_ctx,
             rationale=["Motor cloud: solo sampling. Usa max_ctx del modelo."],
         )
@@ -84,18 +106,20 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
     quants = ENGINE_QUANTS.get(engine_id, ENGINE_QUANTS["llamacpp"])
     kv_pref = ENGINE_KV_PREFERENCE.get(engine_id, ["f16"])
 
-    rationale: list[str] = [
-        f"Hardware: {hw.primary_vram_gb}GB VRAM + {hw.ram_gb}GB RAM"
-    ]
+    rationale: list[str] = [f"Hardware: {hw.primary_vram_gb}GB VRAM + {hw.ram_gb}GB RAM"]
 
-    # MoE offload candidato (solo llama.cpp)
-    moe_candidate = _estimate_moe_offload(model, snap) if (model.is_moe and engine_id == "llamacpp") else None
-    if moe_candidate:
-        rationale.append(f"Modelo MoE detectado: probando --n-cpu-moe={moe_candidate}")
+    is_moe_llamacpp = model.is_moe and engine_id == "llamacpp"
+    if is_moe_llamacpp:
+        rationale.append("Modelo MoE detectado: --n-cpu-moe se estima por cuantización")
 
     best: OptimalConfig | None = None
     for kv in kv_pref:
         for quant in quants:
+            # MoE offload candidato estimado para el quant REAL que se está probando.
+            # Un Q8_0 ocupa ~2× un Q4_K_M → necesita descargar más capas; estimarlo
+            # siempre con Q4_K_M (el default) provocaba OOM a quant alto (ver
+            # _estimate_moe_offload).
+            moe_candidate = _estimate_moe_offload(model, snap, quant) if is_moe_llamacpp else None
             opts = compat.EngineOpts(
                 quant=quant, kv_cache=kv, context_len=MIN_CONTEXT, moe_offload=moe_candidate
             )
@@ -113,7 +137,11 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                 flags = _default_flags(engine_id, model, status, snap)
                 if engine_id in ("llamacpp",):
                     ngl, mode = compute_optimal_ngl(
-                        model, snap, quant, kv, max_ctx,
+                        model,
+                        snap,
+                        quant,
+                        kv,
+                        max_ctx,
                         moe_offload=moe_candidate if status == "moe" else None,
                     )
                     flags["ngl"] = ngl
@@ -131,7 +159,13 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     context_len=max_ctx,
                     moe_offload=moe_used,
                     flags=flags,
-                    rationale=rationale + [
+                    rationale=rationale
+                    + (
+                        [f"MoE offload --n-cpu-moe={moe_used} (estimado para {quant})"]
+                        if moe_used
+                        else []
+                    )
+                    + [
                         f"Elegida cuantización {quant} con KV {kv}: status={status}",
                         f"Contexto máximo automático: {max_ctx} tokens",
                         f"Memoria estimada total: {round(total, 2)} GB"
@@ -145,8 +179,7 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
                     estimated_total_gb=round(total, 2),
                 )
                 # Preferimos status='ok' o 'moe' sobre 'partial' sobre 'cpu' sobre 'disk'
-                STATUS_RANK = {"ok": 0, "moe": 1, "partial": 2, "cpu": 3, "disk": 4}
-                if best is None or STATUS_RANK.get(status, 9) < STATUS_RANK.get(best.status, 9):
+                if best is None or _STATUS_RANK.get(status, 9) < _STATUS_RANK.get(best.status, 9):
                     best = cfg
                 if status in {"ok", "moe"}:
                     return best
@@ -160,9 +193,8 @@ def get_optimal_config(engine_id: str, model_id: str, hw: HardwareInfo | None = 
         model_id=model_id,
         feasible=False,
         status="fail",
-        rationale=rationale + [
-            "Ninguna combinación cabe en este hardware. Considera un modelo más pequeño."
-        ],
+        rationale=rationale
+        + ["Ninguna combinación cabe en este hardware. Considera un modelo más pequeño."],
     )
 
 
@@ -192,13 +224,17 @@ def _fit_status_kv(
 
     # MoE con offload: solo shared+gating+atención+KV deben caber en VRAM
     if model.is_moe and engine_id == "llamacpp" and hw.vram_gb > 0:
-        shared = (model.active_b / model.params_b) * model_size * 0.4 + 1.2
+        shared = compat.moe_shared_gb(model, model_size)
         if shared + (0.0 if kv_in_ram else kv_overhead) <= hw.vram_gb:
             return "moe"
 
     if vram_need <= hw.vram_gb and ram_extra <= hw.ram_gb * 0.8:
         return "ok"
-    if hw.vram_gb > 0 and vram_need <= hw.vram_gb + hw.ram_gb * 0.8 and ram_extra <= hw.ram_gb * 0.8:
+    if (
+        hw.vram_gb > 0
+        and vram_need <= hw.vram_gb + hw.ram_gb * 0.8
+        and ram_extra <= hw.ram_gb * 0.8
+    ):
         return "partial"
     if vram_need + ram_extra <= hw.ram_gb * 0.8:
         return "cpu"
@@ -231,38 +267,42 @@ def most_powerful_per_compression(
     for pid, preset in compat.COMPRESSION_PRESETS.items():
         kv_f = compat.preset_kv_factor(pid)
         in_ram = bool(preset.get("nkvo"))
-        top_ok = None       # más potente 100% en VRAM (rápido)
+        top_ok = None  # más potente 100% en VRAM (rápido)
         top_runnable = None  # más potente ejecutable (incluye MoE offload / GPU+CPU)
         for m in models:  # de más a menos potente
             for q in quants:  # de mayor a menor calidad
                 st = _fit_status_kv(m, snap, q, context_len, kv_f, in_ram, engine_id)
                 if st in ("ok", "moe", "partial"):
                     if top_runnable is None:
-                        top_runnable = _rec_entry(m, q, st, kv_f, context_len, snap, in_ram)
+                        top_runnable = _rec_entry(m, q, st, kv_f, context_len)
                     if st == "ok":
                         if top_ok is None:
-                            top_ok = _rec_entry(m, q, "ok", kv_f, context_len, snap, in_ram)
+                            top_ok = _rec_entry(m, q, "ok", kv_f, context_len)
                         break  # 100% GPU para este modelo: no probar quants menores
                 # Si este quant no cabe entero (partial/moe), seguimos probando quants MENORES
                 # del MISMO modelo buscando un "ok" — no saltamos a un modelo más débil sin
                 # antes comprobar si una cuantización más agresiva lo mete entero en GPU.
             if top_ok and top_runnable:
                 break
-        out.append({
-            "preset": pid,
-            "label": preset["label"],
-            "kv_k": preset["kv_k"],
-            "kv_v": preset["kv_v"],
-            "kv_in_ram": in_ram,
-            "kv_factor": round(kv_f, 3),
-            "desc": preset["desc"],
-            "top_full_gpu": top_ok,
-            "top_runnable": top_runnable,
-        })
+        out.append(
+            {
+                "preset": pid,
+                "label": preset["label"],
+                "kv_k": preset["kv_k"],
+                "kv_v": preset["kv_v"],
+                "kv_in_ram": in_ram,
+                "kv_factor": round(kv_f, 3),
+                "desc": preset["desc"],
+                "top_full_gpu": top_ok,
+                "top_runnable": top_runnable,
+            }
+        )
     return out
 
 
-def _rec_entry(model, quant, status, kv_f, context_len, snap, in_ram) -> dict[str, Any]:
+def _rec_entry(
+    model: Model, quant: str, status: str, kv_f: float, context_len: int
+) -> dict[str, Any]:
     size = compat.get_model_size_gb(model, quant)
     kv_per_tok_gb = compat.kv_per_token_mb_f16(model) * kv_f / 1024.0
     kv_gb = context_len * kv_per_tok_gb
@@ -313,7 +353,7 @@ def _gpu_mem_fraction(vram_total_gb: float, headroom_gb: float = 1.0) -> float:
 
 
 def _default_flags(
-    engine_id: str, model: Model, status: str, snap: "compat.HardwareSnapshot | None" = None
+    engine_id: str, model: Model, status: str, snap: compat.HardwareSnapshot | None = None
 ) -> dict[str, Any]:
     vram = snap.vram_gb if snap else 0.0
     if engine_id == "llamacpp":
@@ -406,7 +446,7 @@ def plan_llamacpp_run(
 
     # VRAM que ocupan los pesos en GPU (con MoE offload solo va shared+gating+atención)
     if model.is_moe and moe_offload and moe_offload > 0:
-        weights_vram = (model.active_b / model.params_b) * model_size + 1.2
+        weights_vram = compat.moe_weights_vram_gb(model, model_size)
     else:
         weights_vram = model_size
 
@@ -432,7 +472,7 @@ def plan_llamacpp_run(
     return max_ctx, ngl, mode
 
 
-def benefits_summary(cfg: "OptimalConfig", model: Model, hw: compat.HardwareSnapshot) -> list[str]:
+def benefits_summary(cfg: OptimalConfig, model: Model, hw: compat.HardwareSnapshot) -> list[str]:
     """Lista de las técnicas de optimización aplicadas con su beneficio cuantificado."""
     out: list[str] = []
     base_fp16 = model.size_base_gb
@@ -445,7 +485,7 @@ def benefits_summary(cfg: "OptimalConfig", model: Model, hw: compat.HardwareSnap
             f"({pct:.0f}% menos)"
         )
     if cfg.kv_cache and cfg.kv_cache != "f16":
-        kv_factor = {"q8_0": 0.5, "q4_0": 0.25, "fp8": 0.5, "fp8_e5m2": 0.5}.get(cfg.kv_cache, 1.0)
+        kv_factor = compat.KV_FACTOR.get(cfg.kv_cache, 1.0)
         out.append(
             f"KV-cache {cfg.kv_cache}: {(1 - kv_factor) * 100:.0f}% menos memoria de contexto"
         )
@@ -474,5 +514,7 @@ def benefits_summary(cfg: "OptimalConfig", model: Model, hw: compat.HardwareSnap
     if cfg.flags.get("prefixCaching"):
         out.append("Prefix caching: vLLM reusa el prompt entre requests")
     if cfg.flags.get("chunkedPrefill"):
-        out.append(f"Chunked prefill ({cfg.flags['chunkedPrefill']}): SGLang procesa el prompt en chunks")
+        out.append(
+            f"Chunked prefill ({cfg.flags['chunkedPrefill']}): SGLang procesa el prompt en chunks"
+        )
     return out

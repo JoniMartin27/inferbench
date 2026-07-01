@@ -1,4 +1,5 @@
 """Endpoint /api/optimize."""
+
 from __future__ import annotations
 
 import asyncio
@@ -24,13 +25,20 @@ from core.optimizer import (
     most_powerful_per_compression,
 )
 from engines import registry
+from engines.base import Engine
 
 router = APIRouter(prefix="/api", tags=["optimize"])
 
 _STATUS_RANK: dict[str, int] = {"ok": 0, "moe": 1, "partial": 2, "cpu": 3, "disk": 4}
 _STATUS_SCORE: dict[str, float] = {
-    "ok": 1.0, "moe": 0.9, "partial": 0.7, "cpu": 0.3,
-    "disk": 0.0, "fail": 0.0, "api": 0.8, "nofile": 0.0,
+    "ok": 1.0,
+    "moe": 0.9,
+    "partial": 0.7,
+    "cpu": 0.3,
+    "disk": 0.0,
+    "fail": 0.0,
+    "api": 0.8,
+    "nofile": 0.0,
 }
 
 
@@ -61,12 +69,12 @@ class EngineRec(BaseModel):
     best_quant: str | None = None
     context_len: int = 0
     runtime_ready: bool
-    model_source: str   # "gguf" | "ollama" | "hf_repo" | "api" | "none"
+    model_source: str  # "gguf" | "ollama" | "hf_repo" | "api" | "none"
     model_available: bool
-    score: float        # 0–1, mayor = más recomendado
+    score: float  # 0–1, mayor = más recomendado
 
 
-def _runtime_ready(eng_id: str, eng) -> bool:
+def _runtime_ready(eng_id: str, eng: Engine) -> bool:
     """Comprueba si el runtime del motor está instalado y listo sin lanzar el proceso."""
     if eng.meta.type == "api":
         return True
@@ -121,7 +129,10 @@ async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[Recommenda
         # Mejor motor: menor STATUS_RANK; en empate preferir llamacpp (más técnicas disponibles)
         winner_id = min(
             best_per_engine,
-            key=lambda e: (_STATUS_RANK.get(best_per_engine[e].status, 9), 0 if e == "llamacpp" else 1),
+            key=lambda e: (
+                _STATUS_RANK.get(best_per_engine[e].status, 9),
+                0 if e == "llamacpp" else 1,
+            ),
         )
         winner = best_per_engine[winner_id]
         techniques = benefits_summary(winner, model, snap)
@@ -131,18 +142,22 @@ async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[Recommenda
             ll_rank = _STATUS_RANK.get(best_per_engine["llamacpp"].status, 9)
             ol_rank = _STATUS_RANK.get(best_per_engine["ollama"].status, 9)
             if ol_rank < ll_rank:
-                engine_note = f"Ollama tiene mejor status ({best_per_engine['ollama'].status}) que llama.cpp"
+                engine_note = (
+                    f"Ollama tiene mejor status ({best_per_engine['ollama'].status}) que llama.cpp"
+                )
             elif model.ollama_tag and ol_rank == ll_rank and winner_id == "llamacpp":
                 engine_note = f"También disponible en Ollama ({model.ollama_tag})"
         elif winner_id == "ollama":
             engine_note = "Ollama recomendado (llama.cpp no compatible con este modelo)"
 
-        rows.append(RecommendationRow(
-            model=model,
-            config=winner,
-            techniques=techniques,
-            engine_note=engine_note,
-        ))
+        rows.append(
+            RecommendationRow(
+                model=model,
+                config=winner,
+                techniques=techniques,
+                engine_note=engine_note,
+            )
+        )
 
     # Ordenar: status (ok > moe > partial > cpu > disk), luego params_b desc
     rows.sort(key=lambda r: (_STATUS_RANK.get(r.config.status, 9), -r.model.params_b))
@@ -198,6 +213,15 @@ async def quants_for_model(
     # Solo se comprueban las quants que el hardware admitiría (evita HEAD innecesarios).
     # Los requests van en paralelo con asyncio.gather y se cachean 20 min.
 
+    def _all_nofile(rows: list[QuantOption]) -> list[QuantOption]:
+        """Marca como 'nofile' las filas que el hardware sí admitiría (no toca disk/fail)."""
+        return [
+            QuantOption(quant=r.quant, status="nofile", size_gb=r.size_gb)
+            if r.status not in ("disk", "fail")
+            else r
+            for r in rows
+        ]
+
     if engine == "llamacpp" and model.hf_gguf:
         # Llamacpp: comprobación por archivo individual (.gguf)
         async def _check_gguf(row: QuantOption) -> QuantOption:
@@ -217,23 +241,13 @@ async def quants_for_model(
         # Ollama: una sola comprobación del tag base; si no existe, todas las quants = nofile
         base_exists = await ollama_model_exists(model.ollama_tag)
         if not base_exists:
-            rows = [
-                QuantOption(quant=r.quant, status="nofile", size_gb=r.size_gb)
-                if r.status not in ("disk", "fail")
-                else r
-                for r in rows
-            ]
+            rows = _all_nofile(rows)
 
     elif engine in ("vllm", "sglang", "tgi") and model.hf_repo:
         # Docker engines: comprobación del repo HF (README.md como sonda)
         repo_exists = await hf_repo_exists(model.hf_repo)
         if not repo_exists:
-            rows = [
-                QuantOption(quant=r.quant, status="nofile", size_gb=r.size_gb)
-                if r.status not in ("disk", "fail")
-                else r
-                for r in rows
-            ]
+            rows = _all_nofile(rows)
 
     return rows
 
@@ -306,6 +320,6 @@ async def model_engines(
             score=round(score, 3),
         )
 
-    recs = list(await asyncio.gather(*[_rec(eng_id) for eng_id in registry._REGISTRY]))
+    recs = list(await asyncio.gather(*[_rec(eng.meta.id) for eng in registry.list_engines()]))
     recs.sort(key=lambda r: -r.score)
     return recs

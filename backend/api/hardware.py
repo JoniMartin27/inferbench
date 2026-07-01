@@ -1,4 +1,5 @@
 """Endpoint /api/hardware."""
+
 from fastapi import APIRouter
 
 from core.hardware import HardwareInfo, detect_hardware

@@ -3,6 +3,7 @@
 Por seguridad NUNCA se devuelven los valores de las keys: solo si cada proveedor tiene
 una guardada. El benchmark las recupera del keyring cuando el request no trae api_key.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

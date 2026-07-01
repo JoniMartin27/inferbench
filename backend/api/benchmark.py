@@ -1,9 +1,11 @@
 """Endpoints /api/benchmark — POST /run, GET /stream/{run_id} (SSE), POST /stop/{run_id}."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import time
+import uuid
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, HTTPException
@@ -11,6 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from pydantic import BaseModel, Field
 
+from core import lookspan
 from core.benchmark import BenchmarkRequest, BenchmarkRunner
 from core.hardware import detect_hardware
 from db import BenchmarkResult, BenchmarkRun, get_session
@@ -73,8 +76,11 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
     lock = _engine_lock(runner.req.engine)
     if lock.locked():
         runner.queue.put_nowait(
-            {"type": "log", "level": "info",
-             "text": f"Motor {runner.req.engine} ocupado por otra run; esperando turno…"}
+            {
+                "type": "log",
+                "level": "info",
+                "text": f"Motor {runner.req.engine} ocupado por otra run; esperando turno…",
+            }
         )
     async with lock:
         started = time.time()
@@ -90,66 +96,92 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
         s.commit()
 
     # Observabilidad opt-in: exporta el run como trace a lookspan (best-effort, no rompe nada)
-    from core import lookspan
-
     await lookspan.export_run(
-        runner.run_id, runner.req.engine, runner.req.model, runner.req.quant,
-        runner.results, started, ended, runner.req.engine_opts,
+        runner.run_id,
+        runner.req.engine,
+        runner.req.model,
+        runner.req.quant,
+        runner.results,
+        started,
+        ended,
+        runner.req.engine_opts,
     )
 
 
 class SweepRequest(BaseModel):
     """Lanza el mismo modelo+motor con N cuantizaciones distintas (sequencialmente)."""
+
     base: BenchmarkRequest
     quants: list[str] = Field(min_length=1)
 
 
-_SWEEPS: dict[str, dict] = {}  # sweep_id → state
+class SweepRunRef(BaseModel):
+    run_id: str
+    quant: str
+
+
+class SweepState(BaseModel):
+    id: str
+    queue: list[str]
+    runs: list[SweepRunRef] = Field(default_factory=list)
+    current: str | None = None
+    cancelled: bool = False
+    completed: bool = False
+
+
+class StartSweepResponse(BaseModel):
+    sweep_id: str
+    runs_planned: int
+
+
+_SWEEPS: dict[str, SweepState] = {}  # sweep_id → state
 _MAX_SWEEPS = 50
 
 
 @router.post("/sweep")
-async def start_sweep(req: SweepRequest) -> dict:
-    import uuid
-
+async def start_sweep(req: SweepRequest) -> StartSweepResponse:
     sweep_id = uuid.uuid4().hex[:10]
-    state = {"id": sweep_id, "queue": list(req.quants), "runs": [], "current": None,
-             "cancelled": False, "completed": False}
+    state = SweepState(id=sweep_id, queue=list(req.quants))
     _SWEEPS[sweep_id] = state
     # Purgar sweeps completados más viejos si se supera el cap
     if len(_SWEEPS) > _MAX_SWEEPS:
-        done = [k for k, v in _SWEEPS.items() if v.get("completed") or v.get("cancelled")]
-        for k in done[:len(_SWEEPS) - _MAX_SWEEPS]:
+        done = [k for k, v in _SWEEPS.items() if v.completed or v.cancelled]
+        for k in done[: len(_SWEEPS) - _MAX_SWEEPS]:
             _SWEEPS.pop(k, None)
 
     async def runner_loop():
         for quant in req.quants:
-            if state["cancelled"]:
+            if state.cancelled:
                 break
             sub_req = req.base.model_copy(update={"quant": quant})
             runner = BenchmarkRunner(sub_req)
             _RUNNERS[runner.run_id] = runner
-            state["current"] = runner.run_id
-            state["runs"].append({"run_id": runner.run_id, "quant": quant})
+            _prune_runners()
+            state.current = runner.run_id
+            state.runs.append(SweepRunRef(run_id=runner.run_id, quant=quant))
             with get_session() as s:
-                s.add(BenchmarkRun(
-                    id=runner.run_id, ts=int(time.time()), engine=sub_req.engine,
-                    hw_json=detect_hardware().model_dump_json(),
-                    opts_json=sub_req.model_dump_json(exclude={"api_key"}),
-                    notes=f"[sweep {sweep_id}] {sub_req.notes}".strip(),
-                    status="running",
-                ))
+                s.add(
+                    BenchmarkRun(
+                        id=runner.run_id,
+                        ts=int(time.time()),
+                        engine=sub_req.engine,
+                        hw_json=detect_hardware().model_dump_json(),
+                        opts_json=sub_req.model_dump_json(exclude={"api_key"}),
+                        notes=f"[sweep {sweep_id}] {sub_req.notes}".strip(),
+                        status="running",
+                    )
+                )
                 s.commit()
             await _run_and_persist(runner)
-        state["current"] = None
-        state["completed"] = True
+        state.current = None
+        state.completed = True
 
     asyncio.create_task(runner_loop())
-    return {"sweep_id": sweep_id, "runs_planned": len(req.quants)}
+    return StartSweepResponse(sweep_id=sweep_id, runs_planned=len(req.quants))
 
 
 @router.get("/sweep/{sweep_id}")
-async def sweep_status(sweep_id: str) -> dict:
+async def sweep_status(sweep_id: str) -> SweepState:
     s = _SWEEPS.get(sweep_id)
     if not s:
         raise HTTPException(404, f"Unknown sweep: {sweep_id}")
@@ -157,20 +189,20 @@ async def sweep_status(sweep_id: str) -> dict:
 
 
 @router.post("/sweep/{sweep_id}/stop")
-async def sweep_stop(sweep_id: str) -> dict:
+async def sweep_stop(sweep_id: str) -> SweepState:
     s = _SWEEPS.get(sweep_id)
     if not s:
         raise HTTPException(404, f"Unknown sweep: {sweep_id}")
-    s["cancelled"] = True
-    if s.get("current"):
-        runner = _RUNNERS.get(s["current"])
+    s.cancelled = True
+    if s.current:
+        runner = _RUNNERS.get(s.current)
         if runner:
             runner.cancel()
     return s
 
 
 @router.post("/{run_id}/stop")
-async def stop_run(run_id: str) -> dict:
+async def stop_run(run_id: str) -> dict[str, str | bool]:
     runner = _RUNNERS.get(run_id)
     if not runner:
         raise HTTPException(404, f"Unknown or already finished run_id: {run_id}")

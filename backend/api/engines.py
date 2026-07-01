@@ -47,11 +47,13 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                 out.append(RuntimeAvailability(runtime="native", ready=fully, detail=detail))
             elif meta.id == "ollama":
                 if ollama_manager.is_installed():
+                    # Solo el nombre del ejecutable: no filtrar la ruta absoluta del usuario.
+                    exe = ollama_manager.find_ollama_exe()
                     out.append(
                         RuntimeAvailability(
                             runtime="native",
                             ready=True,
-                            detail=f"Instalado en {ollama_manager.find_ollama_exe()}",
+                            detail=f"Instalado ({exe.name})" if exe else "Instalado",
                         )
                     )
                 else:

@@ -15,6 +15,7 @@ este módulo (y main.py) no falle si la dependencia aún no está instalada.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 
@@ -41,14 +42,14 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
             r = await client.get(url, params=params)
             r.raise_for_status()
             return r.json()
-    except httpx.ConnectError:
-        raise RuntimeError(_BACKEND_DOWN)
+    except httpx.ConnectError as e:
+        raise RuntimeError(_BACKEND_DOWN) from e
     except httpx.HTTPStatusError as e:
         raise RuntimeError(
             f"InferBench devolvió HTTP {e.response.status_code}: {e.response.text[:300]}"
-        )
+        ) from e
     except httpx.HTTPError as e:
-        raise RuntimeError(f"Error contactando InferBench: {e}")
+        raise RuntimeError(f"Error contactando InferBench: {e}") from e
 
 
 async def _post(path: str, body: dict[str, Any] | None = None) -> Any:
@@ -60,15 +61,16 @@ async def _post(path: str, body: dict[str, Any] | None = None) -> Any:
             if r.status_code >= 400:
                 detail = ""
                 try:
-                    detail = r.json().get("detail") or r.json().get("message") or ""
+                    payload = r.json()
+                    detail = payload.get("detail") or payload.get("message") or ""
                 except Exception:  # noqa: BLE001
                     detail = r.text[:300]
                 raise RuntimeError(f"InferBench HTTP {r.status_code}: {detail}")
             return r.json()
-    except httpx.ConnectError:
-        raise RuntimeError(_BACKEND_DOWN)
+    except httpx.ConnectError as e:
+        raise RuntimeError(_BACKEND_DOWN) from e
     except httpx.HTTPError as e:
-        raise RuntimeError(f"Error contactando InferBench: {e}")
+        raise RuntimeError(f"Error contactando InferBench: {e}") from e
 
 
 def _build_server():
@@ -147,15 +149,14 @@ def _build_server():
         'ready'/'error' o timeout (~300s). Devuelve el estado final (incluye endpoint
         OpenAI y el quant elegido). InferBench elige el quant óptimo si `quant` es None.
         """
-        import asyncio
-
         await _post(
             "/api/serve/load",
             {"model_id": model_id, "engine": engine, "quant": quant},
         )
-        deadline = asyncio.get_event_loop().time() + 300.0
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + 300.0
         last: dict[str, Any] = {}
-        while asyncio.get_event_loop().time() < deadline:
+        while loop.time() < deadline:
             last = await _get("/api/serve/status")
             if last.get("phase") in ("ready", "error", "idle"):
                 return last

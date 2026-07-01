@@ -137,6 +137,26 @@ class ServeManager:
 
     # --- carga ------------------------------------------------------------------
 
+    async def _cancel_pending_task(self) -> None:
+        """Cancela y espera la tarea de carga en background previa, si sigue viva.
+
+        Sin esto, una segunda llamada a load()/_load_image() mientras la primera
+        sigue descargando/arrancando sustituye la referencia a `self._task` y la
+        deja huérfana: sigue corriendo sin lock, puede arrancar su motor DESPUÉS
+        del nuevo (pisándolo en el mismo slot/puerto) y unload() ya no puede
+        cancelarla. Debe llamarse con `self._lock` ya adquirido.
+        """
+        task = self._task
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            # CancelledError hereda de BaseException (no de Exception) desde 3.8: hay que
+            # capturarla explícitamente o la propia cancelación que acabamos de pedir se
+            # propaga sin querer. Esperado: la cancelación misma o un fallo previo de la tarea.
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+
     async def load(
         self,
         model_id: str,
@@ -185,8 +205,7 @@ class ServeManager:
             )
         if not model.is_image and engine == "stablediffusion":
             raise ServeError(
-                f"El motor 'stablediffusion' solo sirve modelos de imagen; {model_id} "
-                f"es de texto.",
+                f"El motor 'stablediffusion' solo sirve modelos de imagen; {model_id} es de texto.",
                 status_code=400,
             )
 
@@ -205,12 +224,16 @@ class ServeManager:
                 )
             chosen_quant = quant or optimal.quant or "Q4_K_M"
 
-            # ¿Ya servimos exactamente esto y está vivo? → reusar sin reiniciar.
+            # ¿Ya servimos exactamente esto y está vivo? → reusar sin reiniciar. Si el
+            # caller pide un `context` explícito distinto del ya servido, NO reusamos:
+            # honramos el nuevo valor reiniciando el motor (si no, un segundo load() con
+            # otro `context` se ignoraría en silencio y serviría con el ctx viejo).
             if (
                 self.phase == "ready"
                 and self.model_id == model_id
                 and self.engine == engine
                 and self.quant == chosen_quant
+                and (context is None or context == self.context)
                 and self._engine_running()
             ):
                 logger.info(f"serve: reusando motor ya cargado {model_id}/{chosen_quant}")
@@ -227,10 +250,16 @@ class ServeManager:
             )
             chosen_ctx = int(context) if context else planned_ctx
 
+            # Si había otra carga en curso (downloading/starting), cancelarla antes de
+            # sustituir self._task — si no, queda huérfana corriendo en background.
+            await self._cancel_pending_task()
+
             # Si había otro modelo servido, lo paramos antes de cargar el nuevo (slot único).
+            # stop() es bloqueante (puede esperar hasta ~7s a que el proceso termine) →
+            # se descarga a un hilo para no congelar el event loop mientras se sostiene el lock.
             if self.engine and self._engine_running():
                 logger.info("serve: parando motor previo antes de cargar el nuevo")
-                native_runtime.stop(self.engine)
+                await asyncio.to_thread(native_runtime.stop, self.engine)
                 native_runtime.set_loaded(self.engine, None)
 
             # Fijar el slot en 'downloading' y lanzar la carga real en background.
@@ -306,7 +335,6 @@ class ServeManager:
             self.progress = None
             self.message = "Arrancando el motor…"
 
-            kv_quantized = kv != "f16"
             n_threads = max(2, psutil.cpu_count(logical=False) or 4)
             port = ENGINE_PORTS[engine]
             args = [
@@ -328,8 +356,11 @@ class ServeManager:
                 kv,
                 "-t",
                 str(n_threads),
+                # Serve siempre activa flash attention (default del optimizer para llamacpp,
+                # y obligatorio si la KV va cuantizada, kv != "f16"); a diferencia del bench,
+                # aquí no hay overrides de engine_opts por request que puedan desactivarlo.
                 "-fa",
-                "on" if (kv_quantized or True) else "off",
+                "on",
             ]
             if mmproj_path:
                 args += ["--mmproj", str(mmproj_path)]
@@ -357,8 +388,18 @@ class ServeManager:
             self.message = f"Sirviendo {model_id} ({quant}) en {self.endpoint}"
             logger.success(f"serve: {model_id}/{quant} listo en {self.endpoint}")
         except asyncio.CancelledError:
+            # Una carga en curso puede cancelarse desde _cancel_pending_task() (otra
+            # load() la sustituye) o desde unload(). En ambos casos, si el motor ya
+            # había arrancado, hay que pararlo aquí mismo: `engine` es el parámetro de
+            # ESTA tarea, no self.engine (que para entonces puede ya apuntar al nuevo).
             self.phase = "error"
             self.message = "Carga cancelada."
+            try:
+                if engine:
+                    await asyncio.to_thread(native_runtime.stop, engine)
+                    native_runtime.set_loaded(engine, None)
+            except Exception:  # noqa: BLE001
+                pass
             raise
         except Exception as e:  # noqa: BLE001
             logger.exception("serve: fallo al cargar el modelo")
@@ -367,7 +408,7 @@ class ServeManager:
             self.message = f"Error al servir el modelo: {e}"
             try:
                 if engine:
-                    native_runtime.stop(engine)
+                    await asyncio.to_thread(native_runtime.stop, engine)
                     native_runtime.set_loaded(engine, None)
             except Exception:  # noqa: BLE001
                 pass
@@ -392,10 +433,14 @@ class ServeManager:
                 logger.info(f"serve: reusando server de imagen ya cargado {model_id}")
                 return self.status_dict()
 
-            # Parar el motor previo (texto o imagen) — slot único de GPU.
+            # Si había otra carga en curso, cancelarla antes de sustituir self._task.
+            await self._cancel_pending_task()
+
+            # Parar el motor previo (texto o imagen) — slot único de GPU. stop() bloquea
+            # (hasta ~7s) → a un hilo para no congelar el event loop con el lock tomado.
             if self.engine and self._engine_running():
                 logger.info("serve: parando motor previo antes de cargar el de imagen")
-                native_runtime.stop(self.engine)
+                await asyncio.to_thread(native_runtime.stop, self.engine)
                 native_runtime.set_loaded(self.engine, None)
 
             self.model_id = model_id
@@ -442,9 +487,7 @@ class ServeManager:
                 self.message = "Descargando diffusion-model y auxiliares…"
                 aux = await model_manager.ensure_all_aux(model, progress=model_progress)
                 if "diffusion_model" not in aux:
-                    raise RuntimeError(
-                        f"No se pudo obtener el diffusion-model de {model_id}"
-                    )
+                    raise RuntimeError(f"No se pudo obtener el diffusion-model de {model_id}")
                 opts["diffusion_model"] = str(aux["diffusion_model"])
                 for kind in ("vae", "clip_l", "clip_g", "t5xxl"):
                     if kind in aux:
@@ -496,8 +539,16 @@ class ServeManager:
             self.message = f"Sirviendo {model_id} (imagen) en {self.endpoint}"
             logger.success(f"serve: {model_id} (imagen) listo en {self.endpoint}")
         except asyncio.CancelledError:
+            # Igual que en _run_load: si el motor ya había arrancado cuando llegó la
+            # cancelación (sustitución por otra load() o unload()), pararlo aquí.
             self.phase = "error"
             self.message = "Carga cancelada."
+            try:
+                if engine:
+                    await asyncio.to_thread(native_runtime.stop, engine)
+                    native_runtime.set_loaded(engine, None)
+            except Exception:  # noqa: BLE001
+                pass
             raise
         except Exception as e:  # noqa: BLE001
             logger.exception("serve: fallo al cargar el modelo de imagen")
@@ -506,7 +557,7 @@ class ServeManager:
             self.message = f"Error al servir el modelo de imagen: {e}"
             try:
                 if engine:
-                    native_runtime.stop(engine)
+                    await asyncio.to_thread(native_runtime.stop, engine)
                     native_runtime.set_loaded(engine, None)
             except Exception:  # noqa: BLE001
                 pass
@@ -577,24 +628,24 @@ class ServeManager:
                 resp = await client.post(url, json=body)
                 if resp.status_code >= 400:
                     raise ServeError(
-                        f"El server de imagen respondió HTTP {resp.status_code}: "
-                        f"{resp.text[:300]}",
+                        f"El server de imagen respondió HTTP {resp.status_code}: {resp.text[:300]}",
                         status_code=502,
                     )
                 data = resp.json()
         except ServeError:
             raise
         except Exception as e:  # noqa: BLE001
-            raise ServeError(
-                f"No se pudo contactar al server de imagen: {e}", status_code=502
-            )
+            raise ServeError(f"No se pudo contactar al server de imagen: {e}", status_code=502)
 
         elapsed = round(loop.time() - t0, 2)
-        images = data.get("images") or []
-        if not images:
+        if not isinstance(data, dict):
             raise ServeError(
-                "El server de imagen no devolvió ninguna imagen.", status_code=502
+                "El server de imagen devolvió una respuesta con forma inesperada.",
+                status_code=502,
             )
+        images = data.get("images") or []
+        if not images or not isinstance(images[0], str):
+            raise ServeError("El server de imagen no devolvió ninguna imagen.", status_code=502)
         raw_b64 = images[0]
         # sd.cpp devuelve PNG base64 sin prefijo; el contrato pide data URL.
         image_b64 = raw_b64 if raw_b64.startswith("data:") else f"data:image/png;base64,{raw_b64}"
@@ -652,7 +703,7 @@ class ServeManager:
                 resp = await client.post(url, json=body)
                 if resp.status_code >= 400:
                     raise ServeError(
-                        f"El motor respondió HTTP {resp.status_code}: " f"{resp.text[:300]}",
+                        f"El motor respondió HTTP {resp.status_code}: {resp.text[:300]}",
                         status_code=502,
                     )
                 data = resp.json()
@@ -661,7 +712,13 @@ class ServeManager:
         except Exception as e:  # noqa: BLE001
             raise ServeError(f"No se pudo contactar al motor servido: {e}", status_code=502)
 
-        choice = (data.get("choices") or [{}])[0]
+        if not isinstance(data, dict):
+            raise ServeError(
+                "El motor servido devolvió una respuesta con forma inesperada.",
+                status_code=502,
+            )
+        choices = data.get("choices") or [{}]
+        choice = choices[0] if isinstance(choices[0], dict) else {}
         content = (choice.get("message") or {}).get("content", "") or ""
         usage = data.get("usage")
         # tok/s de decode: timings internos de llama-server si los expone.
@@ -687,6 +744,9 @@ class ServeManager:
                 self._task.cancel()
                 try:
                     await self._task
+                # CancelledError hereda de BaseException, no de Exception (desde 3.8):
+                # capturarla explícitamente, si no la cancelación que acabamos de pedir
+                # se propaga y rompe unload(). Esperado: la cancelación u otro fallo previo.
                 except (asyncio.CancelledError, Exception):  # noqa: BLE001
                     pass
             engine = self.engine

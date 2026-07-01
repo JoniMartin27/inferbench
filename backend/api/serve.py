@@ -9,6 +9,8 @@ Toda la lógica vive en core/serve.py::ServeManager — este router es fino.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -22,7 +24,9 @@ class LoadRequest(BaseModel):
     model_id: str
     engine: str = "llamacpp"
     quant: str | None = None
-    context: int | None = None
+    # None → ctx óptimo calculado por el planner; si se fija, debe ser positivo (un valor
+    # <=0 llegaría tal cual a `-c` de llama-server).
+    context: int | None = Field(default=None, gt=0)
 
 
 class ChatMessage(BaseModel):
@@ -32,8 +36,8 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
-    max_tokens: int = 512
-    temperature: float = 0.7
+    max_tokens: int = Field(default=512, ge=1, le=32768)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     # Atajo: { "prompt": "..." } → [{role:"user", content:prompt}]
     prompt: str | None = None
 
@@ -41,16 +45,18 @@ class ChatRequest(BaseModel):
 class GenerateRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    steps: int = 20
-    width: int = 512
-    height: int = 512
+    # Cotas defensivas en el borde de la API: sin esto, steps/width/height fuera de rango
+    # llegan tal cual al subproceso sd.cpp (cuelgues largos o fallos opacos del binario).
+    steps: int = Field(default=20, ge=1, le=150)
+    width: int = Field(default=512, ge=64, le=2048)
+    height: int = Field(default=512, ge=64, le=2048)
     seed: int = -1
-    cfg_scale: float = 7.0
+    cfg_scale: float = Field(default=7.0, ge=0.0, le=30.0)
     sampler: str | None = None
 
 
 @router.post("/load")
-async def load(req: LoadRequest):
+async def load(req: LoadRequest) -> dict[str, Any]:
     """Empieza a servir un modelo de forma residente (no bloquea)."""
     try:
         return await serve_core.get_manager().load(
@@ -67,13 +73,13 @@ async def load(req: LoadRequest):
 
 
 @router.get("/status")
-async def status():
+async def status() -> dict[str, Any]:
     """Estado actual del slot servido."""
     return serve_core.get_manager().status_dict()
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest) -> dict[str, Any]:
     """Proxy de chat (no-stream) al modelo servido. 409 si no hay modelo ready."""
     messages = [m.model_dump() for m in req.messages]
     if req.prompt is not None and not messages:
@@ -94,7 +100,7 @@ async def chat(req: ChatRequest):
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest) -> dict[str, Any]:
     """Genera una imagen con el modelo de imagen servido. 409 si no hay uno ready.
 
     Devuelve la imagen como data URL PNG base64 (`image_b64`) + metadata (seed, tamaño,
@@ -121,7 +127,7 @@ async def generate(req: GenerateRequest):
 
 
 @router.post("/unload")
-async def unload():
+async def unload() -> dict[str, Any]:
     """Para el motor servido y libera VRAM."""
     try:
         return await serve_core.get_manager().unload()

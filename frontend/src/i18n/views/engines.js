@@ -49,9 +49,12 @@ export const engines = {
       error: "Error: {message}",
       starting: "Starting…",
     },
+    // "missing" (el estado que manda el backend) significa que el proceso/contenedor no
+    // existe todavía, NO que falte nada por instalar — con el binario listo y el motor
+    // parado se leía como un error. De ahí "not started".
     state: {
       running: "running",
-      missing: "missing",
+      missing: "not started",
       dockerOff: "docker off",
       exited: "exited",
       api: "API",
@@ -114,13 +117,15 @@ export const engines = {
       error: "Error: {message}",
       starting: "Iniciando…",
     },
+    // Estaban SIN TRADUCIR (copiadas tal cual del bloque inglés): en una UI que dice
+    // "Motores", "Arrancar" y "Puerto", el estado ponía "missing" / "exited" / "created".
     state: {
-      running: "running",
-      missing: "missing",
-      dockerOff: "docker off",
-      exited: "exited",
+      running: "en marcha",
+      missing: "sin arrancar",
+      dockerOff: "docker apagado",
+      exited: "terminado",
       api: "API",
-      created: "created",
+      created: "creado",
     },
     toast: {
       listError: "No se pudo cargar la lista de motores",

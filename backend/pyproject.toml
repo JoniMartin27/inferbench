@@ -15,7 +15,12 @@ dependencies = [
   "loguru>=0.7",
   "keyring>=25.5",
   "sqlmodel>=0.0.22",
-  "mcp>=1.2"
+  # Techo en la 2.0: el SDK 2.0 movió/eliminó `mcp.server.fastmcp`, que es de donde
+  # `mcp_server.py` saca `FastMCP` y `TransportSecuritySettings`. Con `mcp>=1.2` a pelo,
+  # una instalación limpia de hoy resuelve 2.0.0 y el servidor MCP revienta al construirse
+  # (ModuleNotFoundError) — o sea Serve/MCP roto para cualquiera que instale de cero.
+  # Migrar a la API de 2.0 es trabajo aparte y hay que verificarlo contra un cliente real.
+  "mcp>=1.2,<2"
 ]
 
 [project.optional-dependencies]

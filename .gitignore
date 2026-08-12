@@ -16,6 +16,11 @@ build/
 # Electron build
 out/
 release/
+# ...pero frontend/build/ NO es un artefacto: es el buildResources de electron-builder
+# (iconos de la app, generados con scripts/make-icons.mjs). Sin esto, `build/` de la
+# sección Node se los tragaba y el instalador salía con el icono genérico de Electron.
+!frontend/build/
+!frontend/build/**
 # sidecar PyInstaller (artefacto de build, se genera con scripts/build-sidecar.ps1)
 frontend/electron/sidecar/*.exe
 frontend/electron/sidecar/inferbench-backend

@@ -345,6 +345,10 @@ Se abre la app en una ventana Electron. La sidebar muestra la salud del backend 
 El backend Python se empaqueta como ejecutable con PyInstaller y se embebe como **sidecar** en el instalador Electron. La app empaquetada no requiere Python en la máquina destino.
 
 ```powershell
+# Iconos de marca (solo si cambia frontend/public/favicon.svg — el resultado se commitea)
+mkdir C:\tmp\ib-icons; cd C:\tmp\ib-icons; npm i puppeteer-core@23
+$env:IB_TOOLS_DIR="C:\tmp\ib-icons"; node <repo>\scripts\make-icons.mjs
+
 # Construir el sidecar
 scripts\build-sidecar.ps1     # Windows
 bash scripts/build-sidecar.sh # macOS / Linux
@@ -355,9 +359,32 @@ npm run electron:build
 ```
 
 Salida en `frontend/release/`:
-- Windows → `InferBench Setup *.exe` (NSIS)
+- Windows → `InferBench-Setup-<version>.exe` (NSIS)
 - macOS → `InferBench-*.dmg`
 - Linux → `InferBench-*.AppImage`
+
+### Arranque de un solo click
+
+El instalador de Windows es **one-click y por usuario** (sin UAC): crea acceso directo en
+el escritorio y en el menú inicio, ambos con el icono de marca, y abre la app al terminar.
+Un doble click en ese acceso directo levanta **todo**: Electron arranca el sidecar del
+backend, la ventana aparece de inmediato y la UI se engancha al `:7777` en cuanto responde.
+No hay que arrancar nada a mano.
+
+Detalles que hacen que eso funcione siempre, no solo la primera vez (`frontend/electron/main.js`):
+
+- **Instancia única**: un segundo doble click enfoca la ventana existente en vez de levantar
+  otro backend peleando por el `:7777`.
+- **Reuso de backend sano**: si ya hay un InferBench respondiendo en el `:7777` (típico tras
+  un cierre forzado, donde el sidecar sobrevive), la app lo reutiliza en lugar de arrancar
+  otro que moriría con un error de bind invisible.
+- **Cierre limpio**: al salir se mata el **árbol** del sidecar con `taskkill /T` de forma
+  **síncrona** — `before-quit` no espera trabajo asíncrono, y con un `spawn` normal Electron
+  se moría antes y dejaba el backend huérfano ocupando el puerto.
+- **Log del sidecar** en `%APPDATA%\InferBench\logs\backend.log`: en una app GUI empaquetada
+  no hay consola, así que un arranque fallido dejaría cero rastro. Si el exe del sidecar
+  falta, además sale un diálogo de error en vez de un cierre silencioso.
+- El puerto se pasa por `INFERBENCH_PORT` (que es lo que lee `backend/main.py`).
 
 ---
 

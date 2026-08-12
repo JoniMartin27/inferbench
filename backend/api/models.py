@@ -31,11 +31,16 @@ async def list_models() -> list[Model]:
 
 @router.get("/local", response_model=list[local_models.LocalModel])
 async def list_local_models(refresh: bool = False) -> list[local_models.LocalModel]:
-    """Escanea carpetas conocidas + extras y devuelve todos los GGUFs locales."""
+    """Escanea carpetas conocidas + extras y devuelve todos los GGUFs locales.
+
+    `refresh=true` tira la caché de metadata GGUF y vuelve a leer todas las cabeceras. El
+    rglob se hace SIEMPRE, así que un modelo nuevo o borrado se ve sin pedir refresco;
+    refresh solo hace falta si un .gguf cambió por debajo manteniendo mtime y tamaño.
+    """
     # discover() hace rglob sobre ~20 carpetas y lee headers GGUF (hasta 16 MB c/u),
     # todo I/O síncrono. Fuera del event loop para no congelar el backend (regla
     # load-bearing del proyecto: no bloquear el loop).
-    return await asyncio.to_thread(local_models.discover, read_metadata=True)
+    return await asyncio.to_thread(local_models.discover, read_metadata=True, refresh=refresh)
 
 
 class SearchDirs(BaseModel):

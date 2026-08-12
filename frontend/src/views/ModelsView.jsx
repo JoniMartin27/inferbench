@@ -40,10 +40,12 @@ export default function ModelsView({ onNavigate }) {
   const toast = useToast();
   const t = useT();
 
-  const refreshLocal = async () => {
+  // `force` solo desde el botón de reescanear: al montar la vista basta con la caché de
+  // metadata del backend (el rglob se hace igual, así que un GGUF nuevo se ve al vuelo).
+  const refreshLocal = async (force = false) => {
     setLocalLoading(true);
     try {
-      const [m, d] = await Promise.all([api.listLocalModels(), api.listSearchDirs()]);
+      const [m, d] = await Promise.all([api.listLocalModels(force), api.listSearchDirs()]);
       setLocalModels(m);
       setSearchDirs(d);
       setExtraInput((d.extra || []).join("\n"));
@@ -136,8 +138,9 @@ export default function ModelsView({ onNavigate }) {
         title={t("models.header.title")}
         subtitle={t("models.header.subtitle")}
         actions={
-          <Button variant="ghost" onClick={refreshLocal}>
-            <RefreshCw size={14} /> {t("models.header.rescan")}
+          <Button variant="ghost" onClick={() => refreshLocal(true)} disabled={localLoading}>
+            <RefreshCw size={14} className={localLoading ? "animate-spin" : undefined} />{" "}
+            {t("models.header.rescan")}
           </Button>
         }
       />

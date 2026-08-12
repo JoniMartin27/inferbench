@@ -15,11 +15,19 @@ dependencies = [
   "loguru>=0.7",
   "keyring>=25.5",
   "sqlmodel>=0.0.22",
-  "mcp>=1.2"
+  # Techo en la 2.0: el SDK 2.0 movió/eliminó `mcp.server.fastmcp`, que es de donde
+  # `mcp_server.py` saca `FastMCP` y `TransportSecuritySettings`. Con `mcp>=1.2` a pelo,
+  # una instalación limpia de hoy resuelve 2.0.0 y el servidor MCP revienta al construirse
+  # (ModuleNotFoundError) — o sea Serve/MCP roto para cualquiera que instale de cero.
+  # Migrar a la API de 2.0 es trabajo aparte y hay que verificarlo contra un cliente real.
+  "mcp>=1.2,<2"
 ]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.7", "black>=24", "pytest>=8", "pytest-asyncio>=0.24"]
+# Techo en ruff: sin él CI instala la última versión y un cambio de defaults tumba el
+# gate sin que nadie toque código (pasó con 0.16). El `select` de [tool.ruff.lint] es la
+# otra mitad de la defensa.
+dev = ["ruff>=0.15,<0.17", "black>=24", "pytest>=8", "pytest-asyncio>=0.24"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -42,6 +50,13 @@ target-version = "py311"
 extend-exclude = ["scripts"]
 
 [tool.ruff.lint]
+# Selección EXPLÍCITA a propósito. Hasta ruff 0.15 el proyecto vivía del set por defecto
+# (E4/E7/E9/F); ruff 0.16 amplió ese default a decenas de reglas nuevas (BLE/S/SIM/UP/I/
+# DTZ/ASYNC/PL…) y, como el dev extra pedía `ruff>=0.7` sin techo, CI empezó a instalar
+# 0.16 y a fallar con 92 errores sobre código que no había cambiado. Declarar `select`
+# hace que subir de versión no cambie el veredicto por su cuenta: para adoptar una regla
+# nueva, se añade aquí a mano y se arregla el código en el mismo commit.
+select = ["E4", "E7", "E9", "F"]
 # E702: estilo compacto deliberado en gguf_reader (struct unpack + return en una línea)
 ignore = ["E702"]
 

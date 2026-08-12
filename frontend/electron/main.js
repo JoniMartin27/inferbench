@@ -35,7 +35,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1320,
     height: 860,
-    backgroundColor: "#020617", // slate-950
+    backgroundColor: "#0E0B0A", // Fervon carbon — mismo fondo que la UI, sin flash frío al abrir
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

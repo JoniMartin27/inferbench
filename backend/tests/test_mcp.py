@@ -12,6 +12,21 @@ import pytest
 import mcp_server
 
 
+def bloques_de(resultado):
+    """Bloques de contenido de un `call_tool`, sea cual sea la versión del SDK.
+
+    mcp 1.x devuelve la tupla `(content_blocks, structured)`; mcp 2.x devuelve un
+    `CallToolResult` con el contenido en `.content`. Los tests miran el CONTRATO (qué
+    bloques salen), no la forma del envoltorio, así que normalizamos aquí.
+    """
+    contenido = getattr(resultado, "content", None)
+    if contenido is not None:
+        return list(contenido)
+    if isinstance(resultado, tuple):
+        return list(resultado[0])
+    return list(resultado)
+
+
 @pytest.mark.anyio
 async def test_server_exposes_contract_tools():
     server = mcp_server.get_server()
@@ -70,8 +85,7 @@ async def test_chat_tool_proxies_content(monkeypatch):
     monkeypatch.setattr(mcp_server, "_post", fake_post)
     server = mcp_server.get_server()
     result = await server.call_tool("chat", {"prompt": "hola"})
-    # call_tool devuelve (content_blocks, structured); el texto está en el bloque de texto.
-    text = "".join(getattr(b, "text", "") for b in result[0])
+    text = "".join(getattr(b, "text", "") for b in bloques_de(result))
     assert "respuesta del modelo" in text
 
 

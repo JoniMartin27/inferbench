@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any
 
 from loguru import logger
@@ -32,15 +34,43 @@ class ContainerStatus(BaseModel):
     gpu: bool | None = None  # True/False si se conoce (start()); None si no aplica (status/stop)
 
 
+_client_cache = None
+_client_lock = threading.Lock()
+
+
 def _client():
+    """Cliente Docker reutilizado.
+
+    `from_env()` lee la configuración y abre el named pipe, y `ping()` es otro viaje al
+    daemon: hacerlo en CADA operación se notaba, porque `status()` se llama una vez por
+    motor y `EnginesView` pollea cada 4 s. El cliente del SDK es reutilizable y seguro
+    entre hilos; si el daemon se cae, la siguiente operación lanza y lo descartamos aquí.
+    """
+    global _client_cache
     if docker is None:
         raise DockerUnavailableError("docker SDK no instalado")
-    try:
-        client = docker.from_env()
-        client.ping()
+    with _client_lock:
+        if _client_cache is not None:
+            return _client_cache
+        try:
+            client = docker.from_env()
+            client.ping()
+        except Exception as e:
+            raise DockerUnavailableError(f"Docker daemon no accesible: {e}") from e
+        _client_cache = client
         return client
-    except Exception as e:
-        raise DockerUnavailableError(f"Docker daemon no accesible: {e}") from e
+
+
+def _drop_client() -> None:
+    """Tira el cliente cacheado (el daemon se ha caído o reiniciado)."""
+    global _client_cache
+    with _client_lock:
+        cliente, _client_cache = _client_cache, None
+    if cliente is not None:
+        try:
+            cliente.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _docker_cli_installed() -> bool:
@@ -49,8 +79,46 @@ def _docker_cli_installed() -> bool:
     return shutil.which("docker") is not None
 
 
-def availability() -> dict:
-    """Devuelve el estado de Docker en el sistema (sin lanzar excepciones)."""
+# Caché del sondeo de Docker.
+#
+# MEDIDO: `availability()` crea un cliente (`from_env()`, que lee la config y abre el named
+# pipe) y hace `ping()` + `version()` — 200-600 ms por llamada con Docker Desktop arrancado.
+# Y `api/engines.py::_runtime_avail` la llama UNA VEZ POR MOTOR: cinco motores declaran
+# runtime docker, así que un solo `GET /api/engines` disparaba cinco sondeos completos.
+# Con `EnginesView` polleando cada 4 s y `App.jsx` cada 6 s, el resultado era que la app iba
+# MÁS LENTA con Docker funcionando que con Docker apagado: `/api/engines` pasaba de 63 ms a
+# 0,85-1,8 s y `/api/health` de 9 ms a 700 ms.
+#
+# Que Docker esté o no arrancado es un hecho de la máquina, no del motor, y cambia como
+# mucho cada varios minutos. Un TTL corto lo deja fresco de sobra (la UI pollea cada 4 s)
+# y convierte los cinco sondeos por request en cero.
+_AVAIL_TTL_S = 10.0
+_avail_cache: tuple[float, dict] | None = None
+_avail_lock = threading.Lock()
+
+
+def invalidate_availability() -> None:
+    """Olvida el sondeo cacheado. Úsalo tras arrancar/parar Docker desde la app."""
+    global _avail_cache
+    with _avail_lock:
+        _avail_cache = None
+
+
+def availability(force: bool = False) -> dict:
+    """Estado de Docker en el sistema (sin lanzar excepciones), cacheado `_AVAIL_TTL_S`."""
+    global _avail_cache
+    if not force:
+        with _avail_lock:
+            if _avail_cache and (time.monotonic() - _avail_cache[0]) < _AVAIL_TTL_S:
+                return _avail_cache[1]
+    resultado = _probe_availability()
+    with _avail_lock:
+        _avail_cache = (time.monotonic(), resultado)
+    return resultado
+
+
+def _probe_availability() -> dict:
+    """El sondeo de verdad. Caro: no lo llames en bucle, usa `availability()`."""
     if docker is None:
         return {
             "available": False,
@@ -60,8 +128,7 @@ def availability() -> dict:
         }
     cli_installed = _docker_cli_installed()
     try:
-        client = docker.from_env()
-        client.ping()
+        client = _client()
         info = client.version()
         return {
             "available": True,
@@ -71,6 +138,8 @@ def availability() -> dict:
             "platform": (info.get("Platform") or {}).get("Name"),
         }
     except Exception as e:
+        # Si el sondeo falla, el cliente cacheado (si lo había) ya no sirve.
+        _drop_client()
         msg = str(e).split("\n")[0][:200]
         return {
             "available": False,
@@ -94,6 +163,12 @@ def status(engine_id: str) -> ContainerStatus:
         cnt = c.containers.get(name)
     except NotFound:
         return ContainerStatus(name=name, state="missing")
+    except Exception:
+        # El daemon se ha caído bajo un cliente que teníamos cacheado: lo tiramos para que
+        # la siguiente llamada reconecte en vez de repetir el fallo para siempre.
+        _drop_client()
+        invalidate_availability()
+        return ContainerStatus(name=name, state="docker-unavailable")
     cnt.reload()
     return ContainerStatus(
         name=name,

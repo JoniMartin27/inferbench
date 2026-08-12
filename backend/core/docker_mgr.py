@@ -153,23 +153,53 @@ def container_name(engine_id: str) -> str:
     return f"{CONTAINER_PREFIX}{engine_id}"
 
 
+# Instantánea de contenedores nuestros.
+#
+# `status()` se llama UNA VEZ POR MOTOR, y `GET /api/engines` los recorre todos: eran
+# cinco `containers.get()` + `reload()` — dos viajes al daemon cada uno — por request, con
+# la UI polleando cada 4 s. Un solo `containers.list(all=True)` los trae todos con sus
+# attrs ya rellenos (no hace falta `reload()`). El TTL es muy corto: solo tiene que cubrir
+# las llamadas de UNA request, no dar información vieja. Y `start()`/`stop()` lo invalidan
+# para que un cambio de estado se vea al instante.
+_SNAPSHOT_TTL_S = 1.5
+_snapshot_cache: tuple[float, dict[str, Any]] | None = None
+_snapshot_lock = threading.Lock()
+
+
+def invalidate_containers() -> None:
+    """Olvida la instantánea de contenedores (tras arrancar o parar uno)."""
+    global _snapshot_cache
+    with _snapshot_lock:
+        _snapshot_cache = None
+
+
+def _containers_snapshot() -> dict[str, Any]:
+    """{nombre: contenedor} de los contenedores de InferBench, cacheado `_SNAPSHOT_TTL_S`."""
+    global _snapshot_cache
+    with _snapshot_lock:
+        if _snapshot_cache and (time.monotonic() - _snapshot_cache[0]) < _SNAPSHOT_TTL_S:
+            return _snapshot_cache[1]
+    c = _client()  # propaga DockerUnavailableError
+    try:
+        lista = c.containers.list(all=True, filters={"name": CONTAINER_PREFIX})
+    except Exception:
+        _drop_client()
+        invalidate_availability()
+        raise DockerUnavailableError("no pude listar contenedores") from None
+    porNombre = {cnt.name: cnt for cnt in lista}
+    with _snapshot_lock:
+        _snapshot_cache = (time.monotonic(), porNombre)
+    return porNombre
+
+
 def status(engine_id: str) -> ContainerStatus:
     name = container_name(engine_id)
     try:
-        c = _client()
+        cnt = _containers_snapshot().get(name)
     except DockerUnavailableError:
         return ContainerStatus(name=name, state="docker-unavailable")
-    try:
-        cnt = c.containers.get(name)
-    except NotFound:
+    if cnt is None:
         return ContainerStatus(name=name, state="missing")
-    except Exception:
-        # El daemon se ha caído bajo un cliente que teníamos cacheado: lo tiramos para que
-        # la siguiente llamada reconecte en vez de repetir el fallo para siempre.
-        _drop_client()
-        invalidate_availability()
-        return ContainerStatus(name=name, state="docker-unavailable")
-    cnt.reload()
     return ContainerStatus(
         name=name,
         state=cnt.status,
@@ -246,6 +276,7 @@ def start(
         else:
             raise
     cnt.reload()
+    invalidate_containers()  # el estado acaba de cambiar: la instantánea ya no vale
     return ContainerStatus(
         name=name,
         state=cnt.status,
@@ -267,11 +298,14 @@ def stop(engine_id: str, *, remove: bool = True, timeout: int = 10) -> Container
         cnt.stop(timeout=timeout)
     except APIError as e:
         logger.warning(f"stop falló: {e}")
+    finally:
+        invalidate_containers()  # pase lo que pase, el estado cacheado ya no vale
     if remove:
         try:
             cnt.remove(force=True)
         except APIError:
             pass
+        invalidate_containers()
         return ContainerStatus(name=name, state="missing")
     cnt.reload()
     return ContainerStatus(name=name, state=cnt.status, container_id=cnt.short_id)

@@ -16,15 +16,19 @@ from core import docker_mgr as dm
 @pytest.fixture(autouse=True)
 def limpio():
     dm.invalidate_availability()
+    dm.invalidate_containers()
     dm._drop_client()
     yield
     dm.invalidate_availability()
+    dm.invalidate_containers()
     dm._drop_client()
 
 
 def test_el_sondeo_se_hace_una_sola_vez_dentro_del_ttl(monkeypatch):
     llamadas = []
-    monkeypatch.setattr(dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1])
+    monkeypatch.setattr(
+        dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1]
+    )
 
     for _ in range(10):
         assert dm.availability()["available"] is True
@@ -34,7 +38,9 @@ def test_el_sondeo_se_hace_una_sola_vez_dentro_del_ttl(monkeypatch):
 
 def test_force_salta_la_cache(monkeypatch):
     llamadas = []
-    monkeypatch.setattr(dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1])
+    monkeypatch.setattr(
+        dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1]
+    )
 
     dm.availability()
     dm.availability(force=True)
@@ -44,7 +50,9 @@ def test_force_salta_la_cache(monkeypatch):
 
 def test_el_ttl_caduca(monkeypatch):
     llamadas = []
-    monkeypatch.setattr(dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1])
+    monkeypatch.setattr(
+        dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1]
+    )
     reloj = {"t": 1000.0}
     monkeypatch.setattr(dm.time, "monotonic", lambda: reloj["t"])
 
@@ -60,7 +68,9 @@ def test_el_ttl_caduca(monkeypatch):
 
 def test_invalidar_fuerza_un_sondeo_nuevo(monkeypatch):
     llamadas = []
-    monkeypatch.setattr(dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1])
+    monkeypatch.setattr(
+        dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1]
+    )
 
     dm.availability()
     dm.invalidate_availability()
@@ -124,3 +134,101 @@ def test_status_devuelve_docker_unavailable_si_el_cliente_falla(monkeypatch):
 
     assert st.state == "docker-unavailable"
     assert st.name == "inferbench-vllm"
+
+
+# --- instantánea de contenedores -------------------------------------------------------
+#
+# `status()` se llama UNA VEZ POR MOTOR y `GET /api/engines` los recorre todos: eran cinco
+# `containers.get()` + `reload()` (dos viajes al daemon cada uno) por request. Un solo
+# `containers.list(all=True)` los trae con los attrs ya puestos. Medido: /api/engines pasó
+# de 133-243 ms a 30-47 ms.
+
+
+class _Cnt:
+    """Contenedor de mentira con la forma que usa `status()`."""
+
+    def __init__(self, name, status="running"):
+        self.name = name
+        self.status = status
+        self.short_id = "abc123"
+        self.image = None
+        self.attrs = {"NetworkSettings": {"Ports": {}}}
+
+
+def _cliente_falso(monkeypatch, contenedores, contador):
+    class _Containers:
+        def list(self, **kw):
+            contador.append(kw)
+            return contenedores
+
+    class _Cli:
+        containers = _Containers()
+
+        def ping(self):
+            return True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(dm, "_client", lambda: _Cli())
+
+
+def test_una_sola_llamada_al_daemon_para_todos_los_motores(monkeypatch):
+    llamadas = []
+    _cliente_falso(monkeypatch, [_Cnt("inferbench-vllm"), _Cnt("inferbench-tgi")], llamadas)
+
+    estados = [dm.status(e) for e in ("vllm", "sglang", "tgi", "llamacpp", "ollama")]
+
+    assert len(llamadas) == 1, "cinco motores deben costar UN solo listado"
+    assert [s.state for s in estados] == [
+        "running",
+        "missing",
+        "running",
+        "missing",
+        "missing",
+    ]
+
+
+def test_el_listado_pide_solo_nuestros_contenedores(monkeypatch):
+    llamadas = []
+    _cliente_falso(monkeypatch, [], llamadas)
+    dm.status("vllm")
+    assert llamadas[0].get("all") is True
+    assert llamadas[0].get("filters", {}).get("name") == dm.CONTAINER_PREFIX
+
+
+def test_arrancar_o_parar_invalida_la_instantanea(monkeypatch):
+    llamadas = []
+    _cliente_falso(monkeypatch, [_Cnt("inferbench-vllm")], llamadas)
+
+    dm.status("vllm")
+    dm.status("vllm")
+    assert len(llamadas) == 1, "dentro del TTL no se vuelve a listar"
+
+    dm.invalidate_containers()  # es lo que hacen start() y stop()
+    dm.status("vllm")
+    assert len(llamadas) == 2, "tras un cambio de estado hay que releer, no dar dato viejo"
+
+
+def test_el_ttl_de_la_instantanea_caduca(monkeypatch):
+    llamadas = []
+    _cliente_falso(monkeypatch, [_Cnt("inferbench-vllm")], llamadas)
+    reloj = {"t": 500.0}
+    monkeypatch.setattr(dm.time, "monotonic", lambda: reloj["t"])
+
+    dm.status("vllm")
+    reloj["t"] += dm._SNAPSHOT_TTL_S / 2
+    dm.status("vllm")
+    assert len(llamadas) == 1
+
+    reloj["t"] += dm._SNAPSHOT_TTL_S
+    dm.status("vllm")
+    assert len(llamadas) == 2
+
+
+def test_sin_daemon_el_estado_es_docker_unavailable(monkeypatch):
+    def _revienta():
+        raise dm.DockerUnavailableError("daemon caído")
+
+    monkeypatch.setattr(dm, "_client", _revienta)
+    assert dm.status("vllm").state == "docker-unavailable"

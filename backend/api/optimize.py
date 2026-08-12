@@ -216,9 +216,11 @@ async def quants_for_model(
     def _all_nofile(rows: list[QuantOption]) -> list[QuantOption]:
         """Marca como 'nofile' las filas que el hardware sí admitiría (no toca disk/fail)."""
         return [
-            QuantOption(quant=r.quant, status="nofile", size_gb=r.size_gb)
-            if r.status not in ("disk", "fail")
-            else r
+            (
+                QuantOption(quant=r.quant, status="nofile", size_gb=r.size_gb)
+                if r.status not in ("disk", "fail")
+                else r
+            )
             for r in rows
         ]
 

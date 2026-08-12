@@ -35,6 +35,11 @@ jobs:
         run: uv sync --locked --extra dev
       - name: Ruff (lint)
         run: uv run ruff check core api main.py tests
+      # `black` estaba configurado en pyproject y declarado como dep de dev, pero no lo
+      # ejecutaba nadie: había acumulado 9 ficheros sin formatear. Formatear una vez sin
+      # poner el gate solo aplaza la siguiente deriva.
+      - name: Black (formato)
+        run: uv run black --check .
       - name: Pytest
         run: uv run pytest -q
 

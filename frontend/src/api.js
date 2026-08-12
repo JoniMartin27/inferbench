@@ -56,7 +56,10 @@ export const api = {
 
   // Models
   listModels: () => request("/api/models"),
-  listLocalModels: () => request("/api/models/local"),
+  // `force` releé todas las cabeceras GGUF saltándose la caché de metadata (~6s en vez de
+  // ~30ms). Solo desde el botón de reescanear: montar la vista NO debe forzarlo.
+  listLocalModels: (force = false) =>
+    request(`/api/models/local${force ? "?refresh=true" : ""}`),
   listSearchDirs: () => request("/api/models/local/dirs"),
   saveSearchDirs: (dirs) =>
     request("/api/models/local/dirs", { method: "POST", body: JSON.stringify({ dirs }) }),

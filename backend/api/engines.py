@@ -66,17 +66,41 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                             or "https://ollama.com/download",
                         )
                     )
+            elif meta.id == "stablediffusion":
+                # `binary_manager` ya sabía responder por sd.cpp (`stablediffusion_installed`
+                # / `_fully_installed`, calcados de los de llama.cpp), pero nadie los
+                # llamaba: el motor caía en el `else` de abajo y la UI anunciaba
+                # "No implementado" para una funcionalidad que SÍ está implementada y que
+                # se auto-descarga al primer arranque, igual que llama.cpp. Resultado: la
+                # generación de imagen parecía muerta y nadie la pulsaba.
+                fully = binary_manager.stablediffusion_fully_installed()
+                exe_only = binary_manager.stablediffusion_installed()
+                if fully:
+                    detail = "Binario + CUDA listos"
+                elif exe_only:
+                    detail = "Binario sin DLLs CUDA — descarga pendiente"
+                else:
+                    detail = "Listo para descargar"
+                out.append(RuntimeAvailability(runtime="native", ready=fully, detail=detail))
             else:
                 out.append(
                     RuntimeAvailability(runtime="native", ready=False, detail="No implementado")
                 )
         elif rt == "docker":
             d = docker_mgr.availability()
+            if d.get("available"):
+                # `hint`/`reason` solo existen cuando Docker NO está disponible, así que en
+                # el camino feliz el detalle salía VACÍO y la UI pintaba el chip como
+                # "docker:" seguido de nada — parecía roto justo cuando todo iba bien.
+                version = d.get("version")
+                detail = f"Docker {version}" if version else "Disponible"
+            else:
+                detail = d.get("hint") or d.get("reason", "") or "No disponible"
             out.append(
                 RuntimeAvailability(
                     runtime="docker",
-                    ready=d.get("available", False),
-                    detail=d.get("hint") or d.get("reason", ""),
+                    ready=bool(d.get("available")),
+                    detail=detail,
                 )
             )
     return out

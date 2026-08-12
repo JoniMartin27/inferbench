@@ -32,6 +32,9 @@ export const models = {
       empty: "No GGUFs found in the known folders. Add extra folders above if you have models in another location.",
       benchmark: "Benchmark",
       benchmarkTitle: "Launch benchmark with this GGUF",
+      projector: "projector",
+      projectorTitle: "This is a vision projector (mmproj), not a model — it runs alongside its model, not on its own",
+      vision: "vision",
       col: {
         name: "Name",
         arch: "Arch",
@@ -139,6 +142,9 @@ export const models = {
       empty: "No se encontraron GGUFs en las carpetas conocidas. Añade carpetas extra arriba si tienes modelos en otra ubicación.",
       benchmark: "Benchmark",
       benchmarkTitle: "Lanzar benchmark con este GGUF",
+      projector: "projector",
+      projectorTitle: "Esto es un projector de visión (mmproj), no un modelo — se carga junto a su modelo, no se ejecuta solo",
+      vision: "visión",
       col: {
         name: "Nombre",
         arch: "Arch",

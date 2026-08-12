@@ -217,7 +217,13 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
   const engineIsApi = selectedEngine?.meta.type === "api";
   const selectedModel = models.find((m) => m.id === model);
   const modelHasGguf = !!selectedModel?.hf_gguf;
-  const isVisionModel = !!selectedModel?.tags?.includes("vision");
+  // Un GGUF de disco NO está en el catálogo, así que jamás lleva el tag `vision`: si solo
+  // miramos `selectedModel`, un Qwen2-VL local deja los prompts de imagen deshabilitados
+  // para siempre y no hay forma de lanzarlo. La señal para los locales es el mmproj hermano
+  // que publica `/api/models/local` — el mismo que el backend carga con `--mmproj`.
+  const isVisionModel = localModel
+    ? !!localModel.mmproj
+    : !!selectedModel?.tags?.includes("vision");
   // Cuantizaciones válidas para el motor elegido (GGUF en llama.cpp, awq/gptq/fp8 en los
   // Docker, vacío en ollama/API). Las publica el backend en la metadata del motor.
   const engineQuants = selectedEngine?.meta?.quants ?? [];

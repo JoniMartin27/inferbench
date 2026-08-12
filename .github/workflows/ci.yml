@@ -21,12 +21,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install deps
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Desde uv.lock, NO `pip install -e ".[dev]"`. Con la resolución libre, CI instalaba
+      # lo último de todo y se rompía sin que nadie tocase código: pasó con ruff 0.16
+      # (amplió su set de reglas por defecto → 92 errores) y con mcp 2.0 (movió
+      # `mcp.server.fastmcp` → Serve/MCP roto también en instalaciones nuevas). `--locked`
+      # falla si el lock no cuadra con pyproject.toml, así que no puede quedarse obsoleto
+      # en silencio. Para subir una dependencia: `uv lock --upgrade-package X` y se ve en
+      # el diff.
+      - name: Install deps (uv.lock)
+        run: uv sync --locked --extra dev
       - name: Ruff (lint)
-        run: ruff check core api main.py tests
+        run: uv run ruff check core api main.py tests
       - name: Pytest
-        run: pytest -q
+        run: uv run pytest -q
 
   frontend:
     name: Frontend · build + audit

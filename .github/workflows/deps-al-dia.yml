@@ -1,0 +1,66 @@
+# Contrapeso del lock.
+#
+# El CI normal instala desde `backend/uv.lock`, así que es reproducible — pero eso, por sí
+# solo, solo APLAZA el problema: dejas de enterarte de que una dependencia ha roto algo
+# hasta el día que la subes, normalmente con prisa. Ya ha pasado dos veces en este repo
+# (ruff 0.16 amplió su set de reglas por defecto y tumbó el gate; mcp 2.0 movió
+# `mcp.server.fastmcp` y dejó Serve/MCP roto también para instalaciones limpias).
+#
+# Este job resuelve TODO a lo último ignorando el lock y corre lint + tests. No bloquea
+# ningún PR: si se pone rojo, es un aviso de que algo de arriba ha cambiado y hay que
+# mirarlo con calma, no una urgencia.
+
+name: Dependencias al día
+
+on:
+  schedule:
+    # Lunes a las 06:17 UTC. Minuto raro a propósito: las 0 y las 30 en punto son la hora
+    # a la que todo el mundo programa sus crons.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ultimas-versiones:
+    name: Resolver a lo último y probar
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+
+      # --upgrade: ignora las versiones fijadas y coge lo más nuevo que permita pyproject.
+      - name: Resolver a lo último
+        run: uv sync --upgrade --extra dev
+
+      - name: Qué ha cambiado respecto al lock
+        run: |
+          uv pip list --format=freeze > /tmp/ultimas.txt
+          echo "### Versiones resueltas a lo último" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git diff --stat -- uv.lock >> "$GITHUB_STEP_SUMMARY" || true
+          grep -iE '^(ruff|mcp|fastapi|pydantic|uvicorn|sse-starlette|psutil|nvidia-ml-py|sqlmodel|docker|httpx|keyring|pytest|pytest-asyncio|black)==' /tmp/ultimas.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ruff (lint)
+        run: uv run ruff check core api main.py tests
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: Qué hacer si esto sale rojo
+        if: failure()
+        run: |
+          echo "Una dependencia nueva ha roto algo. El CI de los PR sigue verde porque va" >> "$GITHUB_STEP_SUMMARY"
+          echo "desde uv.lock — esto es un aviso, no una urgencia." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Mira arriba qué versiones se resolvieron, reprodúcelo en local con" >> "$GITHUB_STEP_SUMMARY"
+          echo '`cd backend && uv sync --upgrade --extra dev`, y o bien arregla el código' >> "$GITHUB_STEP_SUMMARY"
+          echo "o pon un techo en pyproject.toml explicando por qué." >> "$GITHUB_STEP_SUMMARY"

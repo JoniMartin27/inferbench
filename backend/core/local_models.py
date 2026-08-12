@@ -154,6 +154,12 @@ class LocalModel(BaseModel):
     head_dim: int | None = None
     context_length: int | None = None
     is_moe: bool = False
+    # Un GGUF de disco no está en el catálogo, así que no tiene tag `vision`. Estas dos
+    # banderas son lo que permite a la UI distinguir qué se puede lanzar y con qué:
+    #   is_projector -> el fichero ES un mmproj (no se ejecuta solo; no es un modelo)
+    #   mmproj       -> hay un mmproj hermano en su carpeta => se puede usar con imágenes
+    is_projector: bool = False
+    mmproj: str | None = None
     error: str | None = None
 
 
@@ -364,7 +370,33 @@ def discover(
     if read_metadata:
         with _meta_cache_lock:
             _save_meta_cache()
+
+    _marcar_vision(found)
     return sorted(found, key=lambda m: m.size_gb)
+
+
+def _es_projector(m: LocalModel) -> bool:
+    """¿Este .gguf es un projector de visión (mmproj) y no un modelo ejecutable?"""
+    # Por nombre es como lo detecta el runner (`_find_local_mmproj`), y por arquitectura
+    # es la señal dura: los mmproj declaran `clip` en la cabecera GGUF.
+    return "mmproj" in m.filename.lower() or (m.architecture or "").lower() == "clip"
+
+
+def _marcar_vision(modelos: list[LocalModel]) -> None:
+    """Marca projectors y empareja cada modelo con el mmproj de su carpeta.
+
+    Sin esto la UI no puede saber que un Qwen2-VL de disco admite imágenes (no está en el
+    catálogo, así que no tiene tag `vision`) ni que los ficheros `mmproj-*.gguf` que salen
+    en la lista no son modelos que se puedan lanzar.
+    """
+    projectors_por_carpeta: dict[str, str] = {}
+    for m in modelos:
+        m.is_projector = _es_projector(m)
+        if m.is_projector:
+            projectors_por_carpeta.setdefault(m.dir, m.path)
+    for m in modelos:
+        if not m.is_projector:
+            m.mmproj = projectors_por_carpeta.get(m.dir)
 
 
 def _enrich_cached(m: LocalModel, cache: dict[str, dict], size: int, mtime_ns: int) -> LocalModel:

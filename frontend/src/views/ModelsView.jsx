@@ -233,6 +233,18 @@ export default function ModelsView({ onNavigate }) {
                               MoE
                             </Badge>
                           )}
+                          {/* Un mmproj no se ejecuta solo; sin decirlo, aparecía en la lista
+                              como un modelo más y su botón de benchmark no podía funcionar. */}
+                          {m.is_projector && (
+                            <Badge tone="amber" className="ml-1">
+                              {t("models.local.projector")}
+                            </Badge>
+                          )}
+                          {m.mmproj && (
+                            <Badge tone="emerald" className="ml-1">
+                              {t("models.local.vision")}
+                            </Badge>
+                          )}
                         </td>
                         <td className="py-2 pr-3">
                           {m.quant ? <Badge>{m.quant}</Badge> : <span className="text-slate-500">?</span>}
@@ -256,8 +268,13 @@ export default function ModelsView({ onNavigate }) {
                         <td className="py-2 pr-3">
                           <button
                             onClick={() => onNavigate?.("benchmark", { localModel: m })}
-                            className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-emerald-400 hover:text-emerald-200"
-                            title={t("models.local.benchmarkTitle")}
+                            disabled={m.is_projector}
+                            className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+                            title={
+                              m.is_projector
+                                ? t("models.local.projectorTitle")
+                                : t("models.local.benchmarkTitle")
+                            }
                           >
                             <Play size={12} /> {t("models.local.benchmark")}
                           </button>

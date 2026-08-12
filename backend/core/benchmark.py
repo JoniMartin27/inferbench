@@ -199,14 +199,23 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 API_ENGINES = {"openai", "anthropic", "openrouter", "nvidia"}
 
 
-def supports_vision(engine: str, model: Model | None) -> bool:
+def supports_vision(engine: str, model: Model | None, local_path: str | None = None) -> bool:
     """¿Puede este (motor, modelo) procesar imágenes?
 
     - APIs cloud: sí (gpt-4o, claude… son multimodales; el usuario elige el modelo).
     - Locales (llama.cpp nativo, vLLM/SGLang/TGI Docker): si el modelo tiene tag `vision`
       (lleva mmproj en llama.cpp; vLLM/SGLang sirven el modelo de visión completo).
+    - GGUF de disco: un fichero local NO está en el catálogo, así que nunca tiene tag
+      `vision` por mucho que sea un Qwen2-VL. La señal fiable es que haya un **mmproj
+      hermano** en su carpeta, que es justo lo que el bootstrap va a cargar con `--mmproj`.
+      Sin esto, el motor arrancaba multimodal y el gate seguía diciendo que no: el prompt
+      de imagen se omitía y el run terminaba SIN NINGÚN resultado ni error visible.
     """
-    return engine in API_ENGINES or bool(model and getattr(model, "is_vision", False))
+    if engine in API_ENGINES or bool(model and getattr(model, "is_vision", False)):
+        return True
+    if local_path:
+        return _find_local_mmproj(Path(local_path).parent) is not None
+    return False
 
 
 class BenchmarkRequest(BaseModel):
@@ -846,7 +855,9 @@ class BenchmarkRunner:
             prompts = [p for p in (get_prompt(pid) for pid in self.req.prompts) if p]
             # Gating de visión: un prompt con imagen necesita un modelo multimodal (con
             # mmproj) en local. Para APIs lo dejamos pasar (gpt-4o etc. son multimodales).
-            can_vision = supports_vision(self.req.engine, get_model(self.req.model))
+            can_vision = supports_vision(
+                self.req.engine, get_model(self.req.model), self.req.local_path
+            )
             code_exec = code_exec_enabled()
             kept: list[Prompt] = []
             for p in prompts:
@@ -876,6 +887,22 @@ class BenchmarkRunner:
                     )
                     continue
                 kept.append(p)
+
+            # Si el filtrado se los ha llevado TODOS, esto ya no es un run: es un error.
+            # Antes se seguía adelante, se arrancaba el motor y se emitía `done` sin un solo
+            # `result` ni error — desde fuera parecía que el benchmark "había ido bien" pero
+            # no aparecía nada. Es justo el síntoma de "no puedo lanzar modelos de visión".
+            if prompts and not kept:
+                omitidos = ", ".join(p.id for p in prompts)
+                msg = (
+                    f"Ningún prompt es ejecutable con esta combinación (omitidos: {omitidos}). "
+                    f"Los prompts de imagen necesitan un modelo de visión: del catálogo, uno "
+                    f"con tag `vision`; de disco, un .gguf con su mmproj en la misma carpeta."
+                )
+                await self.emit({"type": "log", "level": "error", "text": msg})
+                await self.emit({"type": "done", "run_id": self.run_id, "error": msg})
+                return
+
             prompts = kept
             await self.emit({"type": "start", "run_id": self.run_id, "total": len(prompts)})
 

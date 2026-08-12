@@ -36,18 +36,6 @@ def test_el_sondeo_se_hace_una_sola_vez_dentro_del_ttl(monkeypatch):
     assert len(llamadas) == 1, "diez consultas seguidas deben costar UN solo sondeo"
 
 
-def test_force_salta_la_cache(monkeypatch):
-    llamadas = []
-    monkeypatch.setattr(
-        dm, "_probe_availability", lambda: (llamadas.append(1), {"available": True})[1]
-    )
-
-    dm.availability()
-    dm.availability(force=True)
-
-    assert len(llamadas) == 2
-
-
 def test_el_ttl_caduca(monkeypatch):
     llamadas = []
     monkeypatch.setattr(

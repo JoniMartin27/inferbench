@@ -42,7 +42,7 @@ from . import (
     ollama_manager,
     secrets,
 )
-from .hardware import detect_hardware, gpu_used_gb
+from .hardware import detect_hardware, gpu_memory_gb, gpu_used_gb, safe_gpu_fraction
 from .models_catalog import Model, get_model
 from .optimizer import _estimate_moe_offload, get_optimal_config, plan_llamacpp_run
 
@@ -197,6 +197,48 @@ DEFAULT_BASE_URLS: dict[str, str] = {
 }
 
 API_ENGINES = {"openai", "anthropic", "openrouter", "nvidia"}
+
+
+def _check_docker_vram_budget(model: Model, quant: str, engine_id: str) -> None:
+    """Rechaza ANTES de arrancar un motor Docker que no puede caber en la VRAM segura.
+
+    El guard de `engines/base.py::_start_docker` es un SUELO ABSOLUTO (`safe < 0.15`): dice
+    "¿queda algo de VRAM?", no "¿cabe ESTE modelo?". Medido en real: con el escritorio de
+    Windows ocupando 4,1 GB de una 3070, `safe_gpu_fraction()` daba 0.22 → 1,76 GB
+    utilizables. Pasó el suelo, el contenedor de vLLM arrancó con un modelo que necesitaba
+    ~6,4 GB, y el runner **esperó 600 s** a que estuviese listo antes de rendirse con
+    "Engine not ready". Diez minutos para un fallo que se sabía desde el segundo cero.
+
+    Los motores Docker sirven el modelo SIN cuantizar salvo que se pida un método que
+    entiendan (awq/gptq/fp8…), así que el tamaño que cuenta es el de fp16. Y no basta con
+    los PESOS: el contenedor necesita además el contexto de CUDA y algo de KV-cache dentro
+    de la misma reserva. Dos medidas reales sobre esta 3070 con `qwen2.5-0.5b` (1,0 GB de
+    pesos): con ~3,8 GB de presupuesto ARRANCA y rinde 162 tok/s; con 1,6-1,8 GB se queda
+    colgado hasta el timeout. De ahí el margen fijo — empírico, no teórico, y ajustable
+    con `INFERBENCH_DOCKER_VRAM_OVERHEAD_GB` para quien tenga otra GPU.
+    """
+    quant_real = quant if quant.lower() in {"awq", "gptq", "fp8", "bitsandbytes", "eetq"} else "F16"
+    pesos = compat.get_model_size_gb(model, quant_real)
+    try:
+        margen = float(os.environ.get("INFERBENCH_DOCKER_VRAM_OVERHEAD_GB", "1.0"))
+    except ValueError:
+        margen = 1.0
+    necesita = pesos + margen
+
+    free, total = gpu_memory_gb()
+    if total <= 0:
+        return  # sin GPU NVIDIA detectable no aplicamos el tope; el motor fallará por su cuenta
+    presupuesto = safe_gpu_fraction() * total
+    if necesita <= presupuesto:
+        return
+    raise RuntimeError(
+        f"{model.id} no cabe en la VRAM disponible para {engine_id}: necesita ~{necesita:.1f} GB "
+        f"({pesos:.1f} de pesos + {margen:.1f} de contexto CUDA y KV) y solo hay "
+        f"{presupuesto:.1f} GB utilizables (de {total:.1f} GB totales, {free:.1f} GB libres, "
+        f"reservando margen para el display). Cierra apps que usen la GPU, elige un modelo más "
+        f"pequeño, o usa llama.cpp con un quant GGUF, que sí cabe. "
+        f"Si esta GPU no pinta tu monitor, baja INFERBENCH_GPU_RESERVE_GB."
+    )
 
 
 def supports_vision(engine: str, model: Model | None, local_path: str | None = None) -> bool:
@@ -1095,6 +1137,7 @@ class BenchmarkRunner:
                     **user_opts,
                 },
             )
+            _check_docker_vram_budget(model, self.req.quant, engine.meta.id)
             await self.emit(
                 {
                     "type": "log",

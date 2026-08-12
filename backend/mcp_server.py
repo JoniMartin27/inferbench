@@ -73,16 +73,16 @@ async def _post(path: str, body: dict[str, Any] | None = None) -> Any:
         raise RuntimeError(f"Error contactando InferBench: {e}") from e
 
 
-def _build_server():
-    """Construye el FastMCP con todas las tools. Importa `mcp` de forma perezosa."""
-    from mcp.server.fastmcp import FastMCP
+def _transport_security():
+    """Defensa anti-DNS-rebinding del transporte HTTP de MCP.
+
+    Es la propia del SDK (igual que el middleware del backend): solo acepta Host/Origin
+    loopback. Añadimos el origen `app://` de Electron para que el handshake desde la app
+    empaquetada no se bloquee. La clase no cambió entre mcp 1.x y 2.x.
+    """
     from mcp.server.transport_security import TransportSecuritySettings
 
-    # El transporte HTTP de MCP trae su PROPIA defensa anti-DNS-rebinding (igual que el
-    # middleware del backend): solo acepta Host/Origin loopback. Añadimos el origen
-    # `app://` de Electron para que el handshake desde la app empaquetada no se bloquee.
-    # Con streamable_http_path="/" el sub-app se monta limpio bajo /mcp en main.py.
-    transport_security = TransportSecuritySettings(
+    return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", "127.0.0.1", "localhost"],
         allowed_origins=[
@@ -93,11 +93,37 @@ def _build_server():
             "app://*",
         ],
     )
-    mcp = FastMCP(
-        SERVER_NAME,
-        streamable_http_path="/",
-        transport_security=transport_security,
-    )
+
+
+def _build_server():
+    """Construye el server MCP con todas las tools. Importa `mcp` de forma perezosa.
+
+    Sirve para los DOS SDK, porque el 2.0 movió las cosas de sitio:
+
+    | | mcp 1.x | mcp 2.x |
+    |---|---|---|
+    | clase | `mcp.server.fastmcp.FastMCP` | `mcp.server.mcpserver.MCPServer` |
+    | `streamable_http_path` | constructor | `streamable_http_app()` |
+    | `transport_security` | constructor | `streamable_http_app()` |
+
+    El resto de la superficie que usamos (`.tool()`, `.list_tools()`, `.call_tool()`,
+    `.run()`, `.session_manager`) es idéntica, así que las tools de abajo no cambian.
+    Sin esto, una instalación limpia resolvía mcp 2.0 y el servidor reventaba al
+    construirse con `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, dejando
+    Serve/MCP roto — por eso estaba acotado a `<2`.
+    """
+    try:  # mcp >= 2
+        from mcp.server.mcpserver import MCPServer as _Server
+
+        mcp = _Server(SERVER_NAME)
+    except ModuleNotFoundError:  # mcp 1.x
+        from mcp.server.fastmcp import FastMCP as _Server
+
+        mcp = _Server(
+            SERVER_NAME,
+            streamable_http_path="/",
+            transport_security=_transport_security(),
+        )
 
     @mcp.tool()
     async def list_models() -> list[dict[str, Any]]:
@@ -226,8 +252,12 @@ def _build_server():
             f"({data.get('width')}x{data.get('height')}, {data.get('steps')} steps, "
             f"seed {used_seed}, {elapsed}s)."
         )
+        # mcp 2.0 renombró el campo `mimeType` a `mime_type`. Construirlo con el nombre
+        # viejo en 2.x deja el ImageContent sin mime y el cliente no sabe qué pintar, así
+        # que preguntamos al modelo cómo se llama en la versión instalada.
+        campo_mime = "mime_type" if "mime_type" in ImageContent.model_fields else "mimeType"
         return [
-            ImageContent(type="image", data=image_b64, mimeType=mime),
+            ImageContent(**{"type": "image", "data": image_b64, campo_mime: mime}),
             TextContent(type="text", text=info),
         ]
 
@@ -259,7 +289,16 @@ def http_app():
     `session_manager_lifespan()` en el lifespan de la app FastAPI raíz. Si no, las
     peticiones a /mcp fallan con "Task group is not initialized".
     """
-    return get_server().streamable_http_app()
+    server = get_server()
+    try:
+        # mcp >= 2: la ruta y la seguridad del transporte se pasan aquí, no al constructor.
+        return server.streamable_http_app(
+            streamable_http_path="/",
+            transport_security=_transport_security(),
+        )
+    except TypeError:
+        # mcp 1.x: ya iban en el constructor y este método no acepta kwargs.
+        return server.streamable_http_app()
 
 
 def session_manager_lifespan():

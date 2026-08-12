@@ -309,12 +309,16 @@ async def test_mcp_generate_image_returns_image_content(monkeypatch):
     server = mcp_server.get_server()
     result = await server.call_tool("generate_image", {"prompt": "un perro"})
     # generate_image devuelve una lista PLANA de content blocks (ImageContent + TextContent),
-    # no un string como chat. server.call_tool la propaga tal cual.
-    blocks = list(result)
+    # no un string como chat. El envoltorio cambia entre SDKs (tupla en mcp 1.x,
+    # CallToolResult en 2.x); `bloques_de` lo normaliza para que el test mire el contrato.
+    from tests.test_mcp import bloques_de
+
+    blocks = bloques_de(result)
     kinds = {getattr(b, "type", None) for b in blocks}
     assert "image" in kinds  # debe haber un ImageContent para que el cliente lo muestre
     img = next(b for b in blocks if getattr(b, "type", None) == "image")
     assert img.data == "QUJD"  # base64 pelado (sin el prefijo data URL)
-    assert img.mimeType == "image/png"
+    # mcp 2.0 renombró `mimeType` a `mime_type`; el contrato (que VENGA el mime) es el mismo.
+    assert getattr(img, "mime_type", None) or getattr(img, "mimeType", None) == "image/png"
     text = "".join(getattr(b, "text", "") for b in blocks if getattr(b, "type", None) == "text")
     assert "seed 42" in text

@@ -43,6 +43,35 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+_MAX_PROMPT = 2000  # el panel de trazas no es un almacén de prompts
+
+
+def _messages(prompt_id: str | None) -> list[dict] | None:
+    """El prompt REAL del catálogo como conversación (`input.messages`), para que en
+    lookspan se vea qué se le pidió al modelo y no solo el id del prompt. El texto del
+    `context_file` (needle-in-haystack, megas) NO se manda: se anota que va delante."""
+    if not prompt_id:
+        return None
+    try:
+        from core.benchmark import get_prompt  # perezoso: benchmark es pesado y opcional aquí
+
+        prompt = get_prompt(prompt_id)
+    except Exception:  # noqa: BLE001 — la telemetría nunca rompe ni bloquea
+        return None
+    if prompt is None:
+        return None
+    msgs: list[dict] = []
+    if prompt.system:
+        msgs.append({"role": "system", "content": prompt.system[:_MAX_PROMPT]})
+    user = prompt.prompt[:_MAX_PROMPT]
+    if prompt.context_file:
+        user = f"[+ contexto largo de {prompt.context_file}]\n{user}"
+    if prompt.image:
+        user = f"[+ imagen {prompt.image}]\n{user}"
+    msgs.append({"role": "user", "content": user})
+    return msgs
+
+
 def build_spans(
     run_id: str,
     engine: str,
@@ -95,6 +124,8 @@ def build_spans(
     for r in results:
         d = _dur(r)
         err = getattr(r, "error", "") or ""
+        pid = getattr(r, "prompt_id", None)
+        msgs = _messages(pid)
         spans.append(
             {
                 "traceId": run_id,
@@ -108,7 +139,7 @@ def build_spans(
                 "framework": "inferbench",
                 "model": getattr(r, "model_id", model) or model,
                 "provider": engine,
-                "input": {"prompt_id": getattr(r, "prompt_id", None)},
+                "input": {"prompt_id": pid, **({"messages": msgs} if msgs else {})},
                 "output": (getattr(r, "raw_output", "") or "")[:2000] or None,
                 "error": {"message": err} if err else None,
                 "usage": {

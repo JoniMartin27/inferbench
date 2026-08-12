@@ -59,6 +59,30 @@ def test_build_spans_root_and_children():
     assert ok["usage"]["outputTokens"] == 256
 
 
+def test_build_spans_carry_the_real_prompt_text():
+    # Sin el texto, en lookspan se veía la RESPUESTA del modelo y ni rastro de qué se le
+    # había pedido: `input` era solo {"prompt_id": "chat"}.
+    from core.benchmark import get_prompt
+
+    catalogo = get_prompt("chat")
+    assert catalogo is not None, "el catálogo de prompts debe traer 'chat'"
+
+    spans = lookspan.build_spans(
+        "r", "llamacpp", "m", "Q4_K_M", [_result(prompt_id="chat")], 1.0, 2.0
+    )
+    msgs = spans[1]["input"]["messages"]
+    assert msgs[-1]["role"] == "user"
+    assert msgs[-1]["content"].startswith(catalogo.prompt[:40])
+    assert spans[1]["input"]["prompt_id"] == "chat"
+
+
+def test_build_spans_survive_an_unknown_prompt_id():
+    spans = lookspan.build_spans(
+        "r", "llamacpp", "m", "Q4_K_M", [_result(prompt_id="no-existe")], 1.0, 2.0
+    )
+    assert spans[1]["input"] == {"prompt_id": "no-existe"}
+
+
 def test_build_spans_match_ingest_contract():
     # Mismas reglas que lookspan/collector/normalize.ts
     spans = lookspan.build_spans("r", "vllm", "m", "fp8", [_result()], 1.0, 2.0)

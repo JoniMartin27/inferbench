@@ -8,6 +8,7 @@ respuesta del modelo de visión con un checklist de atributos (ver data/prompts.
 
   python scripts/make_vision_test.py
 """
+
 from __future__ import annotations
 
 import struct
@@ -87,8 +88,8 @@ def main() -> None:
 
     # Escena: 3 figuras, 3 colores → reconocimiento forma+color y conteo (=3)
     scene = canvas(W, H)
-    circle(scene, W, H, 66, 70, 44, RED)            # círculo rojo, arriba-izquierda
-    rect(scene, W, H, 150, 26, 232, 108, BLUE)      # cuadrado azul, arriba-derecha
+    circle(scene, W, H, 66, 70, 44, RED)  # círculo rojo, arriba-izquierda
+    rect(scene, W, H, 150, 26, 232, 108, BLUE)  # cuadrado azul, arriba-derecha
     triangle(scene, W, H, (128, 138), (84, 226), (172, 226), GREEN)  # triángulo verde, abajo
     write_png(DATA / "vision_scene.png", W, H, scene)
 

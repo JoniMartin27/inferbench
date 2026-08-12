@@ -14,6 +14,7 @@ Idempotente: por defecto solo rellena los que faltan.
   python scripts/enrich_arch.py --force    # recalcula todos
   python scripts/enrich_arch.py --dry-run  # reporta sin escribir
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,8 +49,12 @@ def _arch_dims(meta: dict) -> dict | None:
     )
     if not (n_layer and n_head and n_head_kv and head_dim):
         return None
-    return {"n_layer": int(n_layer), "n_head": int(n_head),
-            "n_head_kv": int(n_head_kv), "head_dim": int(head_dim)}
+    return {
+        "n_layer": int(n_layer),
+        "n_head": int(n_head),
+        "n_head_kv": int(n_head_kv),
+        "head_dim": int(head_dim),
+    }
 
 
 def _range_fetch(url: str, nbytes: int, timeout: int = 40) -> bytes | None:
@@ -98,8 +103,12 @@ def from_config(hf_repo: str | None) -> dict | None:
     )
     if not head_dim:
         return None
-    return {"n_layer": cfg.get("num_hidden_layers"), "n_head": int(n_head),
-            "n_head_kv": int(n_head_kv), "head_dim": int(head_dim)}
+    return {
+        "n_layer": cfg.get("num_hidden_layers"),
+        "n_head": int(n_head),
+        "n_head_kv": int(n_head_kv),
+        "head_dim": int(head_dim),
+    }
 
 
 def main() -> int:
@@ -125,16 +134,20 @@ def main() -> int:
         # Sanity: el n_layer de la fuente debe coincidir con el del catálogo.
         cat_nl, src_nl = m.get("n_layer"), dims.get("n_layer")
         if cat_nl and src_nl and cat_nl != src_nl:
-            print(f"WARN {m['id']:30s} n_layer catálogo={cat_nl} != fuente={src_nl}",
-                  file=sys.stderr)
+            print(
+                f"WARN {m['id']:30s} n_layer catálogo={cat_nl} != fuente={src_nl}", file=sys.stderr
+            )
         m["n_head"] = dims["n_head"]
         m["n_head_kv"] = dims["n_head_kv"]
         m["head_dim"] = dims["head_dim"]
         done += 1
         ratio = dims["n_head"] / dims["n_head_kv"]
         kind = f"GQA {ratio:.0f}x" if ratio > 1 else "MHA"
-        print(f"OK   {m['id']:30s} n_head={dims['n_head']:>3} n_head_kv={dims['n_head_kv']:>3} "
-              f"head_dim={dims['head_dim']:>3}  ({kind})", file=sys.stderr)
+        print(
+            f"OK   {m['id']:30s} n_head={dims['n_head']:>3} n_head_kv={dims['n_head_kv']:>3} "
+            f"head_dim={dims['head_dim']:>3}  ({kind})",
+            file=sys.stderr,
+        )
 
     print(f"\nEnriquecidos {done} · saltados {skipped} · fallidos {failed}", file=sys.stderr)
     if done and not args.dry_run:

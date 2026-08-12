@@ -7,6 +7,7 @@ texto y recuperar un código secreto enterrado en el medio. Estresa la ventana d
 
   python scripts/make_context_test.py
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,8 +15,20 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parent.parent / "data" / "context_haystack.txt"
 
 SECTORS = [
-    "north", "south", "east", "west", "central", "logistics", "mining",
-    "textile", "naval", "agricultural", "chemical", "solar", "wind", "port",
+    "north",
+    "south",
+    "east",
+    "west",
+    "central",
+    "logistics",
+    "mining",
+    "textile",
+    "naval",
+    "agricultural",
+    "chemical",
+    "solar",
+    "wind",
+    "port",
 ]
 STATUS = ["nominal", "elevated", "reduced", "stable", "moderate", "sustained"]
 NEEDLE_LINE = 72  # índice 0-based → "Record 073"

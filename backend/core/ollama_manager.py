@@ -154,9 +154,7 @@ def start_daemon() -> int:
 
     creationflags = 0
     if os.name == "nt":
-        creationflags = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | 0x08000000  # CREATE_NO_WINDOW
-        )
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | 0x08000000  # CREATE_NO_WINDOW
 
     proc = subprocess.Popen(
         [str(exe), "serve"],

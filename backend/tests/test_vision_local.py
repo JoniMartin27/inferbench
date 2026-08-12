@@ -101,7 +101,10 @@ def test_un_modelo_solo_en_su_carpeta_no_se_marca_como_vision(carpeta, monkeypat
 def test_el_projector_se_detecta_tambien_por_arquitectura():
     """Si alguien renombra el fichero, la cabecera GGUF sigue diciendo `clip`."""
     m = lm.LocalModel(
-        path="/x/proyector.gguf", filename="proyector.gguf", dir="/x", size_gb=0.5,
+        path="/x/proyector.gguf",
+        filename="proyector.gguf",
+        dir="/x",
+        size_gb=0.5,
         architecture="clip",
     )
     assert lm._es_projector(m) is True

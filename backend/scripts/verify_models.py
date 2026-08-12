@@ -3,6 +3,7 @@
 Uso: python scripts/verify_models.py
 No inventa datos: solo emite modelos cuyo repo GGUF y archivo Q4_K_M existen de verdad.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,7 +13,18 @@ import urllib.request
 import urllib.error
 
 HF = "https://huggingface.co"
-QUANT_TOKENS = ["Q4_K_M", "Q4_K_S", "Q5_K_M", "Q6_K", "Q8_0", "Q3_K_M", "Q3_K_L", "Q2_K", "IQ4_XS", "IQ4_NL"]
+QUANT_TOKENS = [
+    "Q4_K_M",
+    "Q4_K_S",
+    "Q5_K_M",
+    "Q6_K",
+    "Q8_0",
+    "Q3_K_M",
+    "Q3_K_L",
+    "Q2_K",
+    "IQ4_XS",
+    "IQ4_NL",
+]
 PREFERRED_AUTHORS = ["bartowski", "lmstudio-community", "unsloth", "ggml-org"]
 
 
@@ -44,7 +56,9 @@ def find_gguf_repo(search: str, official_author: str | None) -> str | None:
     data = _get_json(f"{HF}/api/models?search={urllib.parse.quote(search)}&limit=40")
     if isinstance(data, dict) and data.get("__error__"):
         return None
-    cands = [m["id"] for m in data if m.get("id", "").endswith("-GGUF") or "GGUF" in m.get("id", "")]
+    cands = [
+        m["id"] for m in data if m.get("id", "").endswith("-GGUF") or "GGUF" in m.get("id", "")
+    ]
     # priorizar por autor preferido
     for a in authors:
         for cid in cands:
@@ -133,7 +147,10 @@ def main():
             c["head_dim"] = int(head_dim)
         c.setdefault("size_base_gb", round(c["params_b"] * 2, 1))
         out.append(c)
-        print(f"OK  {c['id']:32s} -> {repo}  tmpl={tmpl}  ctx={max_ctx} layers={n_layer}", file=sys.stderr)
+        print(
+            f"OK  {c['id']:32s} -> {repo}  tmpl={tmpl}  ctx={max_ctx} layers={n_layer}",
+            file=sys.stderr,
+        )
 
     for fid, why in fails:
         print(f"FAIL {fid:31s} {why}", file=sys.stderr)
@@ -142,4 +159,5 @@ def main():
 
 if __name__ == "__main__":
     import urllib.parse
+
     main()

@@ -44,6 +44,34 @@ class HardwareInfo(BaseModel):
     primary_vram_gb: float  # vram de la GPU principal (0 si CPU-only)
 
 
+def _cpu_freq_mhz() -> float | None:
+    """Frecuencia máxima del CPU, o None si la plataforma no la expone.
+
+    `psutil.cpu_freq` **no existe como atributo en macOS**: psutil no implementa
+    esa función ahí (Apple no publica la frecuencia por una API pública), así que
+    no es que devuelva None, es que `psutil.cpu_freq` levanta AttributeError. El
+    código anterior hacía `freq.max if freq else None`, que cubre el None pero no
+    la ausencia, y reventaba `_detect_cpu()` → `_detect_static()` →
+    `detect_hardware()`. Como `BenchmarkRunner.__init__` llama a
+    `detect_hardware()`, en un Mac fallaba TODO benchmark, y con él el dashboard y
+    el listado de compatibilidad.
+
+    En Linux tampoco está garantizada: en contenedores y VMs sin
+    `/sys/devices/system/cpu/cpu0/cpufreq` psutil devuelve None o levanta
+    NotImplementedError. La frecuencia es informativa —no entra en ningún cálculo
+    de compatibilidad ni de VRAM—, así que no saberla nunca debe romper nada.
+    """
+    sonda = getattr(psutil, "cpu_freq", None)
+    if sonda is None:
+        return None
+    try:
+        freq = sonda()
+    except Exception as e:  # NotImplementedError, OSError… según plataforma
+        logger.debug(f"cpu_freq no disponible: {e}")
+        return None
+    return freq.max if freq else None
+
+
 def _detect_cpu() -> CPUInfo:
     name = platform.processor() or platform.machine() or "Unknown CPU"
     # En Linux platform.processor() suele estar vacío, intenta /proc/cpuinfo.
@@ -56,13 +84,12 @@ def _detect_cpu() -> CPUInfo:
                         break
         except OSError:
             pass
-    freq = psutil.cpu_freq()
     return CPUInfo(
         name=name,
         arch=platform.machine(),
         physical_cores=psutil.cpu_count(logical=False) or 0,
         logical_cores=psutil.cpu_count(logical=True) or 0,
-        freq_mhz=freq.max if freq else None,
+        freq_mhz=_cpu_freq_mhz(),
     )
 
 

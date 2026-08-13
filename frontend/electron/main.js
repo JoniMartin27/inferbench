@@ -65,6 +65,7 @@ async function startBackendSidecar() {
     );
     backendLogStream.end();
     backendLogStream = null;
+    marcarSidecarSano();
     return;
   }
 
@@ -88,6 +89,10 @@ async function startBackendSidecar() {
   backendProcess.stdout?.pipe(backendLogStream);
   backendProcess.stderr?.pipe(backendLogStream);
 
+  // Cuando de verdad responde, la cuenta de reintentos vuelve a cero: así un fallo
+  // aislado dentro de un mes no arrastra los intentos gastados hoy.
+  esperarSidecarSano();
+
   // Sin este manejador, un ENOENT (sidecar ausente en el paquete) emite 'error' sin
   // escuchador y tumba el proceso principal: la app "no abre" y el usuario no sabe por qué.
   backendProcess.on("error", (err) => {
@@ -103,10 +108,69 @@ async function startBackendSidecar() {
   backendProcess.on("exit", (code, signal) => {
     backendLogStream?.write(`[sidecar] terminó code=${code} signal=${signal}\n`);
     backendProcess = null;
+    programarReintento(`code=${code} signal=${signal}`);
   });
 }
 
+// Reintento del sidecar.
+//
+// MEDIDO: si el sidecar muere con la ventana abierta (lo mató alguien, se cayó, el puerto
+// se le fue), Electron seguía vivo SIN backend y la UI se quedaba en "offline" para
+// siempre. La única salida era cerrar y reabrir la app — y `main.js` solo lo lanzaba en
+// `whenReady`, así que nadie lo reintentaba. El `exit` ya se escuchaba: solo se logueaba.
+//
+// Backoff creciente para no machacar si el fallo es permanente (p.ej. el exe no existe),
+// y tope de intentos con aviso claro en vez de reintentar en bucle callado.
+const _MAX_REINTENTOS = 5;
+let _reintentos = 0;
+let _reintentoEnCurso = null;
+let _cerrando = false;
+
+function programarReintento(motivo) {
+  if (isDev || _cerrando || _reintentoEnCurso) return;
+  if (_reintentos >= _MAX_REINTENTOS) {
+    dialog.showErrorBox(
+      "InferBench perdió su backend",
+      `El proceso del backend se cerró (${motivo}) y no se pudo recuperar tras ` +
+        `${_MAX_REINTENTOS} intentos.\n\nCierra y vuelve a abrir InferBench.\n\n` +
+        `Detalle en:\n${backendLogPath()}`
+    );
+    return;
+  }
+  _reintentos += 1;
+  const espera = Math.min(1000 * 2 ** (_reintentos - 1), 15000);
+  _reintentoEnCurso = setTimeout(() => {
+    _reintentoEnCurso = null;
+    if (_cerrando) return;
+    startBackendSidecar().catch(() => {});
+  }, espera);
+}
+
+/** Un arranque con éxito borra la cuenta: fallos futuros vuelven a tener sus 5 intentos. */
+function marcarSidecarSano() {
+  _reintentos = 0;
+}
+
+/** Sondea el :7777 hasta que conteste (o se rinde) para dar por bueno el arranque. */
+async function esperarSidecarSano(intentos = 20) {
+  for (let i = 0; i < intentos; i++) {
+    if (_cerrando) return;
+    if (await healthyBackendAlreadyRunning()) {
+      marcarSidecarSano();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
 function stopBackendSidecar() {
+  // A partir de aquí el sidecar muere a propósito: que el `exit` NO dispare un reintento
+  // (si no, cerrar la app relanzaría el backend que acabamos de matar).
+  _cerrando = true;
+  if (_reintentoEnCurso) {
+    clearTimeout(_reintentoEnCurso);
+    _reintentoEnCurso = null;
+  }
   const proc = backendProcess;
   backendProcess = null;
   if (proc) {

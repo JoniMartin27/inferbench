@@ -9,6 +9,13 @@ petaban por esto y nadie lo vio porque CI solo corría en Linux.
 
 Se prueba borrando el atributo (que es exactamente la forma del fallo en macOS) y también
 haciendo que levante, que es lo que ocurre en contenedores Linux sin `cpufreq`.
+
+TODOS los `monkeypatch` llevan `raising=False` **a propósito**: tanto `delattr` como
+`setattr` exigen por defecto que el atributo YA exista, así que en el propio macOS —donde
+no existe— el test petaba con AttributeError antes de llegar a comprobar nada. Medido en
+CI: el arreglo de producción estaba bien y era la prueba la que fallaba. Con `raising=False`
+el borrado es un no-op donde ya falta (justo el estado que se quiere) y el resto de casos
+crean el atributo para simular las plataformas que sí lo traen.
 """
 
 import psutil
@@ -26,7 +33,7 @@ def _sin_cache():
 
 
 def test_sin_atributo_cpu_freq_como_en_macos(monkeypatch):
-    monkeypatch.delattr(psutil, "cpu_freq")
+    monkeypatch.delattr(psutil, "cpu_freq", raising=False)
 
     assert _cpu_freq_mhz() is None
     cpu = _detect_cpu()
@@ -40,7 +47,7 @@ def test_cpu_freq_que_revienta_como_en_contenedores(monkeypatch):
     def explota():
         raise NotImplementedError("cpufreq no disponible")
 
-    monkeypatch.setattr(psutil, "cpu_freq", explota)
+    monkeypatch.setattr(psutil, "cpu_freq", explota, raising=False)
 
     assert _cpu_freq_mhz() is None
     assert detect_hardware().cpu.freq_mhz is None
@@ -48,7 +55,7 @@ def test_cpu_freq_que_revienta_como_en_contenedores(monkeypatch):
 
 def test_cpu_freq_que_devuelve_none(monkeypatch):
     """Linux sin `/sys/.../cpufreq` devuelve None en vez de levantar."""
-    monkeypatch.setattr(psutil, "cpu_freq", lambda: None)
+    monkeypatch.setattr(psutil, "cpu_freq", lambda: None, raising=False)
 
     assert _cpu_freq_mhz() is None
 
@@ -59,7 +66,7 @@ def test_cuando_la_plataforma_la_expone_se_usa(monkeypatch):
     class _Freq:
         max = 4200.0
 
-    monkeypatch.setattr(psutil, "cpu_freq", lambda: _Freq())
+    monkeypatch.setattr(psutil, "cpu_freq", lambda: _Freq(), raising=False)
 
     assert _cpu_freq_mhz() == 4200.0
     assert _detect_cpu().freq_mhz == 4200.0

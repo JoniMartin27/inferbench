@@ -24,6 +24,23 @@ import httpx
 SERVER_NAME = "inferbench"
 DEFAULT_TIMEOUT = httpx.Timeout(360.0, connect=10.0)
 
+
+def _server_version() -> str:
+    """Versión de InferBench que se anuncia en el handshake MCP.
+
+    Sin esto el cliente ve la versión del **SDK de mcp** como si fuera la de InferBench:
+    comprobado contra el exe empaquetado, `initialize` respondía
+    `serverInfo: inferbench v1.27.2` — que es la versión del paquete `mcp`, no la 0.1.1 de
+    la app. Claude Desktop y Cursor pintan ese número, así que es lo que ve el usuario.
+    """
+    try:
+        from importlib.metadata import version
+
+        return version("inferbench-backend")
+    except Exception:  # noqa: BLE001 — ejecutado sin instalar el paquete
+        return "0.0.0+dev"
+
+
 # Mensaje claro cuando el backend no está accesible (stdio lanzado sin la app abierta).
 _BACKEND_DOWN = (
     "InferBench no está abierto: arranca la app InferBench y reintenta "
@@ -112,10 +129,11 @@ def _build_server():
     construirse con `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, dejando
     Serve/MCP roto — por eso estaba acotado a `<2`.
     """
+    version = _server_version()
     try:  # mcp >= 2
         from mcp.server.mcpserver import MCPServer as _Server
 
-        mcp = _Server(SERVER_NAME)
+        mcp = _Server(SERVER_NAME, version=version)
     except ModuleNotFoundError:  # mcp 1.x
         from mcp.server.fastmcp import FastMCP as _Server
 
@@ -124,6 +142,12 @@ def _build_server():
             streamable_http_path="/",
             transport_security=_transport_security(),
         )
+        # FastMCP (1.x) no acepta `version` en el constructor y deja el server interno con
+        # `version=None`, y entonces el SDK responde SU propia versión en el handshake.
+        # Se pone a mano sobre el server de bajo nivel, que sí lo tiene.
+        interno = getattr(mcp, "_mcp_server", None)
+        if interno is not None:
+            interno.version = version
 
     @mcp.tool()
     async def list_models() -> list[dict[str, Any]]:

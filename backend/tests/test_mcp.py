@@ -94,3 +94,27 @@ def test_backend_url_env(monkeypatch):
     assert mcp_server.backend_url() == "http://127.0.0.1:7777"
     monkeypatch.setenv("INFERBENCH_BACKEND_URL", "http://localhost:9999/")
     assert mcp_server.backend_url() == "http://localhost:9999"
+
+
+def test_el_handshake_anuncia_la_version_de_inferbench_no_la_del_sdk():
+    """Lo que ve el usuario en Claude Desktop / Cursor es este número.
+
+    Sin fijarlo, FastMCP (mcp 1.x) deja el server interno con `version=None` y el SDK
+    responde SU propia versión: comprobado contra el exe empaquetado, `initialize`
+    devolvía `serverInfo: inferbench v1.27.2` — la versión del paquete `mcp`, no la 0.1.1
+    de la app.
+    """
+    from importlib.metadata import version as _pkg_version
+
+    esperada = _pkg_version("inferbench-backend")
+    server = mcp_server.get_server()
+
+    # mcp 1.x expone el server de bajo nivel; 2.x lo lleva en el propio objeto.
+    interno = getattr(server, "_mcp_server", server)
+    anunciada = getattr(interno, "version", None)
+
+    assert anunciada == esperada, (
+        f"el handshake MCP anuncia {anunciada!r} en vez de la versión de InferBench "
+        f"({esperada!r}); el usuario lo ve en su cliente MCP"
+    )
+    assert not str(anunciada).startswith("1."), "eso es la versión del SDK de mcp"

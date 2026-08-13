@@ -122,9 +122,9 @@ def test_cada_estado_enumerable_del_runtime_trae_clave_i18n():
                     f"{meta.id}/native manda '{disp.detail}' sin detail_key: la UI en "
                     f"español lo pintaría en inglés"
                 )
-            assert _castellano(disp.detail) is None, (
-                f"{meta.id}/{disp.runtime} manda castellano en detail: {disp.detail!r}"
-            )
+            assert (
+                _castellano(disp.detail) is None
+            ), f"{meta.id}/{disp.runtime} manda castellano en detail: {disp.detail!r}"
 
 
 def test_docker_apagado_trae_clave_traducible(monkeypatch):

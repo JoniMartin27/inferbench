@@ -4,13 +4,20 @@ Recursos visuales que enlaza el `README.md` principal.
 
 ## Actuales
 
-- **`inferbench-promo.gif`** — GIF de cabecera actual (900×540, ~20s, 20 fps, 2,1 MB). Promo motion-graphics en inglés generado programáticamente (Pillow + ffmpeg): logo → "Stop guessing" → pipeline one-click → panel de métricas reales (588 ms TTFT, 272 tok/s, 2.47 GB VRAM, 75/100 en RTX 3070) → features → end card. Es el que muestra el `README.md` como hero.
-- **`inferbench-demo.gif`** — demo real de la app (**800×500, 39,8 s, 8 fps, 48 colores, 6,0 MB**; regrabada el 2026-08-13). Recorrido: Dashboard → Modelos/Optimizar → **Benchmark en vivo + fila de resultados** → Comparar runs → Serve/MCP con generación de imagen real. Enlazado en el `README.md` dentro de un `<details>` bajo el hero.
+- **`inferbench-demo.gif`** — **el hero del `README.md`**. Demo real de la app (**800×500, 39,8 s, 8 fps, 48 colores, 6,0 MB**; regrabada el 2026-08-13). Recorrido: Dashboard → Modelos/Optimizar → **Benchmark en vivo + fila de resultados** → Comparar runs → Serve/MCP con generación de imagen real. Enlazado en el `README.md` dentro de un `<details>` bajo el hero.
 - **`inferbench-run.gif`** — clip corto (800×500, ~8 s) centrado en el **panel de ejecución en vivo** del benchmark (arranque del motor + log de fases + tok/s subiendo por SSE). Recorte del tramo de benchmark del GIF de la demo, así que refleja el mismo recorrido actual.
 - **`screenshot-dashboard.png`** — captura estática del Dashboard (fallback si el GIF no carga).
 - **`screenshot-models.png`** — vista Models con el panel de **configuración óptima** abierto (la vista que mejor vende el producto).
 
 Los PNG y el clip se derivan de `inferbench-demo.gif`, así que **siempre reflejan el mismo recorrido que la demo**.
+
+## Retirados
+
+- **`inferbench-promo.gif`** (900×540, ~20 s, 2,1 MB) — promo motion-graphics generado con Pillow + ffmpeg: logo → "Stop guessing" → pipeline one-click → panel de métricas → features → end card. Fue el hero del `README.md` desde el 2026-06-09 y **se retiró el 2026-08-13** por dos motivos medidos:
+  1. **Está en el tema indigo/violeta anterior al reskin Fervon.** El logo, el nombre, la barra de pasos y las gráficas son azules sobre pizarra; la app, la demo que va justo debajo y todo el portfolio son carbón y brasa. Quien llegaba desde fervon.dev veía otra cosa.
+  2. **Sus cifras son de junio y hoy quedan peor que las reales**: enseña 588 ms de TTFT y calidad 75/100, cuando la misma máquina mide ahora ~285 ms y 100.
+
+  El fichero se conserva como referencia, pero **el generador nunca se commiteó** (solo el GIF, ver `6261b36`). Si se quiere recuperar un hero de motion-graphics hay que rehacerlo en la paleta Fervon con cifras actuales — y esta vez commitear el script, como se hizo con `record-demo.mjs` y `build-demo-gif.sh`.
 
 ## Re-grabar / regenerar
 

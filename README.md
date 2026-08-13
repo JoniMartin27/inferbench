@@ -21,15 +21,12 @@
 </p>
 
 <p align="center">
-  <img src="assets/inferbench-promo.gif" alt="InferBench: benchmark de LLMs locales en un click — pipeline automático, métricas reales (TTFT, tok/s, VRAM, calidad) y comparación de runs" width="800">
+  <img src="assets/inferbench-demo.gif" alt="InferBench en acción: hardware detectado, configuración óptima por modelo, benchmark en vivo con TTFT y tok/s reales, comparación de runs Q8 vs Q4 y modelo servido por MCP generando una imagen" width="800">
 </p>
 
-<details align="center">
-  <summary>🎬 Ver la app real en acción (demo completa)</summary>
-  <p align="center">
-    <img src="assets/inferbench-demo.gif" alt="InferBench en acción: hardware detectado, configuración óptima por modelo, benchmark en vivo con TTFT y tok/s reales, comparación de runs Q8 vs Q4 y modelo servido por MCP generando una imagen" width="800">
-  </p>
-</details>
+<p align="center">
+  <sub>Recorrido real del producto en una RTX 3070. Las cifras son de esas ejecuciones, sin editar ni acelerar.</sub>
+</p>
 
 <p align="center">
   <img src="assets/screenshot-dashboard.png" alt="Dashboard: hardware detectado y modelos recomendados para tu equipo" width="420">

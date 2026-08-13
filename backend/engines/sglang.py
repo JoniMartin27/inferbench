@@ -17,7 +17,7 @@ class SglangEngine(Engine):
                 default_port=30000,
                 image="lmsysorg/sglang:latest",
                 optimizable=True,
-                description="SGLang server con chunked prefill + speculative decoding (EAGLE3/DFLASH). Solo Docker + GPU NVIDIA.",
+                description="SGLang server with chunked prefill + speculative decoding (EAGLE3/DFLASH). Docker + NVIDIA GPU only.",
                 runtimes=["docker"],
                 default_runtime="docker",
             )

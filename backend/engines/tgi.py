@@ -17,7 +17,7 @@ class TgiEngine(Engine):
                 default_port=8088,
                 image="ghcr.io/huggingface/text-generation-inference:latest",
                 optimizable=True,
-                description="HuggingFace text-generation-inference. Solo Docker + GPU NVIDIA.",
+                description="HuggingFace text-generation-inference. Docker + NVIDIA GPU only.",
                 runtimes=["docker"],
                 default_runtime="docker",
             )

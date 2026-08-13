@@ -68,10 +68,10 @@ _attach_quants()
 
 # APIs cloud
 for eid, name, desc in [
-    ("openai", "OpenAI", "API cloud — solo sampling."),
-    ("anthropic", "Anthropic", "API cloud — solo sampling."),
-    ("openrouter", "OpenRouter", "Agregador de APIs — solo sampling."),
-    ("nvidia", "NVIDIA NIM", "API cloud — solo sampling."),
+    ("openai", "OpenAI", "Cloud API — sampling only."),
+    ("anthropic", "Anthropic", "Cloud API — sampling only."),
+    ("openrouter", "OpenRouter", "API aggregator — sampling only."),
+    ("nvidia", "NVIDIA NIM", "Cloud API — sampling only."),
 ]:
     _register(_ApiOnlyEngine(_api_meta(eid, name, desc)))
 

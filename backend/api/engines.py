@@ -19,9 +19,19 @@ router = APIRouter(prefix="/api/engines", tags=["engines"])
 
 
 class RuntimeAvailability(BaseModel):
+    """Disponibilidad de un runtime, lista para pintar en cualquier idioma.
+
+    `detail` es el texto en INGLÉS (fallback y documentación de la API). La UI, que
+    habla ES y EN, traduce por `detail_key` (`engines.runtime.<key>`) interpolando
+    `detail_params`, y solo cae a `detail` cuando no hay clave — el caso del error
+    crudo del SDK de Docker, que no es enumerable y por tanto no es traducible.
+    """
+
     runtime: str
     ready: bool
     detail: str = ""
+    detail_key: str | None = None
+    detail_params: dict[str, str] = {}
     install_url: str | None = None
 
 
@@ -31,20 +41,28 @@ class EngineSummary(BaseModel):
     runtimes: list[RuntimeAvailability] = []
 
 
+def _binary_avail(ready_full: bool, exe_only: bool) -> RuntimeAvailability:
+    """Estado de un binario nativo auto-descargable (llama.cpp, sd.cpp)."""
+    if ready_full:
+        key, detail = "binaryCudaReady", "Binary + CUDA ready"
+    elif exe_only:
+        key, detail = "binaryNoCuda", "Binary without CUDA DLLs — download pending"
+    else:
+        key, detail = "readyToDownload", "Ready to download"
+    return RuntimeAvailability(runtime="native", ready=ready_full, detail=detail, detail_key=key)
+
+
 def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
     out: list[RuntimeAvailability] = []
     for rt in meta.runtimes:
         if rt == "native":
             if meta.id == "llamacpp":
-                fully = binary_manager.llamacpp_fully_installed()
-                exe_only = binary_manager.llamacpp_installed()
-                if fully:
-                    detail = "Binario + CUDA listos"
-                elif exe_only:
-                    detail = "Binario sin DLLs CUDA — descarga pendiente"
-                else:
-                    detail = "Listo para descargar"
-                out.append(RuntimeAvailability(runtime="native", ready=fully, detail=detail))
+                out.append(
+                    _binary_avail(
+                        binary_manager.llamacpp_fully_installed(),
+                        binary_manager.llamacpp_installed(),
+                    )
+                )
             elif meta.id == "ollama":
                 if ollama_manager.is_installed():
                     # Solo el nombre del ejecutable: no filtrar la ruta absoluta del usuario.
@@ -53,7 +71,9 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                         RuntimeAvailability(
                             runtime="native",
                             ready=True,
-                            detail=f"Instalado ({exe.name})" if exe else "Instalado",
+                            detail=f"Installed ({exe.name})" if exe else "Installed",
+                            detail_key="installedExe" if exe else "installed",
+                            detail_params={"exe": exe.name} if exe else {},
                         )
                     )
                 else:
@@ -61,7 +81,8 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                         RuntimeAvailability(
                             runtime="native",
                             ready=False,
-                            detail="No instalado",
+                            detail="Not installed",
+                            detail_key="notInstalled",
                             install_url=ollama_manager.installer_url()
                             or "https://ollama.com/download",
                         )
@@ -73,34 +94,49 @@ def _runtime_avail(meta: EngineMeta) -> list[RuntimeAvailability]:
                 # "No implementado" para una funcionalidad que SÍ está implementada y que
                 # se auto-descarga al primer arranque, igual que llama.cpp. Resultado: la
                 # generación de imagen parecía muerta y nadie la pulsaba.
-                fully = binary_manager.stablediffusion_fully_installed()
-                exe_only = binary_manager.stablediffusion_installed()
-                if fully:
-                    detail = "Binario + CUDA listos"
-                elif exe_only:
-                    detail = "Binario sin DLLs CUDA — descarga pendiente"
-                else:
-                    detail = "Listo para descargar"
-                out.append(RuntimeAvailability(runtime="native", ready=fully, detail=detail))
+                out.append(
+                    _binary_avail(
+                        binary_manager.stablediffusion_fully_installed(),
+                        binary_manager.stablediffusion_installed(),
+                    )
+                )
             else:
                 out.append(
-                    RuntimeAvailability(runtime="native", ready=False, detail="No implementado")
+                    RuntimeAvailability(
+                        runtime="native",
+                        ready=False,
+                        detail="Not implemented",
+                        detail_key="notImplemented",
+                    )
                 )
         elif rt == "docker":
             d = docker_mgr.availability()
+            params: dict[str, str] = {}
             if d.get("available"):
                 # `hint`/`reason` solo existen cuando Docker NO está disponible, así que en
                 # el camino feliz el detalle salía VACÍO y la UI pintaba el chip como
                 # "docker:" seguido de nada — parecía roto justo cuando todo iba bien.
                 version = d.get("version")
-                detail = f"Docker {version}" if version else "Disponible"
+                if version:
+                    detail, key = f"Docker {version}", "dockerVersion"
+                    params = {"version": str(version)}
+                else:
+                    detail, key = "Available", "dockerAvailable"
             else:
-                detail = d.get("hint") or d.get("reason", "") or "No disponible"
+                # `hint` trae su `hint_key` traducible; `reason` es el mensaje crudo del SDK
+                # y se pinta tal cual (sin clave) porque no es un estado enumerable.
+                hint, hint_key = d.get("hint"), d.get("hint_key")
+                if hint:
+                    detail, key = hint, hint_key or None
+                else:
+                    detail, key = d.get("reason") or "Not available", None
             out.append(
                 RuntimeAvailability(
                     runtime="docker",
                     ready=bool(d.get("available")),
                     detail=detail,
+                    detail_key=key,
+                    detail_params=params,
                 )
             )
     return out

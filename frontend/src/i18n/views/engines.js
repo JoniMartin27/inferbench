@@ -17,6 +17,40 @@ export const engines = {
     badge: {
       optimizable: "optimizable",
     },
+    // El backend manda `meta.description` en inglés; aquí se traduce por el id del motor
+    // y solo se cae al texto del backend si aparece un motor que la UI no conoce.
+    description: {
+      llamacpp:
+        "llama.cpp server with GGUF support and MoE offload (--n-cpu-moe). Native mode: downloads the official binary.",
+      ollama:
+        "Ollama daemon: models from its own registry (llama3.2:1b, qwen2.5:7b…). OpenAI-compatible API.",
+      vllm: "vLLM server with prefix caching and speculative decoding (DFLASH/EAGLE). Docker + NVIDIA GPU only.",
+      sglang:
+        "SGLang server with chunked prefill + speculative decoding (EAGLE3/DFLASH). Docker + NVIDIA GPU only.",
+      tgi: "HuggingFace text-generation-inference. Docker + NVIDIA GPU only.",
+      stablediffusion:
+        "stable-diffusion.cpp server for local image generation (GGUF/safetensors). Supports single-file SD1.x/SDXL and multi-file FLUX. Video (Wan2.1/LTX): coming soon.",
+      openai: "Cloud API — sampling only.",
+      anthropic: "Cloud API — sampling only.",
+      openrouter: "API aggregator — sampling only.",
+      nvidia: "Cloud API — sampling only.",
+    },
+    // Chips de disponibilidad. El backend manda `detail_key` + `detail_params`; el texto
+    // en inglés que trae en `detail` es solo el fallback para claves desconocidas.
+    runtime: {
+      binaryCudaReady: "Binary + CUDA ready",
+      binaryNoCuda: "Binary without CUDA DLLs — download pending",
+      readyToDownload: "Ready to download",
+      installed: "Installed",
+      installedExe: "Installed ({exe})",
+      notInstalled: "Not installed",
+      notImplemented: "Not implemented",
+      dockerVersion: "Docker {version}",
+      dockerAvailable: "Available",
+      sdkMissing: "pip install docker",
+      startDockerDesktop: "Start Docker Desktop",
+      installDockerDesktop: "Install Docker Desktop",
+    },
     port: {
       with: "Port :{port}",
       none: "No local port",
@@ -63,6 +97,10 @@ export const engines = {
     toast: {
       listError: "Could not load the list of engines",
     },
+    errors: {
+      notInstalled: "{name} is not installed.",
+      installFrom: " Install it from {url}",
+    },
     empty: {
       title: "No engines available",
       body: "No inference engines were found. Check that the backend is running.",
@@ -84,6 +122,36 @@ export const engines = {
     },
     badge: {
       optimizable: "optimizable",
+    },
+    description: {
+      llamacpp:
+        "Servidor llama.cpp con soporte GGUF y MoE offload (--n-cpu-moe). Modo nativo: descarga el binario oficial.",
+      ollama:
+        "Daemon Ollama: modelos vía su registro propio (llama3.2:1b, qwen2.5:7b…). API compatible con OpenAI.",
+      vllm: "Servidor vLLM con prefix caching y speculative decoding (DFLASH/EAGLE). Solo Docker + GPU NVIDIA.",
+      sglang:
+        "Servidor SGLang con chunked prefill + speculative decoding (EAGLE3/DFLASH). Solo Docker + GPU NVIDIA.",
+      tgi: "HuggingFace text-generation-inference. Solo Docker + GPU NVIDIA.",
+      stablediffusion:
+        "Servidor stable-diffusion.cpp para generación de imagen local (GGUF/safetensors). Soporta SD1.x/SDXL en un solo archivo y FLUX multi-archivo. Vídeo (Wan2.1/LTX): próximamente.",
+      openai: "API cloud — solo sampling.",
+      anthropic: "API cloud — solo sampling.",
+      openrouter: "Agregador de APIs — solo sampling.",
+      nvidia: "API cloud — solo sampling.",
+    },
+    runtime: {
+      binaryCudaReady: "Binario + CUDA listos",
+      binaryNoCuda: "Binario sin DLLs CUDA — descarga pendiente",
+      readyToDownload: "Listo para descargar",
+      installed: "Instalado",
+      installedExe: "Instalado ({exe})",
+      notInstalled: "No instalado",
+      notImplemented: "No implementado",
+      dockerVersion: "Docker {version}",
+      dockerAvailable: "Disponible",
+      sdkMissing: "pip install docker",
+      startDockerDesktop: "Arranca Docker Desktop",
+      installDockerDesktop: "Instala Docker Desktop",
     },
     port: {
       with: "Puerto :{port}",
@@ -129,6 +197,10 @@ export const engines = {
     },
     toast: {
       listError: "No se pudo cargar la lista de motores",
+    },
+    errors: {
+      notInstalled: "{name} no está instalado.",
+      installFrom: " Instálalo desde {url}",
     },
     empty: {
       title: "No hay motores disponibles",

@@ -19,7 +19,9 @@ class LlamaCppEngine(Engine):
                 default_port=8080,
                 image="ghcr.io/ggerganov/llama.cpp:server-cuda",
                 optimizable=True,
-                description="Servidor llama.cpp con soporte GGUF y MoE offload (--n-cpu-moe). Modo nativo: descarga binario oficial.",
+                # Texto en inglés: es el FALLBACK de la UI (que traduce por
+                # `engines.description.<id>`) y lo que ven los consumidores de la API.
+                description="llama.cpp server with GGUF support and MoE offload (--n-cpu-moe). Native mode: downloads the official binary.",
                 runtimes=["native", "docker"],
                 default_runtime="native",
             )

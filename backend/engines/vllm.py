@@ -19,7 +19,7 @@ class VllmEngine(Engine):
                 default_port=8000,
                 image="vllm/vllm-openai:latest",
                 optimizable=True,
-                description="Servidor vLLM con prefix caching y speculative decoding (DFLASH/EAGLE). Solo Docker + GPU NVIDIA.",
+                description="vLLM server with prefix caching and speculative decoding (DFLASH/EAGLE). Docker + NVIDIA GPU only.",
                 runtimes=["docker"],
                 default_runtime="docker",
             )

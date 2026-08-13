@@ -19,7 +19,7 @@ class OllamaEngine(Engine):
                 default_port=11434,
                 image="ollama/ollama:latest",
                 optimizable=True,
-                description="Daemon Ollama: modelos vía su registro propio (llama3.2:1b, qwen2.5:7b…). API OpenAI-compatible.",
+                description="Ollama daemon: models from its own registry (llama3.2:1b, qwen2.5:7b…). OpenAI-compatible API.",
                 runtimes=["native", "docker"],
                 default_runtime="native",
             )

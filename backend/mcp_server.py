@@ -46,7 +46,7 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         raise RuntimeError(_BACKEND_DOWN) from e
     except httpx.HTTPStatusError as e:
         raise RuntimeError(
-            f"InferBench devolvió HTTP {e.response.status_code}: {e.response.text[:300]}"
+            f"InferBench returned HTTP {e.response.status_code}: {e.response.text[:300]}"
         ) from e
     except httpx.HTTPError as e:
         raise RuntimeError(f"Error contactando InferBench: {e}") from e

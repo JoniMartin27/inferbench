@@ -189,7 +189,7 @@ async def _download_zip(
     """
     url = asset["browser_download_url"]
     if not _is_trusted_dl_host(url):
-        raise RuntimeError(f"URL de descarga no confiable (host fuera de GitHub): {url}")
+        raise RuntimeError(f"Untrusted download URL (host outside GitHub): {url}")
     size = asset.get("size", 0)
     name = asset["name"]
     # Digest esperado que publica la API de GitHub (formato "sha256:abc…"). Viaja por
@@ -212,7 +212,7 @@ async def _download_zip(
                 resp.raise_for_status()
                 # Tras seguir redirects, el host final también debe ser de GitHub.
                 if not _is_trusted_dl_host(str(resp.url)):
-                    raise RuntimeError(f"Redirect de descarga a host no confiable: {resp.url}")
+                    raise RuntimeError(f"Download redirected to an untrusted host: {resp.url}")
                 async for chunk in resp.aiter_bytes(chunk_size=131072):
                     if cancel_event is not None and cancel_event.is_set():
                         raise asyncio.CancelledError(f"Descarga de {name} cancelada por el usuario")
@@ -250,8 +250,8 @@ async def _download_zip(
         if actual_digest != expected_digest:
             zip_path.unlink(missing_ok=True)
             raise RuntimeError(
-                f"Checksum SHA-256 no coincide para {name}: "
-                f"esperado {expected_digest}, obtenido {actual_digest}. Descarga abortada."
+                f"SHA-256 checksum mismatch for {name}: "
+                f"expected {expected_digest}, got {actual_digest}. Download aborted."
             )
         logger.info(f"Checksum verificado para {name}: sha256:{actual_digest}")
     else:
@@ -307,9 +307,7 @@ async def install_llamacpp(
 
         main_asset = _match_asset(assets, terms) if need_main else None
         if need_main and not main_asset:
-            raise RuntimeError(
-                f"No se encontró asset compatible en release {tag}. Términos: {terms}"
-            )
+            raise RuntimeError(f"No compatible asset found in release {tag}. Terms: {terms}")
 
         cudart_asset = None
         if need_cudart:
@@ -352,7 +350,7 @@ async def install_llamacpp(
     if not found:
         contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:30]
         raise RuntimeError(
-            f"{_exe_name()} no encontrado tras extraer. Contenido: {contents or '(vacío)'}"
+            f"{_exe_name()} not found after extracting. Contents: {contents or '(empty)'}"
         )
 
     if found.name != _exe_name():
@@ -504,9 +502,7 @@ async def install_stablediffusion(
 
         main_asset = _match_sd_asset(assets, terms) if need_main else None
         if need_main and not main_asset:
-            raise RuntimeError(
-                f"No se encontró asset de sd.cpp compatible en release {tag}. Términos: {terms}"
-            )
+            raise RuntimeError(f"No compatible sd.cpp asset found in release {tag}. Terms: {terms}")
 
         cudart_asset = None
         if need_cudart:
@@ -529,8 +525,8 @@ async def install_stablediffusion(
     if not found:
         contents = sorted(p.name for p in target.rglob("*") if p.is_file())[:30]
         raise RuntimeError(
-            f"{_sd_server_exe_name()} no encontrado tras extraer sd.cpp. "
-            f"Contenido: {contents or '(vacío)'}"
+            f"{_sd_server_exe_name()} not found after extracting sd.cpp. "
+            f"Contents: {contents or '(empty)'}"
         )
 
     # Aplanar: mover el binario y sus DLLs hermanas al directorio raíz del motor.

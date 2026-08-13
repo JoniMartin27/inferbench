@@ -80,7 +80,7 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
             {
                 "type": "log",
                 "level": "info",
-                "text": f"Motor {runner.req.engine} ocupado por otra run; esperando turno…",
+                "text": f"Engine {runner.req.engine} is busy with another run; waiting for its turn…",
             }
         )
     async with lock:

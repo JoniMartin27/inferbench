@@ -23,9 +23,25 @@ a = Analysis(
     ["main.py"],
     pathex=[str(ROOT)],
     binaries=[],
+    # TODO el contenido de data/ MENOS la base de datos.
+    #
+    # Antes se listaban models.json y prompts.json a mano, y se quedaban fuera los assets
+    # que referencia el propio prompts.json: `vision_scene.png`, `vision_count.png` y
+    # `context_haystack.txt`. Medido en el exe instalado — su bundle solo traía los dos
+    # JSON — así que **3 de los 7 prompts estaban rotos en la app empaquetada**:
+    # `vision-scene`, `vision-count` y `long-context` no encontraban su fichero.
+    # Enumerar a mano se rompe en cuanto alguien añade un prompt con asset nuevo; hay un
+    # test (`tests/test_datos_empaquetados.py`) que ata el spec a lo que pide prompts.json.
+    #
+    # El .sqlite NO se empaqueta: es la base de datos de desarrollo y además, congelado,
+    # la app usa la de %APPDATA% (ver `db._db_path`). Meterla aquí distribuiría runs de
+    # pruebas a todo el que instale.
     datas=[
-        ("data/models.json", "data"),
-        ("data/prompts.json", "data"),
+        *[
+            (str(p), "data")
+            for p in sorted((ROOT / "data").iterdir())
+            if p.is_file() and p.suffix != ".sqlite"
+        ],
         *_pkg_metadata,
     ],
     hiddenimports=[

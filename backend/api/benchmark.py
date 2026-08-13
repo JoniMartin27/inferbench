@@ -73,6 +73,29 @@ async def start_run(req: BenchmarkRequest) -> dict[str, str]:
     return {"run_id": runner.run_id}
 
 
+def _merge_resolved_opts(opts_json: str | None, resolved: dict[str, Any]) -> str | None:
+    """Funde en `engine_opts` la configuración que de verdad se ejecutó.
+
+    Con `auto=true` el usuario no manda contexto ni KV-cache: los elige el planificador al
+    arrancar el motor. Sin esto, el Historial enseñaba `—` en las columnas KV y CTX de la
+    comparación en todas las runs automáticas — o sea, no se podía saber a posteriori con
+    qué configuración se había medido. Lo resuelto MANDA sobre lo pedido: es lo que corrió.
+
+    Nunca rompe la persistencia del run: si el JSON no se puede leer, se deja como estaba.
+    """
+    if not resolved or not opts_json:
+        return opts_json
+    try:
+        opts = json.loads(opts_json)
+        if not isinstance(opts, dict):
+            return opts_json
+        opts["engine_opts"] = {**(opts.get("engine_opts") or {}), **resolved}
+        return json.dumps(opts)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.warning(f"no pude guardar la config resuelta del run: {e}")
+        return opts_json
+
+
 async def _run_and_persist(runner: BenchmarkRunner) -> None:
     lock = _engine_lock(runner.req.engine)
     if lock.locked():
@@ -91,6 +114,7 @@ async def _run_and_persist(runner: BenchmarkRunner) -> None:
         run = s.get(BenchmarkRun, runner.run_id)
         if run:
             run.status = "done"
+            run.opts_json = _merge_resolved_opts(run.opts_json, runner.resolved_opts)
             s.add(run)
         for r in runner.results:
             s.add(BenchmarkResult(run_id=runner.run_id, **r.model_dump()))

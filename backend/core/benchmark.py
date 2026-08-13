@@ -872,6 +872,13 @@ class BenchmarkRunner:
         # mitad de run. `emit` descarta el evento más viejo cuando está llena.
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=2000)
         self.results: list[ResultPayload] = []
+        # Config que de verdad se ejecutó. Con `auto=true` el usuario no manda ctx ni KV: los
+        # decide el planificador al arrancar el motor, y hasta ahora ese resultado solo salía
+        # en el log en vivo y se perdía. En el Historial, las columnas KV y CTX de la
+        # comparación salían vacías (`—`) en TODAS las runs automáticas, que son casi todas:
+        # justo los dos campos que dicen con qué configuración se midió. `api/benchmark.py`
+        # lo funde en `opts_json.engine_opts` al persistir.
+        self.resolved_opts: dict[str, Any] = {}
         self.hw = detect_hardware()
         self.is_api = req.engine in API_ENGINES
         self.base_url = req.base_url or DEFAULT_BASE_URLS.get(req.engine)
@@ -1428,6 +1435,22 @@ class BenchmarkRunner:
             n_threads = int(req_opts.get("threads", max(2, psutil.cpu_count(logical=False) or 4)))
             batch = int(req_opts.get("batchSize", 2048))
             ubatch = int(req_opts.get("ubatchSize", 512))
+
+            # Deja constancia del plan REAL para que el Historial pueda decir con qué
+            # configuración se midió (ver `resolved_opts` en __init__).
+            self.resolved_opts = {
+                "contextLen": ctx,
+                "kvCacheK": kv_k,
+                "kvCacheV": kv_v,
+                "nkvo": kv_in_ram,
+                "ngl": ngl,
+                "nglMode": ngl_mode,
+                "flashAttn": fa,
+                "mlock": mlock,
+                "noMmap": no_mmap,
+                **({"moeOffload": moe} if moe else {}),
+                **({"cacheReuse": cache_reuse} if cache_reuse else {}),
+            }
 
             await self.emit(
                 {

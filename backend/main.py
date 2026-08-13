@@ -18,12 +18,20 @@ from api.keys import router as keys_router
 from api.optimize import router as optimize_router
 from api.serve import router as serve_router
 from core.docker_mgr import availability as docker_availability
-from db import init_db
+from db import init_db, reconcile_orphan_runs
 
 
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     init_db()
+    # Runs que quedaron colgadas en `running` de una ejecución anterior: el proceso que las
+    # ejecutaba ya no existe, así que aquí es donde se cierran. Si no, el Historial las
+    # enseña "en curso" para siempre y no hay forma de pararlas.
+    huerfanas = reconcile_orphan_runs()
+    if huerfanas:
+        logger.warning(
+            f"{huerfanas} run(s) quedaron a medias en un arranque anterior; marcadas como interrumpidas."
+        )
     # El transporte HTTP de MCP (montado bajo /mcp) necesita que su gestor de sesiones
     # corra durante la vida de la app. Starlette no ejecuta el lifespan de sub-apps
     # montadas, así que lo encadenamos aquí. Si `mcp` no está instalado, seguimos sin MCP

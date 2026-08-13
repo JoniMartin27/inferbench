@@ -9,6 +9,7 @@ import uuid
 from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 from sse_starlette.sse import EventSourceResponse
 
 from pydantic import BaseModel, Field
@@ -204,10 +205,24 @@ async def sweep_stop(sweep_id: str) -> SweepState:
 @router.post("/{run_id}/stop")
 async def stop_run(run_id: str) -> dict[str, str | bool]:
     runner = _RUNNERS.get(run_id)
-    if not runner:
-        raise HTTPException(404, f"Unknown or already finished run_id: {run_id}")
-    runner.cancel()
-    return {"run_id": run_id, "cancelled": True}
+    if runner:
+        runner.cancel()
+        return {"run_id": run_id, "cancelled": True}
+
+    # No está en memoria. Antes esto era un 404 seco, y ahí estaba la trampa: una run que
+    # quedó marcada `running` en la base de datos (backend caído, app cerrada a mitad) se
+    # veía "en curso" en el Historial y NO había manera de pararla — el único botón para
+    # hacerlo respondía 404. Si la fila sigue en `running`, el proceso que la ejecutaba ya
+    # no existe: la cerramos aquí en vez de mentir diciendo que no existe.
+    with get_session() as s:
+        run = s.get(BenchmarkRun, run_id)
+        if run and run.status == "running":
+            run.status = "interrupted"
+            s.add(run)
+            s.commit()
+            logger.info(f"Run {run_id} estaba colgada en 'running' sin proceso vivo; cerrada.")
+            return {"run_id": run_id, "cancelled": True, "was_orphan": True}
+    raise HTTPException(404, f"Unknown or already finished run_id: {run_id}")
 
 
 @router.get("/{run_id}/stream")

@@ -78,8 +78,28 @@ def _is_api(engine_id: str) -> bool:
     return engine_id in {"openai", "anthropic", "openrouter", "nvidia"}
 
 
+def quants_above_floor(engine_id: str, floor: str | None) -> list[str]:
+    """Las cuantizaciones del motor hasta `floor` incluido (van de mayor a menor calidad).
+
+    `floor=None` devuelve la lista entera. Si `floor` no está en la lista del motor se
+    devuelve entera también: es preferible recomendar algo a no recomendar nada por una
+    errata en el nombre del quant.
+    """
+    quants = ENGINE_QUANTS.get(engine_id, ENGINE_QUANTS["llamacpp"])
+    if not floor:
+        return list(quants)
+    objetivo = floor.lower()
+    for i, q in enumerate(quants):
+        if q.lower() == objetivo:
+            return list(quants[: i + 1])
+    return list(quants)
+
+
 def get_optimal_config(
-    engine_id: str, model_id: str, hw: HardwareInfo | None = None
+    engine_id: str,
+    model_id: str,
+    hw: HardwareInfo | None = None,
+    quant_floor: str | None = None,
 ) -> OptimalConfig:
     model = get_model(model_id)
     if model is None:
@@ -103,7 +123,7 @@ def get_optimal_config(
 
     hw = hw or detect_hardware()
     snap = compat.HardwareSnapshot(vram_gb=hw.primary_vram_gb, ram_gb=hw.ram_gb)
-    quants = ENGINE_QUANTS.get(engine_id, ENGINE_QUANTS["llamacpp"])
+    quants = quants_above_floor(engine_id, quant_floor)
     kv_pref = ENGINE_KV_PREFERENCE.get(engine_id, ["f16"])
 
     rationale: list[str] = [f"Hardware: {hw.primary_vram_gb}GB VRAM + {hw.ram_gb}GB RAM"]

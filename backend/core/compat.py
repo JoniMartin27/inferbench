@@ -82,6 +82,17 @@ QUANT_FACTOR: dict[str, float] = {
 }
 
 
+def bits_per_weight(quant: str) -> float | None:
+    """Bits por peso de una cuantización, o None si no está en la tabla.
+
+    Es el número que de verdad dice cuánto se está comprimiendo: `IQ1_S` son 1,5
+    bits/peso y `Q4_K_M` son 4,4. La UI lo enseña porque «IQ1_S» no le dice nada a
+    nadie, mientras que «1,5 bits/peso» sí.
+    """
+    b = QUANT_FACTOR.get(quant) or QUANT_FACTOR.get(quant.upper())
+    return round(b * 8, 1) if b else None
+
+
 KV_FACTOR: dict[str, float] = {
     # f16 baseline (2 bytes/valor)
     "f16": 1.0,

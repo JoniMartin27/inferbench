@@ -73,7 +73,8 @@ export const dashboard = {
       "api": "API"
     },
     "rec": {
-      "ctx": "ctx {ctx}"
+      "ctx": "ctx {ctx}",
+      "bpw": "{bpw} bits/weight"
     },
     "toast": {
       "loadError": "Could not load dashboard data"
@@ -152,7 +153,8 @@ export const dashboard = {
       "api": "API"
     },
     "rec": {
-      "ctx": "ctx {ctx}"
+      "ctx": "ctx {ctx}",
+      "bpw": "{bpw} bits/peso"
     },
     "toast": {
       "loadError": "No se pudieron cargar los datos del dashboard"

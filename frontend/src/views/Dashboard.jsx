@@ -341,7 +341,7 @@ function Row({ k, v }) {
 
 function ModelRecRow({ row, onNavigate, accent }) {
   const t = useT();
-  const { model, config, techniques, engine_note } = row;
+  const { model, config, techniques, engine_note, bits_per_weight: bpw } = row;
   const accents = {
     emerald: "from-emerald-500/20 to-cyan-500/20 text-emerald-300",
     purple: "from-purple-500/20 to-indigo-500/20 text-purple-300",
@@ -365,6 +365,14 @@ function ModelRecRow({ row, onNavigate, accent }) {
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
           <Badge tone={compatTone(config.status)}>{t(compatLabel(config.status))}</Badge>
           {config.quant && <Badge tone="indigo">{config.quant}</Badge>}
+          {/* El nombre del quant no dice cuánto se comprime; los bits/peso sí. Y por debajo
+              de 4 se avisa: es donde la evidencia publicada deja de respaldar el canje de
+              precisión por tamaño, y donde inferbench no ha medido nada todavía. */}
+          {bpw != null && (
+            <Badge tone={bpw < 4 ? "amber" : "slate"}>
+              {t("dashboard.rec.bpw", { bpw })}
+            </Badge>
+          )}
           {config.engine !== "llamacpp" && <Badge tone="amber">{config.engine}</Badge>}
           <Badge tone="slate">{model.params_b}B</Badge>
           {model.is_moe && <Badge tone="purple">MoE</Badge>}

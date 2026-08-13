@@ -30,6 +30,12 @@ from engines.base import Engine
 router = APIRouter(prefix="/api", tags=["optimize"])
 
 _STATUS_RANK: dict[str, int] = {"ok": 0, "moe": 1, "partial": 2, "cpu": 3, "disk": 4}
+
+# Cuantización mínima que se considera «calidad usable» al RECOMENDAR. Es el mismo piso que
+# `optimizer.most_powerful_per_compression` lleva aplicando desde siempre en la tabla de
+# Benchmark; aquí faltaba, y por eso las dos vistas de la app se contradecían.
+# Nada impide ejecutar por debajo: el piso solo decide qué se PRESENTA como recomendado.
+QUALITY_FLOOR: dict[str, str] = {"llamacpp": "Q4_K_M", "ollama": "q4_K_M"}
 _STATUS_SCORE: dict[str, float] = {
     "ok": 1.0,
     "moe": 0.9,
@@ -52,6 +58,9 @@ class RecommendationRow(BaseModel):
     config: OptimalConfig
     techniques: list[str]
     engine_note: str | None = None
+    # «IQ1_S» no le dice nada a nadie; «1,5 bits/peso» sí. Va aquí para que la UI pueda
+    # enseñar cuánto se está comprimiendo de verdad sin tener que replicar la tabla.
+    bits_per_weight: float | None = None
 
 
 class QuantOption(BaseModel):
@@ -105,10 +114,31 @@ async def optimize(req: OptimizeRequest) -> OptimizeResponse:
 
 
 @router.get("/optimize/recommendations", response_model=list[RecommendationRow])
-async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[RecommendationRow]:
-    """Para cada modelo del catálogo, encuentra el mejor motor+cuantización+KV que cabe en el hardware
-    actual. Devuelve los top N modelos más potentes y ejecutables, ordenados por calidad de status
-    y luego por número de parámetros.
+async def recommendations(
+    top: int = Query(15, ge=1, le=500),
+    quality_floor: bool = Query(True),
+) -> list[RecommendationRow]:
+    """Para cada modelo del catálogo, el mejor motor+cuantización+KV que cabe en este hardware.
+
+    **Con piso de calidad (por defecto).** Sin él, esta lista era «el modelo más grande que
+    quepa, cueste lo que cueste»: en una GPU de 8 GB devolvía 15 de 15 modelos a menos de
+    3 bits por peso (14× IQ1_S, 1× IQ2_XS), encabezados por un 35B a 1,5 bits/peso. Tres
+    razones para no hacer eso:
+
+    1. **El propio repo ya lo había decidido.** `optimizer.most_powerful_per_compression`
+       —la tabla de Benchmark— aplica desde siempre un piso `≥Q4_K_M` con el comentario
+       «sin piso, el más potente sería siempre un modelo enorme a IQ1_S (1.5-bit,
+       inservible)». El Dashboard contradecía a la otra vista de la misma app.
+    2. **La evidencia publicada apunta a 4 bits.** Dettmers & Zettlemoyer (ICML 2023),
+       35.000 experimentos: para un presupuesto fijo de bits totales, 4 bits es
+       «casi universalmente óptimo» en precisión. Su barrido va de 3 a 8 bits, así que
+       IQ1_S ni siquiera entra en el rango estudiado.
+    3. **inferbench no lo ha medido NUNCA.** Cero runs a IQ1_S en la base de datos. La app
+       existe para desmentir promesas sin medir; no puede recomendar de portada lo que no
+       ha medido.
+
+    `quality_floor=false` devuelve la lista sin piso. No se esconde nada: se deja de
+    presentar como recomendación por defecto.
     """
     hw_info = detect_hardware()
     snap = _compat.HardwareSnapshot(vram_gb=hw_info.primary_vram_gb, ram_gb=hw_info.ram_gb)
@@ -119,7 +149,8 @@ async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[Recommenda
     for model in load_models():
         best_per_engine: dict[str, OptimalConfig] = {}
         for eng_id in local_engine_ids:
-            cfg = get_optimal_config(eng_id, model.id, hw=hw_info)
+            floor = QUALITY_FLOOR.get(eng_id) if quality_floor else None
+            cfg = get_optimal_config(eng_id, model.id, hw=hw_info, quant_floor=floor)
             if cfg.feasible:
                 best_per_engine[eng_id] = cfg
 
@@ -156,6 +187,7 @@ async def recommendations(top: int = Query(15, ge=1, le=500)) -> list[Recommenda
                 config=winner,
                 techniques=techniques,
                 engine_note=engine_note,
+                bits_per_weight=_compat.bits_per_weight(winner.quant) if winner.quant else None,
             )
         )
 

@@ -21,11 +21,11 @@ indigo/slate, sin vista Guide, sin nav agrupada y sin la tabla de motores por mo
 |---|---|---|
 | Resolución de captura | 1280×800, `deviceScaleFactor: 1` | Es la ventana típica de la app de escritorio; todo entra sin scroll horizontal. |
 | Idioma de la UI | **inglés** (`inferbench:lang = en`) | Es el idioma por defecto de la app y el GIF también se usa en los materiales de lanzamiento en inglés. El recorder acepta `IB_LANG=es` para sacar un corte en castellano sin tocar código. |
-| Duración | **40,3 s** (medida) | Por encima de ~45 s nadie lo mira entero. |
+| Duración | **39,4 s** (medida) | Por encima de ~45 s nadie lo mira entero. |
 | Ancho del GIF | **800 px** | El `README.md` lo pinta con `width="800"`: exportarlo a 900 solo añadía peso invisible. |
 | fps del GIF | **8** | MEDIDO: a 12 fps el GIF pesaba 8,4 MB y a 10 fps 6,0 MB pero con solo 32 colores (banding en los degradados del tema). A 8 fps caben 48 colores y el texto queda limpio; el contenido es texto y scroll, no vídeo. |
 | Colores | **48** | Ver arriba. Con 64 se va a 8,4 MB; con 32 se nota el ruido de dithering en la barra lateral. |
-| Peso | **5,8 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
+| Peso | **6,1 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
 | Tema | Fervon (carbon/ember), el de la app | Sin CSS inyectado para maquillar nada. |
 
 **Prohibido en esta grabación:** ocultar banners con CSS (la versión de junio tapaba el aviso
@@ -62,21 +62,21 @@ real.
 
 ## 3. Escaleta
 
-Duraciones **medidas en el GIF publicado** (40,3 s en total; toma 9 del 2026-08-13).
+Duraciones **medidas en el GIF publicado** (39,4 s en total; toma 10 del 2026-08-13).
 
 | # | Escena | Vista | Dur. | Tramo del GIF | Tramo de la toma |
 |---|---|---|---|---|---|
 | 0 | El flujo, de un vistazo | Guide | 2,1 s | 0,0 – 2,1 | 2,0 – 4,1 |
 | 1 | Tu máquina, tus modelos | Dashboard | 3,6 s | 2,1 – 5,7 | 4,2 – 7,8 |
 | 2 | La config óptima para TU equipo | Models | 6,4 s | 5,7 – 12,1 | 7,9 – 14,3 |
-| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 9,0 s | 12,1 – 21,1 | 18,6 – 27,6 |
-| 3b | La fila de resultados | Benchmark | 3,2 s | 21,1 – 24,3 | 30,2 – 33,4 |
-| 4 | Compara y decide | History | 6,8 s | 24,3 – 31,1 | 33,5 – 40,3 |
-| 5a | Y luego, sírvelo por MCP | Serve / MCP | 4,0 s | 31,1 – 35,1 | 40,6 – 44,6 |
-| 5b | La imagen + Connect over MCP | Serve / MCP | 5,1 s | 35,1 – 40,3 | 47,8 – 52,9 |
+| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 8,3 s | 12,1 – 20,4 | 18,6 – 26,9 |
+| 3b | La fila de resultados | Benchmark | 3,0 s | 20,4 – 23,4 | 29,9 – 32,9 |
+| 4 | Compara y decide | History | 6,8 s | 23,4 – 30,2 | 32,9 – 39,7 |
+| 5a | Y luego, sírvelo por MCP | Serve / MCP | 4,0 s | 30,2 – 34,2 | 39,9 – 43,9 |
+| 5b | La imagen + Connect over MCP | Serve / MCP | 5,1 s | 34,2 – 39,3 | 47,1 – 52,2 |
 
 La última columna es la **lista de cortes** (vive en `scripts/build-demo-gif.sh`): la toma
-cruda dura 53,2 s y el montaje quita lo que no aporta (la carga inicial de la página, el
+cruda dura 52,5 s y el montaje quita lo que no aporta (la carga inicial de la página, el
 bucle que insiste con el quant, y parte del tramo de "Generating…" — se dejan ~3 s para
 que no parezca instantáneo; el tiempo real sale escrito en la propia imagen). No se
 acelera nada: los tramos que quedan van a velocidad real. **Entre tomas hay ~0,5 s de
@@ -93,6 +93,13 @@ deriva**, así que si regrabas hay que sacar los cortes otra vez mirando fotogra
 > leer la tabla entera y las cuatro gráficas, que además ahora son el doble de anchas.
 > Descartado grabar en una ventana más estrecha para agrandar el texto: a 1152 px la tabla
 > de motores por modelo ya se corta (necesita 384 px y solo caben 368).
+>
+> **Vuelta 3:** en esa misma tabla, las columnas `KV` y `CTX` salían vacías (`—`) porque
+> con `auto=true` el contexto y la KV los elige el planificador al arrancar el motor y ese
+> resultado no se guardaba en ningún sitio. Arreglado en el producto (el run persiste la
+> config que de verdad corrió) y regrabado: ahora la comparación es limpia de verdad —
+> mismo modelo, misma KV (f16), mismo contexto (131.072), **solo cambia el quant**, y por
+> eso los 308,8 vs 227,1 tok/s significan algo.
 
 La escena 3 se lleva un tercio del metraje a propósito: es el producto. El resto son el
 antes (qué elijo, con qué config) y el después (comparar, servir).
@@ -186,8 +193,10 @@ deja leer la tabla comparativa entera y luego scroll a las gráficas de abajo.
 **Qué se ve:** la tabla comparativa **completa y a lo ancho de la pantalla** (run, engine,
 model, quant, KV, ctx, `AVG TPS`, `AVG TTFT`, `AVG QUALITY`, `VRAM PEAK`) y las cuatro
 gráficas por prompt: `TOK/S`, `TTFT`, `QUALITY PER PROMPT` y `VRAM PEAK (GB) PER PROMPT`,
-con las dos series una al lado de la otra. En la toma actual: **308,0 vs 224,4 tok/s de
-media, misma calidad (100) y menos VRAM (6,84 vs 7,32 GB)** — el Q4 gana en las tres.
+con las dos series una al lado de la otra. En la toma actual, con **la misma KV (f16) y el
+mismo contexto (131.072) en las dos filas**, o sea cambiando una sola variable:
+**308,8 vs 227,1 tok/s de media, mismo TTFT (281 ms), misma calidad (100) y menos VRAM
+(6,83 vs 7,30 GB)** — el Q4 gana en todo lo que se mide.
 
 **Qué vende:** contesta la pregunta con la que vive cualquiera que corre modelos en local:
 *¿me compensa Q8 sobre Q4 en mi máquina?* — con tus números, no con los de un blog.

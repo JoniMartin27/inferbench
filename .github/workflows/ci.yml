@@ -11,8 +11,18 @@ permissions:
 
 jobs:
   backend:
-    name: Backend · lint + tests
-    runs-on: ubuntu-latest
+    name: Backend · lint + tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # inferbench se DISTRIBUYE para los tres sistemas (el release construye .exe, .dmg y
+    # .AppImage), pero la suite solo corría en Linux. Resultado medido el 2026-08-13:
+    # `psutil.cpu_freq` no existe en macOS, `_detect_cpu()` reventaba, y como
+    # `BenchmarkRunner.__init__` llama a `detect_hardware()`, en un Mac fallaba TODO
+    # benchmark. Llevaba ahí desde siempre y ningún CI lo veía. Probar donde se distribuye
+    # es la única forma de cazar esta clase de fallo.
+    strategy:
+      fail-fast: false  # si macOS falla, queremos ver igual el veredicto de los otros dos
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     defaults:
       run:
         working-directory: backend
@@ -31,8 +41,12 @@ jobs:
       # falla si el lock no cuadra con pyproject.toml, así que no puede quedarse obsoleto
       # en silencio. Para subir una dependencia: `uv lock --upgrade-package X` y se ve en
       # el diff.
+      # `--python 3.11` explícito: sin él uv elige el intérprete más nuevo que encuentre en
+      # el runner, no el que instala setup-python. Se descubrió construyendo el sidecar,
+      # que salió con CPython 3.14 (ver PR #47); aquí el riesgo es el mismo, validar sobre
+      # un runtime que nadie distribuye.
       - name: Install deps (uv.lock)
-        run: uv sync --locked --extra dev
+        run: uv sync --locked --python 3.11 --extra dev
       - name: Ruff (lint)
         run: uv run ruff check core api main.py tests
       # `black` estaba configurado en pyproject y declarado como dep de dev, pero no lo

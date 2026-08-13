@@ -17,8 +17,11 @@ con `importlib.reload` para probar la constante: SQLModel registra las tablas al
 y el segundo import revienta con "Table 'benchmark_runs' is already defined".
 """
 
+import os
 import pathlib
 import sys
+
+import pytest
 
 import db as db_mod
 
@@ -34,8 +37,14 @@ def _ruta(monkeypatch, *, frozen: bool, appdata=None, home=None):
     return db_mod._db_path()
 
 
-def test_empaquetado_guarda_en_los_datos_del_usuario(monkeypatch, tmp_path):
-    """Lo que arregla el fallo: congelado NO puede escribir junto al ejecutable."""
+@pytest.mark.skipif(os.name != "nt", reason="la rama de APPDATA es solo de Windows")
+def test_empaquetado_guarda_en_appdata_en_windows(monkeypatch, tmp_path):
+    """Lo que arregla el fallo: congelado NO puede escribir junto al ejecutable.
+
+    Solo en Windows: el código exige `os.name == "nt" AND APPDATA`, así que en el CI
+    (Linux) esta rama no se toma y el fallback lo cubre el test de abajo. No parchees
+    `os.name` para forzarla — envenena `pathlib` (ver nota del otro test).
+    """
     appdata = tmp_path / "Roaming"
     appdata.mkdir()
 

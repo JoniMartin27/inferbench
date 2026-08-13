@@ -217,8 +217,8 @@ async function main() {
   }
   await sleep(200);
   await page.getByRole("button", { name: /Compare|Comparar/i }).first().click();
-  await sleep(1400);
-  await scrollMain(page, 520); // encuadra las gráficas por prompt (incluida QUALITY)
+  await sleep(1800); // la tabla comparativa entera (10 columnas) + las dos gráficas de arriba
+  await scrollMain(page, 460); // baja a QUALITY y VRAM PEAK por prompt, con sus leyendas
   await sleep(2400);
 
   // ---- Escena 5: Serve / MCP — y luego, sírvelo (5,5 s) ----
@@ -241,7 +241,10 @@ async function main() {
   await page.locator('img[src^="data:image"], img[src^="blob:"]').first().waitFor({ timeout: 60000 }).catch(() => {});
   mark("   imagen generada");
   await sleep(1500);
-  await scrollMain(page, 700); // hasta "Connect over MCP"
+  // 560 y no 700: con 700 la columna izquierda se queda en negro (sus tarjetas son más
+  // cortas) y el plano final era medio vacío. Así entra la cabecera de "Connect over MCP"
+  // sin perder de vista la imagen ni la tarjeta de estado.
+  await scrollMain(page, 560);
   await sleep(2400);
 
   mark("fin");

@@ -11,17 +11,18 @@ set -euo pipefail
 V="${1:?falta la toma .webm}"; OUT="${2:?falta el gif de salida}"
 FPS="${3:-8}"; COLORS="${4:-48}"; WIDTH="${5:-800}"
 
-# Tramos de la toma que SÍ entran (segundos). Válidos para la toma del 2026-08-13; si
-# regrabas, sácalos de nuevo mirando fotogramas, no a ojo.
+# Tramos de la toma que SÍ entran (segundos). Válidos para la toma del 2026-08-13 (la 9);
+# si regrabas, sácalos de nuevo MIRANDO fotogramas, no a ojo — entre tomas hay medio
+# segundo de deriva y los cortes se notan.
 SEGS=(
   "2.0:4.1"    # escena 0 · Guide
   "4.2:7.8"    # escena 1 · Dashboard
   "7.9:14.3"   # escena 2 · Models + panel de configuración óptima
-  "18.3:27.8"  # escena 3 · config final del benchmark + run en vivo
-  "30.5:34.1"  # escena 3 · fila de RESULTS
-  "34.4:40.2"  # escena 4 · History + comparación
-  "41.0:45.3"  # escena 5 · Serve/MCP: prompt, Generate y spinner
-  "47.6:53.2"  # escena 5 · imagen generada + Connect over MCP
+  "18.6:27.6"  # escena 3 · config final del benchmark + run en vivo
+  "30.2:33.4"  # escena 3 · fila de RESULTS
+  "33.5:40.3"  # escena 4 · History: tabla comparativa entera + gráficas por prompt
+  "40.6:44.6"  # escena 5 · Serve/MCP: prompt, Generate y spinner
+  "47.8:52.9"  # escena 5 · imagen generada + Connect over MCP
 )
 
 filter=""; labels=""; i=0

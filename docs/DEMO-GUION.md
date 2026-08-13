@@ -11,7 +11,8 @@ posterior comprueba escena por escena los criterios de aceptación de aquí.
 > maquilla.
 
 Última regrabación: **2026-08-13** (la anterior era del 2026-06-08, con el tema viejo
-indigo/slate, sin vista Guide, sin nav agrupada y sin la tabla de motores por modelo).
+indigo/slate, la nav sin agrupar, sin la tabla de motores por modelo y sin la escena de
+Serve/MCP).
 
 ---
 
@@ -21,11 +22,11 @@ indigo/slate, sin vista Guide, sin nav agrupada y sin la tabla de motores por mo
 |---|---|---|
 | Resolución de captura | 1280×800, `deviceScaleFactor: 1` | Es la ventana típica de la app de escritorio; todo entra sin scroll horizontal. |
 | Idioma de la UI | **inglés** (`inferbench:lang = en`) | Es el idioma por defecto de la app y el GIF también se usa en los materiales de lanzamiento en inglés. El recorder acepta `IB_LANG=es` para sacar un corte en castellano sin tocar código. |
-| Duración | **39,4 s** (medida) | Por encima de ~45 s nadie lo mira entero. |
+| Duración | **38,8 s** (medida) | Por encima de ~45 s nadie lo mira entero. |
 | Ancho del GIF | **800 px** | El `README.md` lo pinta con `width="800"`: exportarlo a 900 solo añadía peso invisible. |
 | fps del GIF | **8** | MEDIDO: a 12 fps el GIF pesaba 8,4 MB y a 10 fps 6,0 MB pero con solo 32 colores (banding en los degradados del tema). A 8 fps caben 48 colores y el texto queda limpio; el contenido es texto y scroll, no vídeo. |
 | Colores | **48** | Ver arriba. Con 64 se va a 8,4 MB; con 32 se nota el ruido de dithering en la barra lateral. |
-| Peso | **6,1 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
+| Peso | **6,5 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
 | Tema | Fervon (carbon/ember), el de la app | Sin CSS inyectado para maquillar nada. |
 
 **Prohibido en esta grabación:** ocultar banners con CSS (la versión de junio tapaba el aviso
@@ -62,21 +63,20 @@ real.
 
 ## 3. Escaleta
 
-Duraciones **medidas en el GIF publicado** (39,4 s en total; toma 10 del 2026-08-13).
+Duraciones **medidas en el GIF publicado** (38,8 s en total; toma 11 del 2026-08-13).
 
 | # | Escena | Vista | Dur. | Tramo del GIF | Tramo de la toma |
 |---|---|---|---|---|---|
-| 0 | El flujo, de un vistazo | Guide | 2,1 s | 0,0 – 2,1 | 2,0 – 4,1 |
-| 1 | Tu máquina, tus modelos | Dashboard | 3,6 s | 2,1 – 5,7 | 4,2 – 7,8 |
-| 2 | La config óptima para TU equipo | Models | 6,4 s | 5,7 – 12,1 | 7,9 – 14,3 |
-| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 8,3 s | 12,1 – 20,4 | 18,6 – 26,9 |
-| 3b | La fila de resultados | Benchmark | 3,0 s | 20,4 – 23,4 | 29,9 – 32,9 |
-| 4 | Compara y decide | History | 6,8 s | 23,4 – 30,2 | 32,9 – 39,7 |
-| 5a | Y luego, sírvelo por MCP | Serve / MCP | 4,0 s | 30,2 – 34,2 | 39,9 – 43,9 |
-| 5b | La imagen + Connect over MCP | Serve / MCP | 5,1 s | 34,2 – 39,3 | 47,1 – 52,2 |
+| 1 | Tu máquina, tus modelos (apertura) | Dashboard | 4,5 s | 0,0 – 4,5 | 2,4 – 6,9 |
+| 2 | La config óptima para TU equipo | Models | 6,5 s | 4,5 – 11,0 | 6,9 – 13,4 |
+| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 8,6 s | 11,0 – 19,6 | 17,7 – 26,3 |
+| 3b | La fila de resultados | Benchmark | 3,2 s | 19,6 – 22,8 | 29,2 – 32,4 |
+| 4 | Compara y decide | History | 6,8 s | 22,8 – 29,6 | 32,5 – 39,3 |
+| 5a | Y luego, sírvelo por MCP | Serve / MCP | 4,0 s | 29,6 – 33,6 | 39,5 – 43,5 |
+| 5b | La imagen + Connect over MCP | Serve / MCP | 5,1 s | 33,6 – 38,7 | 46,6 – 51,7 |
 
 La última columna es la **lista de cortes** (vive en `scripts/build-demo-gif.sh`): la toma
-cruda dura 52,5 s y el montaje quita lo que no aporta (la carga inicial de la página, el
+cruda dura 52,4 s y el montaje quita lo que no aporta (la carga inicial de la página, el
 bucle que insiste con el quant, y parte del tramo de "Generating…" — se dejan ~3 s para
 que no parezca instantáneo; el tiempo real sale escrito en la propia imagen). No se
 acelera nada: los tramos que quedan van a velocidad real. **Entre tomas hay ~0,5 s de
@@ -100,31 +100,34 @@ deriva**, así que si regrabas hay que sacar los cortes otra vez mirando fotogra
 > config que de verdad corrió) y regrabado: ahora la comparación es limpia de verdad —
 > mismo modelo, misma KV (f16), mismo contexto (131.072), **solo cambia el quant**, y por
 > eso los 308,8 vs 227,1 tok/s significan algo.
+>
+> **Vuelta 4:** fuera la escena 0. El GIF abría con **2,1 s de un panel congelado** de
+> `Guide` diciendo "6 / 6 steps completed": ni se movía nada —en un GIF que GitHub
+> autoreproduce, eso se lee como "se ha quedado colgado"— ni enseñaba un estado que un
+> usuario nuevo vea nunca (él vería 0/6). Ahora abre en `Dashboard`, con el hardware real
+> y modelos de 32-35B marcados `100% GPU` en una tarjeta de 8 GB **desde el primer
+> fotograma**, y con scroll de verdad en el primer segundo y medio.
 
 La escena 3 se lleva un tercio del metraje a propósito: es el producto. El resto son el
 antes (qué elijo, con qué config) y el después (comparar, servir).
 
 ---
 
-### Escena 0 — El flujo, de un vistazo · `Guide` · 2,5 s
+> **La vista `Guide` no sale en la demo, y es a propósito.** Fue la escena de apertura
+> hasta la vuelta 4: 2,1 s de un panel congelado con "6 / 6 steps completed". Como primer
+> plano de un GIF que GitHub autoreproduce, un fotograma quieto se lee como "esto se ha
+> colgado"; y además enseñaba un estado que un usuario nuevo no ve nunca (él vería 0/6).
+> Si algún día vuelve, que sea con movimiento y en mitad del recorrido, no abriendo.
 
-**Acción:** la app abre ya en Guide, sin clicks. Frame quieto.
+### Escena 1 — Tu máquina, tus modelos · `Dashboard` · 4,5 s · **es la apertura**
 
-**Qué se ve:** `6 / 6 steps completed`, y los pasos con su estado real —
-`Check your hardware · done` con "Intel64 · 31.88GB RAM · NVIDIA GeForce RTX 3070 (8GB VRAM)",
-`Your engine is ready · done` con "6 runtimes operational",
-`Available models · done` con "30 GGUF(s) detected on your disk".
+**Acción:** la app abre ya en Dashboard, sin clicks. Un segundo largo quieto en las
+tarjetas de cabecera y enseguida scroll por la sección `100% GPU — MAXIMUM SPEED`, un
+segundo scroll hasta `HARDWARE` / `LATEST ACTIVITY`, y vuelta arriba.
 
-**Qué vende:** en los dos primeros segundos ya se sabe que esto lee tu máquina de verdad, y
-que hay un camino guiado en vez de un panel de mandos que hay que adivinar.
-
-**Aceptación:** ningún paso en estado "checking"; el hardware real visible; barra de progreso
-pintada.
-
-### Escena 1 — Tu máquina, tus modelos · `Dashboard` · 4,0 s
-
-**Acción:** click en `Dashboard`, medio segundo quieto, scroll suave hacia abajo por la
-sección `100% GPU — MAXIMUM SPEED` y vuelta arriba.
+**Por qué abre aquí:** es el fotograma que más vende y el que más rápido se entiende — un
+modelo de 35B marcado `100% GPU` en una tarjeta de 8 GB. Y hay movimiento real en el
+primer segundo y medio, que es lo que hace que alguien siga mirando.
 
 **Qué se ve:** las cuatro tarjetas de cabecera (`RTX 3070 · 8 GB VRAM`, `31.88 GB` de RAM,
 `10/10` motores, `127` runs) y la rejilla de recomendaciones: modelos de **32B–35B** marcados

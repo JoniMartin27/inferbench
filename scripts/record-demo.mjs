@@ -76,7 +76,11 @@ async function main() {
 
   await page.addInitScript((lang) => {
     try { localStorage.setItem("inferbench:lang", lang); } catch {}
-    try { localStorage.setItem("inferbench:lastView", "guide"); } catch {}
+    // Abre en Dashboard, no en Guide: la apertura es el sitio más caro del GIF y Guide son
+    // 2 s de un panel congelado en "6/6 completado" — un estado que además ningún usuario
+    // nuevo ve nunca. El Dashboard arranca con hardware real y modelos de 32-35B marcados
+    // "100% GPU" en una tarjeta de 8 GB, que es el gancho.
+    try { localStorage.setItem("inferbench:lastView", "dashboard"); } catch {}
   }, LANG);
 
   await page.goto(FE, { waitUntil: "networkidle" });
@@ -84,21 +88,20 @@ async function main() {
   // ---- Puerta de pre-calentado: no se empieza hasta que la vista está POBLADA.
   // Sin esto se cuela el fotograma a medio cargar (backend en "checking", tarjetas vacías).
   await page.locator("nav").first().waitFor({ timeout: 30000 });
-  await page.locator("main").getByText(/100%|\d+ \/ \d+/).first().waitFor({ timeout: 30000 }).catch(() => {});
-  await sleep(900);
-
-  // ---- Escena 0: Guide — el flujo de un vistazo (2,5 s) ----
-  mark("escena 0 · Guide");
-  await sleep(2400);
-
-  // ---- Escena 1: Dashboard — tu máquina, tus modelos (4,0 s) ----
-  mark("escena 1 · Dashboard");
-  await clickNav(page, L.dashboard);
+  // La puerta espera a que las recomendaciones estén CALCULADAS (la sección "100% GPU" solo
+  // aparece cuando la sonda de hardware ha vuelto), no solo a que pinte la vista.
+  await page.locator("main").getByText(/100% GPU/i).first().waitFor({ timeout: 30000 }).catch(() => {});
   await sleep(1200);
+
+  // ---- Escena 1: Dashboard — tu máquina, tus modelos (5,0 s, es la apertura) ----
+  mark("escena 1 · Dashboard");
+  await sleep(1400);
   await scrollMain(page, 430);
+  await sleep(1600);
+  await scrollMain(page, 760);
   await sleep(1400);
   await scrollMain(page, 0);
-  await sleep(400);
+  await sleep(500);
 
   // ---- Escena 2: Models — la config óptima para TU equipo (6,0 s) ----
   mark("escena 2 · Models");

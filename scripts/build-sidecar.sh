@@ -5,12 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT/backend"
-if [ ! -d .venv ]; then
-  uv venv --python 3.11
-fi
-source .venv/bin/activate
-uv pip install pyinstaller >/dev/null
-pyinstaller pyinstaller.spec --clean --noconfirm
+# Desde uv.lock y con el extra "build": mismas versiones que CI y que el release.
+# `--python 3.11` obligatorio: sin él uv elige el intérprete más nuevo instalado.
+uv sync --locked --python 3.11 --extra build
+uv run pyinstaller pyinstaller.spec --clean --noconfirm
 
 DST="$ROOT/frontend/electron/sidecar"
 mkdir -p "$DST"

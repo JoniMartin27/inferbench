@@ -23,12 +23,13 @@ function Invoke-Native {
 
 Push-Location "$root\backend"
 try {
-    if (-not (Test-Path .venv)) {
-        Invoke-Native "uv" @("venv", "--python", "3.11")
-    }
-    # La venv de uv no trae pip: instalamos con `uv pip install`.
-    Invoke-Native "uv" @("pip", "install", "pyinstaller")
-    Invoke-Native ".\.venv\Scripts\pyinstaller.exe" @("pyinstaller.spec", "--clean", "--noconfirm")
+    # Desde uv.lock y con el extra "build": el sidecar se construye con las MISMAS
+    # versiones que valida CI y que usa el workflow de release. `uv sync` crea la venv si
+    # falta. El `--python 3.11` es OBLIGATORIO: sin él uv coge el intérprete más nuevo
+    # que tenga instalado (aquí 3.14) y el binario saldría con un runtime distinto
+    # del que fija el proyecto y valida CI.
+    Invoke-Native "uv" @("sync", "--locked", "--python", "3.11", "--extra", "build")
+    Invoke-Native "uv" @("run", "pyinstaller", "pyinstaller.spec", "--clean", "--noconfirm")
 } finally {
     Pop-Location
 }

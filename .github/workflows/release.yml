@@ -33,12 +33,26 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
+      # Desde uv.lock, igual que CI. Antes era `uv pip install -e . pyinstaller`, que
+      # ignora el lock y resuelve libre: el binario que se DISTRIBUYE se construía con
+      # dependencias que nadie había probado, mientras CI validaba otras. Es el mismo
+      # patrón que ya rompió dos veces (ruff 0.16 tumbó el gate, mcp 2.0 dejó Serve/MCP
+      # roto en instalaciones nuevas). `--locked` falla si el lock no cuadra con
+      # pyproject, así que no puede quedarse atrás en silencio.
+      - name: Instalar dependencias (uv.lock)
+        working-directory: backend
+        run: uv sync --locked --python 3.11 --extra dev --extra build
+
+      # El instalador que se publica debe salir de código que pasa la suite. Antes se
+      # empaquetaba sin correr un solo test: un fallo que CI habría cazado llegaba igual
+      # al binario si alguien etiquetaba sin mirar el estado de la rama.
+      - name: Tests antes de empaquetar
+        working-directory: backend
+        run: uv run pytest -q
+
       - name: Build sidecar (PyInstaller)
         working-directory: backend
-        run: |
-          uv venv --python 3.11
-          uv pip install -e . pyinstaller
-          uv run pyinstaller pyinstaller.spec --clean --noconfirm
+        run: uv run pyinstaller pyinstaller.spec --clean --noconfirm
 
       - name: Copy sidecar into Electron resources
         run: |

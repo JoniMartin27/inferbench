@@ -28,6 +28,13 @@ dependencies = [
 # gate sin que nadie toque código (pasó con 0.16). El `select` de [tool.ruff.lint] es la
 # otra mitad de la defensa.
 dev = ["ruff>=0.15,<0.17", "black>=24", "pytest>=8", "pytest-asyncio>=0.24"]
+# Herramientas para EMPAQUETAR el sidecar. Van declaradas —y por tanto en uv.lock— para
+# que el binario que se distribuye se construya con las mismas versiones que CI valida.
+# El workflow de release hacía `uv pip install -e . pyinstaller`, que ignora el lock y
+# resuelve libre: exactamente el patrón que ya rompió dos veces (ruff 0.16 tumbó el gate,
+# mcp 2.0 dejó Serve/MCP roto en instalaciones nuevas). Un release construido así puede
+# llevar dependencias que nadie probó.
+build = ["pyinstaller>=6.10,<7"]
 
 [build-system]
 requires = ["setuptools>=68"]

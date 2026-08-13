@@ -114,7 +114,7 @@ async def pull_model(
                 # {"error": "..."} con HTTP 200 dentro del stream, no como status HTTP de
                 # error. Si no se comprueba aquí, un pull fallido parece haber tenido éxito.
                 if evt.get("error"):
-                    raise RuntimeError(f"Pull de {tag} falló: {evt['error']}")
+                    raise RuntimeError(f"Pull of {tag} failed: {evt['error']}")
                 # evt típico: {"status": "downloading", "digest":..., "total":..., "completed":...}
                 if progress:
                     pct = None
@@ -150,7 +150,7 @@ def start_daemon() -> int:
 
     exe = find_ollama_exe()
     if not exe:
-        raise RuntimeError("Ollama no instalado")
+        raise RuntimeError("Ollama is not installed")
 
     creationflags = 0
     if os.name == "nt":
@@ -170,7 +170,7 @@ async def ensure_running(timeout: float = 30.0) -> None:
     if await is_running():
         return
     if not is_installed():
-        raise RuntimeError("Ollama no instalado. Descárgalo desde https://ollama.com/download")
+        raise RuntimeError("Ollama is not installed. Download it from https://ollama.com/download")
     logger.info("Arrancando Ollama daemon…")
     start_daemon()
     loop = asyncio.get_running_loop()
@@ -179,7 +179,7 @@ async def ensure_running(timeout: float = 30.0) -> None:
         if await is_running():
             return
         await asyncio.sleep(1)
-    raise RuntimeError(f"Ollama no respondió tras {timeout}s")
+    raise RuntimeError(f"Ollama did not respond after {timeout}s")
 
 
 def installer_url() -> str | None:

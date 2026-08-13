@@ -282,7 +282,7 @@ async def _download_resilient(
         head = await client.head(url)
         if head.status_code in (401, 403, 404):
             raise RuntimeError(
-                not_found_msg or f"{label} no disponible (HTTP {head.status_code}) en {url}"
+                not_found_msg or f"{label} unavailable (HTTP {head.status_code}) at {url}"
             )
         head.raise_for_status()
         total = int(head.headers.get("content-length", 0))
@@ -353,7 +353,7 @@ async def _download_resilient(
                 code = e.response.status_code
                 if code < 500 and code != 429:  # 4xx (salvo 429) son permanentes
                     tmp.unlink(missing_ok=True)
-                    raise RuntimeError(f"Descarga de {filename} falló con HTTP {code}") from e
+                    raise RuntimeError(f"Download of {filename} failed with HTTP {code}") from e
                 last_err = e
             except httpx.TransportError as e:
                 last_err = e
@@ -379,7 +379,7 @@ async def _download_resilient(
         # Agotados los reintentos: limpiar el .part parcial y abortar con error claro.
         tmp.unlink(missing_ok=True)
         raise RuntimeError(
-            f"No se pudo descargar {label} tras {_MAX_DL_RETRIES} intentos: {last_err}"
+            f"Could not download {label} after {_MAX_DL_RETRIES} attempts: {last_err}"
         )
 
 
@@ -399,8 +399,8 @@ async def _ensure_gguf_multipart(
     shards = await _fetch_shard_files(repo, base)
     if not shards:
         raise RuntimeError(
-            f"No se encontraron shards de {quant} para {model.id} en {repo}. "
-            f"Prueba otro quant o revisa el catálogo."
+            f"No {quant} shards found for {model.id} in {repo}. "
+            f"Try another quant or check the catalog."
         )
     repo_dir = _repo_dir(model)
     logger.info(f"Descargando {len(shards)} shards de {model.id} {quant}")
@@ -428,7 +428,7 @@ async def ensure_gguf(
     Si el modelo es multi-parte (`hf_gguf.multipart`), descarga todos los shards.
     """
     if not model.hf_gguf:
-        raise RuntimeError(f"Modelo {model.id} no tiene fuente HF GGUF configurada en el catálogo")
+        raise RuntimeError(f"Model {model.id} has no HF GGUF source configured in the catalog")
     if model.hf_gguf.multipart:
         return await _ensure_gguf_multipart(model, quant, progress, cancel_event)
     target = _model_file(model, quant)

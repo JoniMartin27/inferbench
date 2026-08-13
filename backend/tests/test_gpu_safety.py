@@ -52,5 +52,5 @@ def test_vllm_always_caps_gpu_util(monkeypatch):
 def test_start_docker_guard_refuses_when_unsafe(monkeypatch):
     monkeypatch.setattr(hardware, "safe_gpu_fraction", lambda: 0.0)
     monkeypatch.setattr(hardware, "gpu_memory_gb", lambda: (1.0, 8.0))
-    with pytest.raises(RuntimeError, match="saturar la pantalla"):
+    with pytest.raises(RuntimeError, match="starving the display"):
         VllmEngine()._start_docker(StartRequest(runtime="docker", gpu=True))

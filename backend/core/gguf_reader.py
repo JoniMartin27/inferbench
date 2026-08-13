@@ -96,7 +96,7 @@ def read_gguf_metadata(path: Path, max_header_bytes: int = 16 * 1024 * 1024) -> 
         data = f.read(max_header_bytes)
 
     if len(data) < 24:
-        raise ValueError("Archivo demasiado corto para ser GGUF")
+        raise ValueError("File is too short to be a GGUF")
 
     offset = 0
     (magic,) = struct.unpack_from("<I", data, offset)

@@ -112,7 +112,7 @@ class Engine(ABC):
         self, req: StartRequest, progress: ProgressCb = None
     ) -> native_runtime.ProcessStatus | docker_mgr.ContainerStatus:
         if self.is_api:
-            raise ValueError(f"Motor {self.meta.id} es API, no se arranca")
+            raise ValueError(f"Engine {self.meta.id} is an API; there is nothing to start")
         runtime = self.resolve_runtime(req)
         if runtime == "docker":
             # _start_docker es bloqueante (Docker SDK síncrono: images.pull de varios GB
@@ -133,10 +133,10 @@ class Engine(ABC):
             if safe < 0.15:
                 free, total = hardware.gpu_memory_gb()
                 raise RuntimeError(
-                    f"VRAM insuficiente para arrancar {self.meta.id} sin saturar la pantalla "
-                    f"(libre {free:.1f} de {total:.1f} GB; se reserva margen para el display). "
-                    f"Cierra apps que usen la GPU, elige un modelo más pequeño/cuantizado, o "
-                    f"baja INFERBENCH_GPU_RESERVE_GB si esta GPU no pinta tu monitor."
+                    f"Not enough VRAM to start {self.meta.id} without starving the display "
+                    f"({free:.1f} of {total:.1f} GB free; headroom is reserved for the display). "
+                    f"Close apps using the GPU, pick a smaller/more quantized model, or "
+                    f"lower INFERBENCH_GPU_RESERVE_GB if this GPU does not drive your monitor."
                 )
         # El contenedor escucha en `port` (build_command usa req.port or default_port);
         # publicar host:port → container:port. Clavarlo a default_port dejaba el motor

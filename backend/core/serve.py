@@ -61,7 +61,7 @@ async def _wait_engine_ready(base_url: str, timeout: float = 120.0) -> None:
             except Exception as e:  # noqa: BLE001 — el motor aún no escucha
                 last_err = str(e)
             await asyncio.sleep(1.0)
-    raise RuntimeError(f"El motor no quedó listo tras {timeout:.0f}s ({last_err})")
+    raise RuntimeError(f"Engine not ready after {timeout:.0f}s ({last_err})")
 
 
 class ServeError(Exception):

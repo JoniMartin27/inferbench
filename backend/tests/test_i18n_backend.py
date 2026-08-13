@@ -33,9 +33,13 @@ _CASTELLANO = re.compile(
 
 _RAISES = {"RuntimeError", "ValueError", "HTTPException"}
 
-# Ficheros que en este momento lleva otra rama en marcha (barrido i18n de Serve/optimizer).
-# Cuando esa rama entre, se quitan de aquí y el contrato pasa a cubrir todo el backend.
-_PENDIENTES = {"core/serve.py", "core/optimizer.py"}
+# Sin excepciones: el contrato cubre TODO el backend.
+#
+# Hubo un allowlist temporal con `core/serve.py` y `core/optimizer.py` mientras otra rama
+# los estaba traduciendo. Ya entró, así que se retira. Si alguna vez hace falta volver a
+# meter algo aquí, que sea con fecha y motivo — un allowlist permanente convierte este
+# test en decoración.
+_PENDIENTES: set[str] = set()
 
 _RAIZ = pathlib.Path(__file__).resolve().parent.parent
 

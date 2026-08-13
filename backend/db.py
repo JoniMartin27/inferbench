@@ -2,12 +2,44 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlmodel import Field, Session, SQLModel, create_engine
 
-DB_PATH = Path(__file__).resolve().parent / "data" / "inferbench.sqlite"
+
+def _db_path() -> Path:
+    """Dónde vive el SQLite de runs y resultados.
+
+    **Congelado por PyInstaller (el sidecar de la app instalada): en los datos del
+    usuario.** Con `Path(__file__).parent` a secas, en un onefile la ruta caía dentro de
+    `%TEMP%\\_MEI<aleatorio>\\`, que PyInstaller crea NUEVO EN CADA ARRANQUE y borra al
+    salir. Resultado medido en la app instalada: historial vacío en cada apertura, todos
+    los benchmarks perdidos al cerrar, y un `.sqlite` huérfano por lanzamiento tirado en
+    el temporal. La pestaña Historial —comparar runs, exportar CSV/JSON— era inservible
+    en el build empaquetado, y solo parecía funcionar cuando la app reutilizaba un
+    backend de desarrollo.
+
+    Se usa la MISMA carpeta que el resto de cachés del proyecto (`%APPDATA%\\InferBench`
+    en Windows, `~/.inferbench` fuera), donde ya viven binarios, modelos y logs.
+
+    Ejecutando desde el código sigue en `backend/data/`, para no mezclar la base de datos
+    de desarrollo con la del usuario.
+    """
+    if getattr(sys, "frozen", False):
+        base = (
+            Path(os.environ["APPDATA"]) / "InferBench"
+            if os.name == "nt" and "APPDATA" in os.environ
+            else Path.home() / ".inferbench"
+        )
+        base.mkdir(parents=True, exist_ok=True)
+        return base / "inferbench.sqlite"
+    return Path(__file__).resolve().parent / "data" / "inferbench.sqlite"
+
+
+DB_PATH = _db_path()
 _engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 
 

@@ -27,7 +27,7 @@
 <details align="center">
   <summary>🎬 Ver la app real en acción (demo completa)</summary>
   <p align="center">
-    <img src="assets/inferbench-demo.gif" alt="InferBench en acción: elegir modelo, optimizar, benchmark en vivo y comparar runs" width="800">
+    <img src="assets/inferbench-demo.gif" alt="InferBench en acción: hardware detectado, configuración óptima por modelo, benchmark en vivo con TTFT y tok/s reales, comparación de runs Q8 vs Q4 y modelo servido por MCP generando una imagen" width="800">
   </p>
 </details>
 

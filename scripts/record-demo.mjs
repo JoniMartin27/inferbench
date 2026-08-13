@@ -207,7 +207,10 @@ async function main() {
     const top = card.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - 24;
     main.scrollTo({ top, behavior: "smooth" });
   });
-  await sleep(3000);
+  // 4,5 s y no 3: MEDIDO sobre el GIF publicado, de los 3,2 s que duraba esta escena solo
+  // 2,4 tenían la tabla quieta en cuadro (el resto se lo comía el scroll), y son dos filas
+  // de nueve columnas de números. Es el remate de la escena principal: hay que poder leerlo.
+  await sleep(4500);
 
   // ---- Escena 4: History — compara y decide (5,0 s) ----
   mark("escena 4 · History");

@@ -21,11 +21,11 @@ indigo/slate, sin vista Guide, sin nav agrupada y sin la tabla de motores por mo
 |---|---|---|
 | Resolución de captura | 1280×800, `deviceScaleFactor: 1` | Es la ventana típica de la app de escritorio; todo entra sin scroll horizontal. |
 | Idioma de la UI | **inglés** (`inferbench:lang = en`) | Es el idioma por defecto de la app y el GIF también se usa en los materiales de lanzamiento en inglés. El recorder acepta `IB_LANG=es` para sacar un corte en castellano sin tocar código. |
-| Duración | **40 s** (medida: 40,4) | Por encima de ~45 s nadie lo mira entero. |
+| Duración | **40,9 s** (medida) | Por encima de ~45 s nadie lo mira entero. |
 | Ancho del GIF | **800 px** | El `README.md` lo pinta con `width="800"`: exportarlo a 900 solo añadía peso invisible. |
 | fps del GIF | **8** | MEDIDO: a 12 fps el GIF pesaba 8,4 MB y a 10 fps 6,0 MB pero con solo 32 colores (banding en los degradados del tema). A 8 fps caben 48 colores y el texto queda limpio; el contenido es texto y scroll, no vídeo. |
 | Colores | **48** | Ver arriba. Con 64 se va a 8,4 MB; con 32 se nota el ruido de dithering en la barra lateral. |
-| Peso | **6,6 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
+| Peso | **7,0 MB** (tope 8 MB) | El de junio pesaba 8,1 MB a 900 px. |
 | Tema | Fervon (carbon/ember), el de la app | Sin CSS inyectado para maquillar nada. |
 
 **Prohibido en esta grabación:** ocultar banners con CSS (la versión de junio tapaba el aviso
@@ -62,18 +62,28 @@ real.
 
 ## 3. Escaleta
 
-Duraciones **medidas en el GIF publicado** (40,4 s en total).
+Duraciones **medidas en el GIF publicado** (40,9 s en total).
 
-| # | Escena | Vista | Dur. | Tramo del GIF |
-|---|---|---|---|---|
-| 0 | El flujo, de un vistazo | Guide | 2,1 s | 0,0 – 2,1 |
-| 1 | Tu máquina, tus modelos | Dashboard | 3,6 s | 2,1 – 5,7 |
-| 2 | La config óptima para TU equipo | Models | 4,5 s | 5,7 – 10,2 |
-| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 11,2 s | 10,2 – 21,4 |
-| 3b | La fila de resultados | Benchmark | 3,6 s | 21,4 – 25,0 |
-| 4 | Compara y decide | History | 5,8 s | 25,0 – 30,8 |
-| 5a | Y luego, sírvelo por MCP | Serve / MCP | 3,6 s | 30,8 – 34,4 |
-| 5b | La imagen + Connect over MCP | Serve / MCP | 6,0 s | 34,4 – 40,4 |
+| # | Escena | Vista | Dur. | Tramo del GIF | Tramo de la toma |
+|---|---|---|---|---|---|
+| 0 | El flujo, de un vistazo | Guide | 2,1 s | 0,0 – 2,1 | 2,0 – 4,1 |
+| 1 | Tu máquina, tus modelos | Dashboard | 3,6 s | 2,1 – 5,7 | 4,2 – 7,8 |
+| 2 | La config óptima para TU equipo | Models | 6,4 s | 5,7 – 12,1 | 7,9 – 14,3 |
+| 3a | Medir, no adivinar (config + run en vivo) | Benchmark | 9,5 s | 12,1 – 21,6 | 18,3 – 27,8 |
+| 3b | La fila de resultados | Benchmark | 3,6 s | 21,6 – 25,2 | 30,5 – 34,1 |
+| 4 | Compara y decide | History | 5,8 s | 25,2 – 31,0 | 34,4 – 40,2 |
+| 5a | Y luego, sírvelo por MCP | Serve / MCP | 4,3 s | 31,0 – 35,3 | 41,0 – 45,3 |
+| 5b | La imagen + Connect over MCP | Serve / MCP | 5,6 s | 35,3 – 40,9 | 47,6 – 53,2 |
+
+La última columna es la **lista de cortes**: la toma cruda dura 53,6 s y el montaje quita
+lo que no aporta (la carga inicial de la página, el bucle que insiste con el quant, y el
+tramo largo de "Generating…" — del que se dejan ~4 s para que no parezca instantáneo; el
+tiempo real de generación sale escrito en la propia imagen). No se acelera nada: los
+tramos que quedan van a velocidad real.
+
+> Vuelta 1 de pulido (2026-08-13): la escena 2 se quedaba en 4,5 s y el panel de
+> configuración óptima —el segundo mejor gancho del producto— solo salía 1,3 s. Se le dio
+> el tiempo que faltaba quitándoselo al tramo estático de configuración del benchmark.
 
 La escena 3 se lleva un tercio del metraje a propósito: es el producto. El resto son el
 antes (qué elijo, con qué config) y el después (comparar, servir).

@@ -115,37 +115,41 @@ KV_FACTOR: dict[str, float] = {
 
 
 # Niveles de compresión de KV-cache: K y V se cuantizan iguales por simplicidad
+# `label`/`desc` viajan en la respuesta de `/api/optimize/compression` pero la UI NO los
+# pinta: traduce por el id del preset (`benchmark.compression.<id>.label`/`.desc`) y solo
+# cae a estos textos si algún día llega un preset que no conoce. Van en INGLÉS por eso
+# mismo — son el fallback y la documentación de la API, no una cadena de UI.
 COMPRESSION_PRESETS: dict[str, dict] = {
     "quality": {
-        "label": "Calidad",
+        "label": "Quality",
         "kv_k": "f16",
         "kv_v": "f16",
-        "desc": "Sin compresión KV. Máxima precisión, mayor uso de VRAM en contextos largos.",
+        "desc": "No KV compression. Maximum precision, highest VRAM use on long contexts.",
     },
     "balanced": {
-        "label": "Equilibrado",
+        "label": "Balanced",
         "kv_k": "q8_0",
         "kv_v": "q8_0",
-        "desc": "KV q8_0: 50% menos memoria con pérdida de calidad mínima. Default recomendado.",
+        "desc": "KV q8_0: 50% less memory with minimal quality loss. Recommended default.",
     },
     "compressed": {
-        "label": "Comprimido",
+        "label": "Compressed",
         "kv_k": "q8_0",
         "kv_v": "iq4_nl",
-        "desc": "K en q8_0 + V en iq4_nl (i-quant moderna): ~60% menos. Buena calidad para contextos largos.",
+        "desc": "K in q8_0 + V in iq4_nl (modern i-quant): ~60% less. Good quality for long contexts.",
     },
     "aggressive": {
-        "label": "Agresivo",
+        "label": "Aggressive",
         "kv_k": "q4_0",
         "kv_v": "q4_0",
-        "desc": "KV q4_0: 75% menos memoria. Permite contextos enormes pero penaliza calidad.",
+        "desc": "KV q4_0: 75% less memory. Allows huge contexts but costs quality.",
     },
     "extreme": {
-        "label": "Extremo (KV en RAM)",
+        "label": "Extreme (KV in RAM)",
         "kv_k": "q4_0",
         "kv_v": "q4_0",
         "nkvo": True,
-        "desc": "q4_0 + KV completamente en RAM (--no-kv-offload). Libera VRAM al máximo, slow per-token.",
+        "desc": "q4_0 + KV entirely in RAM (--no-kv-offload). Frees the most VRAM, slow per-token.",
     },
 }
 

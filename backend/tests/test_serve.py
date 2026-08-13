@@ -41,7 +41,7 @@ def _reset_manager():
     mgr.modality = "text"
     mgr.phase = "idle"
     mgr.progress = None
-    mgr.message = "Sin modelo servido."
+    mgr.message = "No model served."
     mgr._task = None
     yield
     mgr.phase = "idle"

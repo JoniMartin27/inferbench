@@ -110,6 +110,16 @@ export default function HistoryView({ onNavigate }) {
         }
       />
       <div className="grid gap-6 p-8 lg:grid-cols-[420px_1fr]">
+        {/* La comparación ocupa las DOS columnas. Metida en la pista `1fr` solo le
+            quedaban 490 px para una tabla de 10 columnas que necesita 562, así que las
+            que de verdad importan —tok/s, TTFT, calidad, VRAM— quedaban fuera del
+            scroll horizontal: justo las que uno abre "Comparar" para ver. MEDIDO a
+            1280 px de ventana. */}
+        {comparison && (
+          <div className="min-w-0 lg:col-span-2">
+            <ComparisonPanel data={comparison} onClose={() => setComparison(null)} />
+          </div>
+        )}
         <Card title={t("history.list.cardTitle", { count: runs.length })}>
           {loading && runs.length === 0 && (
             <p className="py-2 text-sm text-slate-500">{t("history.list.loading")}</p>
@@ -183,10 +193,10 @@ export default function HistoryView({ onNavigate }) {
           </ul>
         </Card>
 
-        <div className="space-y-4">
-          {comparison && (
-            <ComparisonPanel data={comparison} onClose={() => setComparison(null)} />
-          )}
+        {/* min-w-0: sin esto la pista `1fr` del grid crece hasta el min-content de la tabla
+            de resultados y el detalle se sale por la derecha (botones CSV/JSON y la última
+            columna fuera de pantalla a 1280px). Con min-w-0 mandan los `overflow-x-auto`. */}
+        <div className="min-w-0 space-y-4">
           {!detail && !comparison && (
             <Card>
               <p className="text-sm text-slate-500">{t("history.detail.placeholder")}</p>

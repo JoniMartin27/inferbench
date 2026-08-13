@@ -118,13 +118,20 @@ def availability(force: bool = False) -> dict:
 
 
 def _probe_availability() -> dict:
-    """El sondeo de verdad. Caro: no lo llames en bucle, usa `availability()`."""
+    """El sondeo de verdad. Caro: no lo llames en bucle, usa `availability()`.
+
+    `hint` viaja hasta la UI (chip de runtime en Motores), así que va en inglés y
+    acompañado de `hint_key`: un id estable que el frontend traduce a su idioma
+    (`engines.runtime.<hint_key>`). `reason` NO es traducible — es el mensaje crudo del
+    SDK de Docker — y por eso no lleva clave.
+    """
     if docker is None:
         return {
             "available": False,
             "installed": False,
-            "reason": "Docker SDK no instalado en el backend",
+            "reason": "Docker SDK not installed in the backend",
             "hint": "pip install docker",
+            "hint_key": "sdkMissing",
         }
     cli_installed = _docker_cli_installed()
     try:
@@ -145,7 +152,8 @@ def _probe_availability() -> dict:
             "available": False,
             "installed": cli_installed,
             "reason": msg,
-            "hint": ("Arranca Docker Desktop" if cli_installed else "Instalar Docker Desktop"),
+            "hint": ("Start Docker Desktop" if cli_installed else "Install Docker Desktop"),
+            "hint_key": ("startDockerDesktop" if cli_installed else "installDockerDesktop"),
         }
 
 

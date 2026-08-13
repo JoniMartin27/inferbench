@@ -4,6 +4,16 @@ import { api, installEngine, humanizeError } from "../api";
 import { PageHeader, Card, Button, Badge, Field, Input, Select, Spinner, Empty, Skeleton } from "../components/ui.jsx";
 import { useT } from "../i18n/index.jsx";
 
+// El backend manda sus textos en INGLÉS (fallback + documentación de la API) acompañados de
+// una clave estable. La UI traduce por esa clave y solo pinta el texto del backend cuando no
+// la conoce: un motor que la UI aún no lista, o el mensaje crudo del SDK de Docker, que no es
+// un estado enumerable y por tanto no tiene traducción posible.
+function fromKey(t, key, fallback, params) {
+  if (!key) return fallback;
+  const hit = t(key, params);
+  return hit === key ? fallback : hit;
+}
+
 export default function EnginesView({ dockerDown }) {
   const t = useT();
   const [engines, setEngines] = useState([]);
@@ -47,8 +57,12 @@ export default function EnginesView({ dockerDown }) {
       // error claro en vez de disparar un /install que el backend rechaza con HTTP 400.
       if (wanted === "native" && rt && !rt.ready) {
         if (id !== "llamacpp") {
-          const where = rt.install_url ? ` Instálalo desde ${rt.install_url}` : "";
-          throw new Error(`${engine?.meta?.name || id} no está instalado.${where}`);
+          const where = rt.install_url
+            ? t("engines.errors.installFrom", { url: rt.install_url })
+            : "";
+          throw new Error(
+            t("engines.errors.notInstalled", { name: engine?.meta?.name || id }) + where
+          );
         }
         setInstalling((s) => ({ ...s, [id]: { phase: "starting" } }));
         const ctrl = new AbortController();
@@ -187,13 +201,21 @@ function EngineCard({ engine, form, onForm, onStart, onStop, busy, installProgre
         </div>
       }
     >
-      <p className="text-sm text-slate-400">{meta.description}</p>
+      <p className="text-sm text-slate-400">
+        {fromKey(t, `engines.description.${meta.id}`, meta.description)}
+      </p>
 
       {!isApi && runtimes.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           {runtimes.map((r) => (
             <Badge key={r.runtime} tone={r.ready ? "emerald" : "slate"}>
-              {r.runtime}: {r.detail}
+              {r.runtime}:{" "}
+              {fromKey(
+                t,
+                r.detail_key ? `engines.runtime.${r.detail_key}` : null,
+                r.detail,
+                r.detail_params
+              )}
             </Badge>
           ))}
         </div>

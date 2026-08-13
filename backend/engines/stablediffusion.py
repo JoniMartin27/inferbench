@@ -35,9 +35,9 @@ class StableDiffusionEngine(Engine):
                 image=None,  # solo runtime nativo por ahora (binario CUDA precompilado)
                 optimizable=False,  # sin schema de optimización (no es benchmark de texto)
                 description=(
-                    "Servidor stable-diffusion.cpp para generación de imagen local "
-                    "(GGUF/safetensors). Soporta SD1.x/SDXL single-file y FLUX multi-archivo. "
-                    "Vídeo (Wan2.1/LTX): próximamente."
+                    "stable-diffusion.cpp server for local image generation "
+                    "(GGUF/safetensors). Supports single-file SD1.x/SDXL and multi-file FLUX. "
+                    "Video (Wan2.1/LTX): coming soon."
                 ),
                 runtimes=["native"],
                 default_runtime="native",

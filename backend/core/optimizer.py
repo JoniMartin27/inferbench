@@ -481,40 +481,38 @@ def benefits_summary(cfg: OptimalConfig, model: Model, hw: compat.HardwareSnapsh
         saved = base_fp16 - size_q
         pct = saved / base_fp16 * 100 if base_fp16 else 0
         out.append(
-            f"Cuantización {cfg.quant}: modelo de {base_fp16:.1f}GB → {size_q:.1f}GB "
-            f"({pct:.0f}% menos)"
+            f"Quantization {cfg.quant}: model from {base_fp16:.1f}GB → {size_q:.1f}GB "
+            f"({pct:.0f}% less)"
         )
     if cfg.kv_cache and cfg.kv_cache != "f16":
         kv_factor = compat.KV_FACTOR.get(cfg.kv_cache, 1.0)
-        out.append(
-            f"KV-cache {cfg.kv_cache}: {(1 - kv_factor) * 100:.0f}% menos memoria de contexto"
-        )
+        out.append(f"KV-cache {cfg.kv_cache}: {(1 - kv_factor) * 100:.0f}% less context memory")
     if cfg.moe_offload:
         n_layer = model.n_layer or 32
         out.append(
-            f"MoE offload --n-cpu-moe={cfg.moe_offload}: {cfg.moe_offload}/{n_layer} capas expert "
-            f"a CPU. Solo el gating + atención usan GPU. Permite correr {model.params_b}B totales "
-            f"con menos VRAM (técnica del video Codacus)"
+            f"MoE offload --n-cpu-moe={cfg.moe_offload}: {cfg.moe_offload}/{n_layer} expert layers "
+            f"on CPU. Only gating + attention use the GPU, so {model.params_b}B total params run "
+            f"with far less VRAM"
         )
     if cfg.flags.get("flashAttn"):
-        out.append("Flash Attention (-fa on): atención con kernels fusionados, ~30% menos memoria")
+        out.append("Flash Attention (-fa on): fused attention kernels, ~30% less memory")
     ngl = cfg.flags.get("ngl")
     if ngl is not None and ngl != 999:
         n_layer = model.n_layer or 32
         out.append(
-            f"Layer offload parcial (-ngl {ngl}): {ngl}/{n_layer} capas en GPU, "
-            f"resto en CPU. Tps bajos pero hace posible correr el modelo"
+            f"Partial layer offload (-ngl {ngl}): {ngl}/{n_layer} layers on GPU, the rest on CPU. "
+            f"Low tok/s, but it makes the model runnable at all"
         )
     if cfg.flags.get("mlock"):
-        out.append("--mlock: evita que el SO mueva el modelo a swap")
+        out.append("--mlock: keeps the OS from swapping the model out")
     if cfg.flags.get("noMmap"):
-        out.append("--no-mmap: carga directa a memoria, evita doble copia mapeada")
+        out.append("--no-mmap: loads straight into memory, avoiding a second mapped copy")
     if cfg.flags.get("cacheReuse"):
-        out.append(f"--cache-reuse {cfg.flags['cacheReuse']}: reusa KV de prompts similares")
+        out.append(f"--cache-reuse {cfg.flags['cacheReuse']}: reuses KV from similar prompts")
     if cfg.flags.get("prefixCaching"):
-        out.append("Prefix caching: vLLM reusa el prompt entre requests")
+        out.append("Prefix caching: vLLM reuses the prompt across requests")
     if cfg.flags.get("chunkedPrefill"):
         out.append(
-            f"Chunked prefill ({cfg.flags['chunkedPrefill']}): SGLang procesa el prompt en chunks"
+            f"Chunked prefill ({cfg.flags['chunkedPrefill']}): SGLang processes the prompt in chunks"
         )
     return out

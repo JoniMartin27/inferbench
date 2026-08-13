@@ -1,12 +1,16 @@
-"""Seed two REAL benchmark runs for the demo recording.
+"""Seed two REAL benchmark runs for the demo recording (see docs/DEMO-GUION.md).
 
-Runs SmolLM2-360M with two quants (Q4_K_M and Q8_0) over a prompt subset the
+Runs the SAME model with two quants (Q8_0 and Q4_K_M) over a prompt subset the
 model actually handles well (chat / summary / long-context) so no quality cell
 shows 0 in the Results table or the History comparison chart. These are real
 llama.cpp benchmarks against the cached GGUFs -- no invented numbers (project
 rule: no simulated data outside unit tests).
 
-Usage: python scripts/seed_demo_runs.py
+Scene 4 of the storyboard picks these two runs by their `notes` and compares
+them, so the answer on screen is the one everybody actually asks: is Q8 worth
+it over Q4 on my machine?
+
+Usage: python scripts/seed_demo_runs.py [model-id]
 """
 from __future__ import annotations
 
@@ -16,9 +20,10 @@ import time
 import urllib.request
 
 BASE = "http://127.0.0.1:7777"
-MODEL = "smollm2-360m"
+MODEL = sys.argv[1] if len(sys.argv) > 1 else "llama-3.2-1b"
 PROMPTS = ["chat", "summary", "long-context"]
 QUANTS = ["Q8_0", "Q4_K_M"]
+NOTE = "demo {quant}"
 
 
 def post(path: str, body: dict) -> dict:
@@ -74,7 +79,7 @@ def main() -> int:
             "auto": True,
             "keep_alive": False,
             "sampling": {"temperature": 0.3, "top_p": 0.95},
-            "notes": f"demo seed ({q})",
+            "notes": NOTE.format(quant=q),
         }
         print(f"== launching {MODEL} {q} prompts={PROMPTS}")
         resp = post("/api/benchmark/run", body)

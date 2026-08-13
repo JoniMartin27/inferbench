@@ -49,8 +49,8 @@ class OllamaEngine(Engine):
             exe = ollama_manager.find_ollama_exe()
             if not exe:
                 raise RuntimeError(
-                    "Ollama no instalado. Instálalo desde https://ollama.com/download "
-                    "y vuelve a intentarlo."
+                    "Ollama is not installed. Install it from https://ollama.com/download "
+                    "and try again."
                 )
             return exe
 

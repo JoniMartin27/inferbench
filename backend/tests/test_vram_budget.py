@@ -38,9 +38,9 @@ def test_rechaza_el_caso_real_que_esperaba_600s(gpu, modelo):
     with pytest.raises(RuntimeError) as e:
         bm._check_docker_vram_budget(modelo, "Q4_K_M", "vllm")
     msg = str(e.value)
-    assert "no cabe" in msg
+    assert "does not fit" in msg
     assert "vllm" in msg, "el mensaje debe decir qué motor"
-    assert "1.8 GB utilizables" in msg or "utilizables" in msg
+    assert "usable" in msg, "hay que decir cuánta VRAM hay disponible"
 
 
 def test_deja_pasar_cuando_de_verdad_cabe(gpu, modelo):

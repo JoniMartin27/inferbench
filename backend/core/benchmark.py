@@ -232,12 +232,12 @@ def _check_docker_vram_budget(model: Model, quant: str, engine_id: str) -> None:
     if necesita <= presupuesto:
         return
     raise RuntimeError(
-        f"{model.id} no cabe en la VRAM disponible para {engine_id}: necesita ~{necesita:.1f} GB "
-        f"({pesos:.1f} de pesos + {margen:.1f} de contexto CUDA y KV) y solo hay "
-        f"{presupuesto:.1f} GB utilizables (de {total:.1f} GB totales, {free:.1f} GB libres, "
-        f"reservando margen para el display). Cierra apps que usen la GPU, elige un modelo más "
-        f"pequeño, o usa llama.cpp con un quant GGUF, que sí cabe. "
-        f"Si esta GPU no pinta tu monitor, baja INFERBENCH_GPU_RESERVE_GB."
+        f"{model.id} does not fit in the VRAM available for {engine_id}: it needs "
+        f"~{necesita:.1f} GB ({pesos:.1f} GB of weights + {margen:.1f} GB of CUDA context and KV "
+        f"cache) and only {presupuesto:.1f} GB are usable (of {total:.1f} GB total, {free:.1f} GB "
+        f"free, reserving headroom for the display). Close apps using the GPU, pick a smaller "
+        f"model, or use llama.cpp with a GGUF quant, which does fit. "
+        f"If this GPU does not drive your monitor, lower INFERBENCH_GPU_RESERVE_GB."
     )
 
 
@@ -944,9 +944,9 @@ class BenchmarkRunner:
             if prompts and not kept:
                 omitidos = ", ".join(p.id for p in prompts)
                 msg = (
-                    f"Ningún prompt es ejecutable con esta combinación (omitidos: {omitidos}). "
-                    f"Los prompts de imagen necesitan un modelo de visión: del catálogo, uno "
-                    f"con tag `vision`; de disco, un .gguf con su mmproj en la misma carpeta."
+                    f"No prompt can run with this combination (skipped: {omitidos}). "
+                    f"Image prompts need a vision model: from the catalog, one tagged `vision`; "
+                    f"from disk, a .gguf with its mmproj in the same folder."
                 )
                 await self.emit({"type": "log", "level": "error", "text": msg})
                 await self.emit({"type": "done", "run_id": self.run_id, "error": msg})

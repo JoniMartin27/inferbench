@@ -1,0 +1,55 @@
+kl_divergence: computing over 2 chunks, n_ctx=512, batch_size=2048, n_seq=4
+kl_divergence: 0.48 seconds per pass - ETA 0.00 minutes
+
+chunk             PPL               ln(PPL(Q)/PPL(base))          KL Divergence              Δp RMS            Same top p
+   1       1.9109 ±    0.2420       0.02192 ±    0.01694       0.00898 ±    0.00135     2.027 ±  0.281 %    98.039 ±  0.870 %
+   2       1.8741 ±    0.1563       0.01051 ±    0.00967       0.00922 ±    0.00091     2.328 ±  0.204 %    98.039 ±  0.615 %
+
+====== Perplexity statistics ======
+Mean PPL(Q)                   :   1.874106 ±   0.156308
+Mean PPL(base)                :   1.854520 ±   0.150341
+Cor(ln(PPL(Q)), ln(PPL(base))):  99.35%
+Mean ln(PPL(Q)/PPL(base))     :   0.010506 ±   0.009671
+Mean PPL(Q)/PPL(base)         :   1.010562 ±   0.009773
+Mean PPL(Q)-PPL(base)         :   0.019587 ±   0.018485
+
+====== KL divergence statistics ======
+Mean    KLD:   0.009224 ±   0.000910
+Maximum KLD:   0.144114
+99.9%   KLD:   0.134919
+99.0%   KLD:   0.089603
+95.0%   KLD:   0.054539
+90.0%   KLD:   0.044021
+Median  KLD:   0.000138
+10.0%   KLD:   0.000006
+ 5.0%   KLD:   0.000001
+ 1.0%   KLD:  -0.000007
+ 0.1%   KLD:  -0.000011
+Minimum KLD:  -0.000014
+
+====== Token probability statistics ======
+Mean    Δp: -0.045 ± 0.103 %
+Maximum Δp: 13.511%
+99.9%   Δp: 12.159%
+99.0%   Δp:  6.392%
+95.0%   Δp:  3.141%
+90.0%   Δp:  0.837%
+75.0%   Δp:  0.026%
+Median  Δp:  0.001%
+25.0%   Δp: -0.027%
+10.0%   Δp: -0.748%
+ 5.0%   Δp: -2.759%
+ 1.0%   Δp: -10.293%
+ 0.1%   Δp: -13.294%
+Minimum Δp: -14.647%
+RMS Δp    :  2.328 ± 0.204 %
+Same top p: 98.039 ± 0.615 %
+
+llama_perf_context_print:        load time =     623.83 ms
+llama_perf_context_print: prompt eval time =       0.85 ms /  1024 tokens (    0.00 ms per token, 1208972.85 tokens per second)
+llama_perf_context_print:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_perf_context_print:       total time =     699.69 ms /  1025 tokens
+llama_perf_context_print:    graphs reused =          0
+common_memory_breakdown_print: | memory breakdown [MiB] | total   free    self   model   context   compute    unaccounted |
+common_memory_breakdown_print: |   - CUDA0 (RTX 3070)   |  8191 = 6609 + ( 477 =     0 +       0 +     477) +        1105 |
+common_memory_breakdown_print: |   - Host               |                  835 =   762 +      64 +       9                |

@@ -9,6 +9,7 @@ import {
   Compass,
   Activity,
   Server,
+  Ruler,
 } from "lucide-react";
 import { api } from "./api";
 import { useBenchmarkRun } from "./useBenchmarkRun";
@@ -24,6 +25,7 @@ const EnginesView = lazy(() => import("./views/EnginesView.jsx"));
 const ModelsView = lazy(() => import("./views/ModelsView.jsx"));
 const BenchmarkView = lazy(() => import("./views/BenchmarkView.jsx"));
 const ServeView = lazy(() => import("./views/ServeView.jsx"));
+const QualityView = lazy(() => import("./views/QualityView.jsx"));
 const HistoryView = lazy(() => import("./views/HistoryView.jsx"));
 const SettingsView = lazy(() => import("./views/SettingsView.jsx"));
 
@@ -67,6 +69,7 @@ const NAV_GROUPS = [
       { id: "engines", labelKey: "app.nav.engines", icon: Cpu, View: EnginesView, mode: "benchmark" },
       { id: "benchmark", labelKey: "app.nav.benchmark", icon: PlayCircle, View: BenchmarkView, mode: "benchmark" },
       { id: "serve", labelKey: "app.nav.serve", icon: Server, View: ServeView, mode: "serve" },
+      { id: "quality", labelKey: "app.nav.quality", icon: Ruler, View: QualityView, mode: "benchmark" },
     ],
   },
   {

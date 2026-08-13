@@ -30,6 +30,16 @@ const STATUS_LABEL = {
   nofile: "benchmark.quantStatus.nofile",
 };
 const statusLabelKey = (s) => STATUS_LABEL[s] || s;
+
+// La tabla "modelos más potentes por compresión" viene del backend, que trae el nombre del
+// preset en castellano (`label`). Con la UI en inglés se colaba "Calidad/Equilibrado/…" en
+// medio de la tabla, así que se traduce por el id del preset y solo se cae al texto del
+// backend si algún día llega un preset que la UI no conoce.
+function presetLabel(t, row) {
+  const key = `benchmark.compression.${row.preset}.label`;
+  const hit = t(key);
+  return hit === key ? row.label : hit;
+}
 const isQuantDisabled = (s) => s === "disk" || s === "fail" || s === "nofile";
 
 // Presets de compresión. Los campos de texto guardan CLAVES i18n; el llamador hace t(...).
@@ -807,7 +817,9 @@ function PowerByCompression({ engine, contextLen, selected }) {
                       selected === p.preset ? "bg-indigo-950/20" : ""
                     }`}
                   >
-                    <td className="py-2 pr-3 font-medium text-slate-200">{p.label}</td>
+                    <td className="py-2 pr-3 font-medium text-slate-200">
+                      {presetLabel(t, p)}
+                    </td>
                     <td className="py-2 pr-3">
                       <Badge tone="slate">
                         {p.kv_k}/{p.kv_v}

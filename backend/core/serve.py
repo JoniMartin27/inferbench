@@ -92,7 +92,7 @@ class ServeManager:
         self.modality: str = "text"  # "text" (chat) | "image" (generate)
         self.phase: Phase = "idle"
         self.progress: float | None = None
-        self.message: str = "Sin modelo servido."
+        self.message: str = "No model served."
         self._hw: HardwareInfo | None = None
 
     # --- estado / serialización -------------------------------------------------
@@ -120,7 +120,7 @@ class ServeManager:
         if phase == "ready" and not self._engine_running():
             phase = "error"
             self.phase = "error"
-            self.message = "El proceso del motor terminó inesperadamente."
+            self.message = "The engine process exited unexpectedly."
         served = phase == "ready" and self.model_id is not None
         return {
             "served": served,
@@ -270,7 +270,7 @@ class ServeManager:
             self.modality = "text"
             self.phase = "downloading"
             self.progress = None
-            self.message = "Preparando motor y modelo…"
+            self.message = "Preparing engine and model…"
 
             self._task = asyncio.create_task(
                 self._run_load(model_id, engine, chosen_quant, chosen_ctx, kv, ngl, ngl_mode, moe)
@@ -295,7 +295,7 @@ class ServeManager:
 
             # 1. Binario nativo (+ DLLs CUDA). Idempotente: solo baja lo que falte.
             self.phase = "downloading"
-            self.message = "Preparando binario de llama.cpp…"
+            self.message = "Preparing the llama.cpp binary…"
 
             async def bin_progress(evt: dict) -> None:
                 self.progress = evt.get("pct")
@@ -306,7 +306,7 @@ class ServeManager:
             binary = binary_manager.llamacpp_binary_path()
 
             # 2. GGUF del modelo (auto-descarga desde HF). Idempotente vía caché.
-            self.message = f"Descargando GGUF {quant}…"
+            self.message = f"Downloading GGUF {quant}…"
 
             async def model_progress(evt: dict) -> None:
                 pct = evt.get("pct")
@@ -333,7 +333,7 @@ class ServeManager:
             # 3. Arranque del motor residente (mismo patrón que el bootstrap del bench).
             self.phase = "starting"
             self.progress = None
-            self.message = "Arrancando el motor…"
+            self.message = "Starting the engine…"
 
             n_threads = max(2, psutil.cpu_count(logical=False) or 4)
             port = ENGINE_PORTS[engine]
@@ -380,7 +380,7 @@ class ServeManager:
                 },
             )
 
-            self.message = "Esperando a que el motor responda…"
+            self.message = "Waiting for the engine to respond…"
             await _wait_engine_ready(engine_endpoint(engine), timeout=120.0)
 
             self.phase = "ready"
@@ -393,7 +393,7 @@ class ServeManager:
             # había arrancado, hay que pararlo aquí mismo: `engine` es el parámetro de
             # ESTA tarea, no self.engine (que para entonces puede ya apuntar al nuevo).
             self.phase = "error"
-            self.message = "Carga cancelada."
+            self.message = "Load cancelled."
             try:
                 if engine:
                     await asyncio.to_thread(native_runtime.stop, engine)
@@ -450,7 +450,7 @@ class ServeManager:
             self.modality = "image"
             self.phase = "downloading"
             self.progress = None
-            self.message = "Preparando stable-diffusion.cpp y el modelo…"
+            self.message = "Preparing stable-diffusion.cpp and the model…"
 
             self._task = asyncio.create_task(self._run_load_image(model_id, engine))
             return self.status_dict()
@@ -463,7 +463,7 @@ class ServeManager:
 
             # 1. Binario sd-server (+ DLLs CUDA). Idempotente.
             self.phase = "downloading"
-            self.message = "Preparando binario de stable-diffusion.cpp…"
+            self.message = "Preparing the stable-diffusion.cpp binary…"
 
             async def bin_progress(evt: dict) -> None:
                 self.progress = evt.get("pct")
@@ -484,7 +484,7 @@ class ServeManager:
             gg = model.hf_gguf
             if gg.diffusion_model:
                 # FLUX (multi-archivo): diffusion-model + auxiliares.
-                self.message = "Descargando diffusion-model y auxiliares…"
+                self.message = "Downloading the diffusion model and its auxiliary files…"
                 aux = await model_manager.ensure_all_aux(model, progress=model_progress)
                 if "diffusion_model" not in aux:
                     raise RuntimeError(f"No se pudo obtener el diffusion-model de {model_id}")
@@ -494,7 +494,7 @@ class ServeManager:
                         opts[kind] = str(aux[kind])
             else:
                 # SD1.x/SDXL/SD-Turbo single-file.
-                self.message = "Descargando checkpoint…"
+                self.message = "Downloading checkpoint…"
                 ckpt = await model_manager.ensure_single_file(model, progress=model_progress)
                 if ckpt is None:
                     raise RuntimeError(
@@ -514,7 +514,7 @@ class ServeManager:
             # 3. Arrancar el server sd.cpp con los args del engine.
             self.phase = "starting"
             self.progress = None
-            self.message = "Arrancando stable-diffusion.cpp…"
+            self.message = "Starting stable-diffusion.cpp…"
 
             from engines.base import StartRequest
             from engines.registry import get_engine
@@ -531,7 +531,7 @@ class ServeManager:
                 {"model": model.id, "modality": "image", "served": True},
             )
 
-            self.message = "Esperando a que el server de imagen responda…"
+            self.message = "Waiting for the image server to respond…"
             await _wait_engine_ready(engine_endpoint(engine), timeout=180.0)
 
             self.phase = "ready"
@@ -542,7 +542,7 @@ class ServeManager:
             # Igual que en _run_load: si el motor ya había arrancado cuando llegó la
             # cancelación (sustitución por otra load() o unload()), pararlo aquí.
             self.phase = "error"
-            self.message = "Carga cancelada."
+            self.message = "Load cancelled."
             try:
                 if engine:
                     await asyncio.to_thread(native_runtime.stop, engine)
@@ -593,7 +593,7 @@ class ServeManager:
             )
         if not self._engine_running():
             self.phase = "error"
-            self.message = "El proceso del server de imagen terminó inesperadamente."
+            self.message = "The image server process exited unexpectedly."
             raise ServeError("El server de imagen ya no está corriendo.", status_code=409)
 
         base = engine_endpoint(self.engine or "stablediffusion")
@@ -687,7 +687,7 @@ class ServeManager:
             )
         if not self._engine_running():
             self.phase = "error"
-            self.message = "El proceso del motor terminó inesperadamente."
+            self.message = "The engine process exited unexpectedly."
             raise ServeError("El motor servido ya no está corriendo.", status_code=409)
 
         url = f"{self.endpoint.rstrip('/')}/chat/completions"
@@ -763,7 +763,7 @@ class ServeManager:
             self.modality = "text"
             self.phase = "idle"
             self.progress = None
-            self.message = "Motor parado. Sin modelo servido."
+            self.message = "Engine stopped. No model served."
             return {"served": False, "phase": "idle", "message": self.message}
 
 

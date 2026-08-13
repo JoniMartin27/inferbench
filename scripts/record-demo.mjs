@@ -1,30 +1,65 @@
-// Programmatic demo recorder for InferBench.
-// Drives the real Vite frontend (localhost:5173) against the real FastAPI
-// backend (localhost:7777) with Playwright, recording a video that is later
-// converted to docs/demo.gif by ffmpeg. No simulated data: hardware is real,
-// history runs are real cached benchmarks, the live benchmark in scene 3 is a
-// real llama.cpp run, and the image in scene 5 is a real sd.cpp generation.
+// Grabador de la demo de InferBench. Es la traducción literal de docs/DEMO-GUION.md:
+// si cambias una escena aquí, cambia el guion (y al revés).
 //
-// This recorder is run from an ISOLATED tooling dir (C:/tmp/ib-rec-tool) so
-// Playwright is never added to the repo's package.json. Invoke with:
-//   node <repo>/scripts/record-demo.mjs            (uses tool dir's playwright)
+// Conduce el frontend REAL de Vite (localhost:5173) contra el backend REAL de FastAPI
+// (localhost:7777) con Playwright y graba un vídeo que después ffmpeg convierte en
+// assets/inferbench-demo.gif. Nada está simulado: el hardware es el de la máquina, los
+// runs del historial son benchmarks reales ya ejecutados (scripts/seed_demo_runs.py), el
+// benchmark de la escena 3 corre de verdad contra llama-server y la imagen de la escena 5
+// la genera stable-diffusion.cpp en ese momento.
 //
-// Scene 3 emphasis (per validator): frame the EXECUTION/RunningPanel POPULATED
-// and LIVE — engine boot phases + the terminal log + tok/s/TTFT climbing via
-// SSE — before the RESULTS row appears. ffmpeg slows that segment so it reads.
+// Se ejecuta desde un directorio de herramientas AISLADO para no meter Playwright en el
+// package.json del repo. Como la resolución de imports de ESM parte del fichero, no del
+// cwd, hay que COPIARLO al directorio de herramientas:
+//   cp scripts/record-demo.mjs C:/tmp/pw-runner/ && cd C:/tmp/pw-runner && node record-demo.mjs
+//
+// Variables:
+//   IB_OUT_DIR   destino del .webm            (por defecto C:/tmp/ib-rec)
+//   IB_LANG      idioma de la UI grabada      (por defecto "en"; "es" saca el corte en castellano)
+//   IB_FE        URL del frontend             (por defecto http://localhost:5173)
+//   IB_API       URL del backend              (por defecto http://127.0.0.1:7777)
 import { chromium } from "playwright";
 
 const OUT_DIR = process.env.IB_OUT_DIR || "C:/tmp/ib-rec";
-const FE = "http://localhost:5173";
+const FE = process.env.IB_FE || "http://localhost:5173";
+const API = process.env.IB_API || "http://127.0.0.1:7777";
+const LANG = process.env.IB_LANG || "en";
 const W = 1280, H = 800;
 
+// Etiquetas de navegación por idioma (App.jsx > NAV_GROUPS).
+const NAV = {
+  en: { dashboard: "Dashboard", models: "Models", benchmark: "Benchmark", serve: "Serve / MCP", history: "History" },
+  es: { dashboard: "Panel", models: "Modelos", benchmark: "Benchmark", serve: "Serve / MCP", history: "Historial" },
+};
+// Prompts que se DESmarcan en la escena 3 para que el run entre en la escena.
+const DROP_PROMPTS = {
+  en: ["Reasoning", "Code", "Long context"],
+  es: ["Razonamiento", "Código", "Contexto largo"],
+};
+const L = NAV[LANG] || NAV.en;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const rx = (s) => new RegExp(s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"), "i");
+const t0 = Date.now();
+const mark = (msg) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s] ${msg}`);
 
 async function clickNav(page, label) {
-  const esc = label.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-  const btn = page.locator("nav button", { hasText: new RegExp(esc, "i") }).first();
-  await btn.click();
-  await sleep(700);
+  await page.locator("nav button", { hasText: rx(label) }).first().click();
+  await sleep(600);
+}
+
+// El contenedor que scrollea es <main>; con el ratón parado en (0,0) la rueda movería la
+// barra lateral, así que se scrollea por código y no con page.mouse.wheel.
+async function scrollMain(page, top, smooth = true) {
+  await page.evaluate(
+    ([y, sm]) => {
+      const m = document.querySelector("main");
+      const opts = { top: y, behavior: sm ? "smooth" : "auto" };
+      if (m && m.scrollHeight > m.clientHeight) m.scrollTo(opts);
+      else window.scrollTo(opts);
+    },
+    [top, smooth]
+  );
 }
 
 async function main() {
@@ -35,174 +70,187 @@ async function main() {
     recordVideo: { dir: OUT_DIR, size: { width: W, height: H } },
   });
   const page = await context.newPage();
+  const consoleErrors = [];
+  page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
+  page.on("pageerror", (e) => consoleErrors.push("pageerror: " + e.message));
 
-  await page.addInitScript(() => {
-    try { localStorage.setItem("inferbench:lang", "en"); } catch {}
-    try { localStorage.setItem("inferbench:lastView", "dashboard"); } catch {}
-    // Hide the cosmetic "Docker unavailable" banner so the demo doesn't carry a
-    // degraded notice. Purely visual — affects no benchmark data. The banner is
-    // the only top-level bar (border-b) rendered before the sidebar flex row.
-    const css = `
-      .flex.h-full.flex-col > .flex.items-center.justify-between.gap-4.border-b { display: none !important; }
-    `;
-    const inject = () => {
-      const s = document.createElement("style");
-      s.textContent = css;
-      document.head.appendChild(s);
-    };
-    if (document.head) inject();
-    else document.addEventListener("DOMContentLoaded", inject);
-  });
+  await page.addInitScript((lang) => {
+    try { localStorage.setItem("inferbench:lang", lang); } catch {}
+    try { localStorage.setItem("inferbench:lastView", "guide"); } catch {}
+  }, LANG);
 
   await page.goto(FE, { waitUntil: "networkidle" });
 
-  // ---- Pre-warm gate: don't start until the Dashboard is fully populated.
-  // Wait for backend status to read "ok" (sidebar shows vX.Y.Z, not "checking")
-  // and for the recommendations to render real rows — avoids the cold-start
-  // half-loaded frame the validator flagged.
+  // ---- Puerta de pre-calentado: no se empieza hasta que la vista está POBLADA.
+  // Sin esto se cuela el fotograma a medio cargar (backend en "checking", tarjetas vacías).
   await page.locator("nav").first().waitFor({ timeout: 30000 });
-  // backend ready + recommendations rendered: wait for the "100% GPU" section
-  // heading (only appears once the hardware probe returned and recs computed).
-  await page
-    .getByText(/100% GPU/i)
-    .first()
-    .waitFor({ timeout: 30000 })
-    .catch(() => {});
-  await sleep(2500); // let hardware cards + recommendation rows fully settle
-
-  // ---- Scene 1: Dashboard (real hardware + recommendations) ----
-  await clickNav(page, "Dashboard");
-  await sleep(1600);
-  await page.mouse.wheel(0, 520);
-  await sleep(1500);
-  await page.mouse.wheel(0, 520);
-  await sleep(1500);
-  await page.mouse.wheel(0, -1040);
+  await page.locator("main").getByText(/100%|\d+ \/ \d+/).first().waitFor({ timeout: 30000 }).catch(() => {});
   await sleep(900);
 
-  // ---- Scene 2: Models catalog + search + optimize ----
-  await clickNav(page, "Models");
-  await sleep(1400);
-  const search = page.getByPlaceholder(/Search/i).first();
-  await search.click();
-  for (const ch of "qwen") { await search.type(ch); await sleep(140); }
-  await sleep(1600);
-  const optimizeBtn = page.locator('button[title*="ptim" i], button[title*="ptimiz" i]').first();
-  try {
-    await optimizeBtn.click({ timeout: 4000 });
-  } catch {
-    await page.locator("tbody tr").first().locator("button").last().click();
-  }
-  await sleep(2400); // optimal-config panel renders
+  // ---- Escena 0: Guide — el flujo de un vistazo (2,5 s) ----
+  mark("escena 0 · Guide");
+  await sleep(2400);
 
-  // ---- Scene 3: Benchmark — real LIVE run, EXECUTION panel populated ----
-  await clickNav(page, "Benchmark");
+  // ---- Escena 1: Dashboard — tu máquina, tus modelos (4,0 s) ----
+  mark("escena 1 · Dashboard");
+  await clickNav(page, L.dashboard);
   await sleep(1200);
-  // llama-3.2-1b is cached and the engine is pre-warmed (keep_alive), so the
-  // run boots in ~3s and streams tokens for several seconds — long enough for
-  // the EXECUTION panel to fill with phases + live tok/s.
-  const modelSelect = page.locator('label:has-text("Model") select').first();
+  await scrollMain(page, 430);
+  await sleep(1400);
+  await scrollMain(page, 0);
+  await sleep(400);
+
+  // ---- Escena 2: Models — la config óptima para TU equipo (6,0 s) ----
+  mark("escena 2 · Models");
+  await clickNav(page, L.models);
+  await sleep(900);
+  const search = page.getByPlaceholder(/Search|Buscar/i).first();
+  await search.click();
+  await search.type("llama-3.2", { delay: 80 });
+  await sleep(1000);
+  await page.locator("tbody tr button", { hasText: /Optimize|Optimizar/i }).first().click({ timeout: 8000 });
+  await page.getByText(/OPTIMIZATION TECHNIQUES|TÉCNICAS DE OPTIMIZACIÓN/i).first().waitFor({ timeout: 15000 }).catch(() => {});
+  await sleep(900);
+  await scrollMain(page, 230); // encuadra el panel de configuración óptima entero
+  await sleep(2000);
+
+  // ---- Escena 3: Benchmark — medir, no adivinar (12,0 s) ----
+  mark("escena 3 · Benchmark");
+  await clickNav(page, L.benchmark);
+  await sleep(1500); // deja leer la tabla ENGINES FOR THIS MODEL
+
+  const modelSelect = page.locator("select").filter({ has: page.locator('option[value="llama-3.2-1b"]') }).first();
   await modelSelect.selectOption("llama-3.2-1b");
-  await sleep(700);
-  // Keep only chat + summary so the run is quick but still streams visibly.
-  for (const lbl of ["Reasoning", "Code", "Long context"]) {
-    try {
-      const b = page.locator("button", { hasText: new RegExp(`^${lbl}$`, "i") }).first();
-      await b.click({ timeout: 1500 });
-      await sleep(120);
-    } catch {}
+  await sleep(900);
+
+  // Quant explícito. El optimizador propone Q8_0 y en esta máquina eso significa ctx 131k:
+  // la KV se va a RAM y el run cae a 4,6 tok/s y 246 s — no cabe en la escena, y además es
+  // justo lo que la escena 4 enseña con datos.
+  //
+  // Hay que INSISTIR: al cambiar de modelo la vista recalcula la compatibilidad de cada
+  // quant en segundo plano y, cuando la respuesta llega, repuebla el desplegable y lo
+  // devuelve al quant recomendado. Si seleccionas antes de eso tu elección se pierde en
+  // silencio y el run acaba corriendo con OTRO quant (pasó: arrancó Q8_0 con -c 131072).
+  const quantSelect = page.locator("select").filter({ has: page.locator('option[value="Q4_K_M"]') }).first();
+  await quantSelect.waitFor({ timeout: 20000 });
+  let stable = 0;
+  for (let i = 0; i < 14 && stable < 3; i++) {
+    if ((await quantSelect.inputValue().catch(() => "")) === "Q4_K_M") {
+      stable++;
+    } else {
+      await quantSelect.selectOption("Q4_K_M").catch(() => {});
+      stable = 0;
+    }
+    await sleep(600);
+  }
+  if ((await quantSelect.inputValue().catch(() => "")) !== "Q4_K_M") {
+    throw new Error("no pude fijar el quant a Q4_K_M");
+  }
+  mark("   quant fijado a Q4_K_M");
+
+  // Solo Summary + Knowledge: el run entero cabe en la escena (~10 s medidos).
+  for (const label of DROP_PROMPTS[LANG] || DROP_PROMPTS.en) {
+    const b = page.locator('button[aria-pressed="true"]', { hasText: rx(label) }).first();
+    await b.click({ timeout: 2500 }).catch(() => {});
+    await sleep(120);
   }
   await sleep(500);
-  // Keep the page scrolled to the TOP so the whole Execution panel (title +
-  // engine-ready box + TTFT/tok-s stats + the black terminal log) sits in the
-  // right column, fully framed, while SSE streams. Scrolling down here is what
-  // previously cut the panel's header off and made it look empty.
-  await page.evaluate(() => {
-    const main = document.querySelector("main");
-    if (main) main.scrollTo({ top: 0 });
-    window.scrollTo(0, 0);
-  });
-  const launchBtn = page.getByRole("button", { name: /Launch benchmark/i }).first();
-  await launchBtn.click();
-  // Hold at top: engine.start -> engine.ready (~3s) -> per-prompt phases +
-  // tokens streaming. The terminal log accumulates lines and the tok/s/TTFT
-  // stats update live. Dwell long enough that ffmpeg can slow this segment.
-  // Re-pin scroll frequently so the panel header (TTFT/tok-s stats) never
-  // scrolls out of frame as the layout grows. ~16s covers boot + 2 prompts
-  // (summary + chat, 384 tok x several iters each).
-  for (let i = 0; i < 18; i++) {
-    await page.evaluate(() => {
-      const main = document.querySelector("main");
-      if (main) main.scrollTo({ top: 0 });
-      window.scrollTo(0, 0);
-    });
-    await sleep(900);
-  }
-  // Run done: now scroll down to reveal the RESULTS row (per-prompt metrics)
-  // that landed under the two panels.
-  await page.evaluate(() => {
-    const main = document.querySelector("main");
-    if (main) main.scrollTo({ top: 380, behavior: "smooth" });
-  });
-  await sleep(3000);
-  await page.evaluate(() => {
-    const main = document.querySelector("main");
-    if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-  });
-  await sleep(800);
 
-  // ---- Scene 4: History — run detail (realistic quality) + comparison ----
-  await clickNav(page, "History");
-  await sleep(1400);
-  // Open the seeded Q8_0 run: detail renders the per-prompt results table with
-  // real tok/s + realistic Quality (~55-71, no zeros, not saturated at 100)
-  // and the tok/s-per-prompt bar chart.
-  const q8row = page.locator("li", { hasText: "demo seed (Q8_0)" }).first();
-  await q8row.getByText(/llama-3.2-1b/i).first().click();
-  await sleep(1700);
-  await page.mouse.wheel(0, 440); // scroll to the results table + tps chart
+  // Anclado arriba: el panel EXECUTION (cabecera + TTFT/tok-s + log negro) tiene que
+  // quedar entero en cuadro mientras el SSE va llenándolo.
+  await scrollMain(page, 0, false);
+  await page.getByRole("button", { name: /Launch benchmark|Lanzar benchmark/i }).first().click();
+  mark("   benchmark lanzado");
+
+  // Primero hay que ver ARRANCAR el run: React tarda un instante en cambiar el botón por
+  // "Stop", y sin esta espera el bucle de abajo daba el run por terminado en el mismo
+  // fotograma en que se lanzaba, y la escena se quedaba sin benchmark.
+  await page.getByRole("button", { name: /^Stop$|^Detener$/i }).first().waitFor({ timeout: 20000 });
+
+  // Se re-ancla el scroll mientras corre: el layout crece y si no la cabecera del panel se
+  // sale de cuadro. El final se detecta por el botón: la reaparición de "Launch benchmark"
+  // ES el fin del run. (Contar filas de tabla no vale: la tabla de motores del modelo ya
+  // tiene 7 y el bucle salía antes de tiempo, dejando la escena sin fila de resultados.)
+  const launchAgain = page.getByRole("button", { name: /Launch benchmark|Lanzar benchmark/i }).first();
+  for (let i = 0; i < 60; i++) {
+    await scrollMain(page, 0, false);
+    if (await launchAgain.isVisible().catch(() => false)) break;
+    await sleep(700);
+  }
+  mark("   benchmark terminado");
+
+  // sd-turbo se carga AQUÍ, en cuanto el run termina y el motor suelta la VRAM: MEDIDO,
+  // con el modelo de imagen residente el benchmark pasa de 9,2 s a 18,6 s y de ~250 a
+  // ~154 tok/s, porque en una 3070 sd.cpp se lleva ~3,9 GB de los 8. Cargarlo antes
+  // arruinaba la escena principal; cargarlo ahora lo deja listo para la escena 5.
+  fetch(`${API}/api/serve/load`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model_id: "sd-turbo", engine: "stablediffusion" }),
+  }).catch((e) => console.error("serve/load falló:", e.message));
+
+  await sleep(900);
+  // Baja a la tarjeta de RESULTS. Un scrollTop fijo NO vale: la de configuración es larga
+  // (tabla de motores + sweep + compresión + prompts + juez) y 620 px se quedaba en los
+  // presets de compresión, dejando la escena sin resultados. Se busca la tarjeta.
+  await page.evaluate(() => {
+    const main = document.querySelector("main");
+    if (!main) return;
+    const title = [...main.querySelectorAll("*")].find(
+      (e) => e.children.length === 0 && /^(Results|Resultados)$/i.test((e.textContent || "").trim())
+    );
+    const card = title?.closest("section") || title?.parentElement;
+    if (!card) return;
+    const top = card.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - 24;
+    main.scrollTo({ top, behavior: "smooth" });
+  });
   await sleep(3000);
-  await page.mouse.wheel(0, -440);
-  await sleep(700);
-  // Multi-select both seeded runs (same model, Q8_0 vs Q4_K_M) and Compare.
-  for (const note of ["demo seed (Q8_0)", "demo seed (Q4_K_M)"]) {
+
+  // ---- Escena 4: History — compara y decide (5,0 s) ----
+  mark("escena 4 · History");
+  await clickNav(page, L.history);
+  await sleep(1100);
+  for (const note of ["demo Q8_0", "demo Q4_K_M"]) {
     const row = page.locator("li", { hasText: note }).first();
-    await row.locator('input[type="checkbox"]').check();
-    await sleep(500);
+    await row.locator('input[type="checkbox"]').check({ timeout: 8000 });
+    await sleep(400);
   }
-  await sleep(400);
-  await page.getByRole("button", { name: /Compare/i }).first().click();
-  await sleep(1900);
-  await page.mouse.wheel(0, 560); // frame the side-by-side charts (incl. Quality)
-  await sleep(3000);
-  await page.mouse.wheel(0, -560);
-  await sleep(600);
+  await sleep(200);
+  await page.getByRole("button", { name: /Compare|Comparar/i }).first().click();
+  await sleep(1400);
+  await scrollMain(page, 520); // encuadra las gráficas por prompt (incluida QUALITY)
+  await sleep(2400);
 
-  // ---- Scene 5: Serve / MCP — real image generation (sd-turbo, pre-warmed) ----
-  await clickNav(page, "Serve / MCP");
-  await sleep(1800);
-  // sd-turbo is already served & ready (pre-warmed before recording). The
-  // GenerateCard is showing. Fill the prompt and generate.
+  // ---- Escena 5: Serve / MCP — y luego, sírvelo (5,5 s) ----
+  mark("escena 5 · Serve / MCP");
+  await clickNav(page, L.serve);
+  // La carga disparada al terminar el benchmark debería estar lista; si no, se espera
+  // fuera de cámara antes de entrar en la vista (no se filma un spinner de carga).
+  for (let i = 0; i < 60; i++) {
+    const st = await fetch(`${API}/api/serve/status`).then((r) => r.json()).catch(() => ({}));
+    if (st.phase === "ready") break;
+    if (i === 0) mark("   esperando a sd-turbo…");
+    await sleep(1000);
+  }
+  await sleep(1500);
   const promptBox = page.locator("textarea").first();
   await promptBox.click();
   await promptBox.fill("a cozy reading nook by a rainy window, warm lamp light, watercolor");
-  await sleep(1100);
-  const genBtn = page.getByRole("button", { name: /^Generate$/i }).first();
-  await genBtn.click();
-  // Real sd.cpp run ~2-3s when warm.
-  try {
-    await page.locator('img[alt*="cozy" i], img[src^="data:image"]').first().waitFor({ timeout: 30000 });
-  } catch {}
+  await sleep(700);
+  await page.getByRole("button", { name: /^Generate$|^Generar$/i }).first().click();
+  await page.locator('img[src^="data:image"], img[src^="blob:"]').first().waitFor({ timeout: 60000 }).catch(() => {});
+  mark("   imagen generada");
+  await sleep(1500);
+  await scrollMain(page, 700); // hasta "Connect over MCP"
   await sleep(2400);
-  // Scroll down to reveal "Connect over MCP" snippet (generate_image tool).
-  await page.mouse.wheel(0, 660);
-  await sleep(2800);
 
-  await sleep(500);
-  await context.close(); // flush video
+  mark("fin");
+  await sleep(400);
+  await context.close(); // vuelca el vídeo
   const video = page.video();
   const path = video ? await video.path() : null;
   await browser.close();
+  if (consoleErrors.length) console.error("CONSOLE_ERRORS=" + JSON.stringify(consoleErrors, null, 1));
   console.log("VIDEO_PATH=" + path);
 }
 

@@ -183,7 +183,10 @@ export default function HistoryView({ onNavigate }) {
           </ul>
         </Card>
 
-        <div className="space-y-4">
+        {/* min-w-0: sin esto la pista `1fr` del grid crece hasta el min-content de la tabla
+            de resultados y el detalle se sale por la derecha (botones CSV/JSON y la última
+            columna fuera de pantalla a 1280px). Con min-w-0 mandan los `overflow-x-auto`. */}
+        <div className="min-w-0 space-y-4">
           {comparison && (
             <ComparisonPanel data={comparison} onClose={() => setComparison(null)} />
           )}

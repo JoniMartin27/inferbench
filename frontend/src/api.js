@@ -87,6 +87,15 @@ export const api = {
     request(`/api/benchmark/${runId}/stop`, { method: "POST" }),
   benchmarkStreamUrl: (runId) => `${API_BASE}/api/benchmark/${runId}/stream`,
 
+  // Daño real de cada cuantización, medido con llama-perplexity (KL divergence).
+  qualityCandidates: () => request("/api/quality/candidates"),
+  qualityResults: (modelo) =>
+    request(`/api/quality/results${modelo ? `?modelo=${encodeURIComponent(modelo)}` : ""}`),
+  qualityMeasure: (body) =>
+    request("/api/quality/measure", { method: "POST", body: JSON.stringify(body) }),
+  qualityCancel: (job) => request(`/api/quality/measure/${job}/cancel`, { method: "POST" }),
+  qualityStreamUrl: (job) => `${API_BASE}/api/quality/measure/${job}/stream`,
+
   listHistory: () => request("/api/history"),
   getHistory: (runId) => request(`/api/history/${runId}`),
   deleteHistory: (runId) => request(`/api/history/${runId}`, { method: "DELETE" }),

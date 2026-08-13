@@ -16,6 +16,7 @@ from api.benchmark import router as benchmark_router
 from api.history import router as history_router
 from api.keys import router as keys_router
 from api.optimize import router as optimize_router
+from api.quality import router as quality_router
 from api.serve import router as serve_router
 from core.docker_mgr import availability as docker_availability
 from db import init_db, reconcile_orphan_runs
@@ -109,6 +110,7 @@ app.include_router(history_router)
 app.include_router(keys_router)
 app.include_router(optimize_router)
 app.include_router(serve_router)
+app.include_router(quality_router)
 
 
 # Servidor MCP por HTTP (streamable). Cualquier cliente MCP (Claude Desktop/Cursor) puede

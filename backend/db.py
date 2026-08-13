@@ -65,6 +65,27 @@ def _migrate() -> None:
                 conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col} {sqltype}"))
 
 
+def reconcile_orphan_runs() -> int:
+    """Cierra las runs que quedaron marcadas `running` de una ejecución anterior.
+
+    El estado `running` de una fila lo cierra el propio flujo del runner al terminar. Si el
+    proceso muere antes —cierras la app, se cae el backend, alguien lo mata— la fila se
+    queda en `running` PARA SIEMPRE: el Historial la enseña "en curso", no hay forma de
+    pararla (el `/stop` daba 404 porque el runner ya no existe en memoria) y encima las
+    nuevas runs se quedaban esperando turno detrás de un fantasma.
+
+    Al arrancar, cualquier fila en `running` es por definición imposible: el proceso que la
+    ejecutaba ya no existe. Se marcan `interrupted`, que es la verdad.
+
+    Devuelve cuántas ha cerrado.
+    """
+    with _engine.begin() as conn:
+        resultado = conn.execute(
+            text("UPDATE benchmark_runs SET status = 'interrupted' WHERE status = 'running'")
+        )
+        return resultado.rowcount or 0
+
+
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(_engine)

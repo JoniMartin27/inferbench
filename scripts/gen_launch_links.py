@@ -13,7 +13,7 @@ reddit_title = ("Built a desktop app that downloads, runs and benchmarks local L
                 "engines in one click — no Docker, no CLI, open source")
 reddit_text = f"""Me cansé de adivinar qué cuantización me entra en la GPU y a cuántos tok/s va a ir, así que construí InferBench: una app de escritorio que, con un click, descarga el binario del motor (release oficial de llama.cpp), baja el GGUF de Hugging Face, arranca el motor con la config óptima para tu hardware y corre una suite de benchmarks midiendo TTFT, tok/s, VRAM y calidad. Mide de verdad — no inventa números.
 
-- 124 modelos verificados en el catálogo (con compatibilidad calculada para TU hardware).
+- 126 modelos verificados en el catálogo (con compatibilidad calculada para TU hardware).
 - llama.cpp en modo nativo (sin Docker); Ollama / vLLM / SGLang / TGI vía Docker; + APIs cloud.
 - Rigor: descarta una pasada de warmup y reporta la mediana de N muestras + desviación.
 - Calidad evaluada con scorers verificables (ejecuta el código que genera el modelo, etc.).
@@ -21,7 +21,7 @@ reddit_text = f"""Me cansé de adivinar qué cuantización me entra en la GPU y 
 
 Ejemplo (mi equipo, medido con la propia app): RTX 3070 8GB · Qwen2.5 7B Q4_K_M · 75 tok/s · TTFT 284 ms · 7.96 GB VRAM · calidad 100/100.
 
-Es v0.1.1, binarios para Windows/macOS/Linux en la release. Busco feedback honesto: qué motor/modelo os falta, qué se rompe.
+Es v0.2.0, binarios para Windows/macOS/Linux en la release. Busco feedback honesto: qué motor/modelo os falta, qué se rompe.
 
 Repo: {REPO}
 Descarga: {RELEASE}
@@ -80,7 +80,7 @@ html = f"""<!doctype html>
   .btn:hover {{ background:#4f46e5; }}
   .note {{ color:#94a3b8; font-size:.85rem; margin-top:24px; }}
 </style></head><body>
-  <h1>🚀 Lanzar InferBench v0.1.1 — un clic por canal</h1>
+  <h1>🚀 Lanzar InferBench v0.2.0 — un clic por canal</h1>
   <p class="sub">Cada botón abre la plataforma con el post ya escrito. Revisa, adjunta el GIF
   donde toque y dale a Postear. <b>Lanza un canal por día.</b> Nada se publica solo.</p>
 {rows}

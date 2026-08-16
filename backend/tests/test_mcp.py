@@ -101,8 +101,8 @@ def test_el_handshake_anuncia_la_version_de_inferbench_no_la_del_sdk():
 
     Sin fijarlo, FastMCP (mcp 1.x) deja el server interno con `version=None` y el SDK
     responde SU propia versión: comprobado contra el exe empaquetado, `initialize`
-    devolvía `serverInfo: inferbench v1.27.2` — la versión del paquete `mcp`, no la 0.1.1
-    de la app.
+    devolvía `serverInfo: inferbench v1.27.2` — la versión del paquete `mcp`, no la de la
+    app.
     """
     from importlib.metadata import version as _pkg_version
 

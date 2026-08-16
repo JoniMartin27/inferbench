@@ -30,8 +30,8 @@ def _server_version() -> str:
 
     Sin esto el cliente ve la versión del **SDK de mcp** como si fuera la de InferBench:
     comprobado contra el exe empaquetado, `initialize` respondía
-    `serverInfo: inferbench v1.27.2` — que es la versión del paquete `mcp`, no la 0.1.1 de
-    la app. Claude Desktop y Cursor pintan ese número, así que es lo que ve el usuario.
+    `serverInfo: inferbench v1.27.2` — que es la versión del paquete `mcp`, no la de la
+    app. Claude Desktop y Cursor pintan ese número, así que es lo que ve el usuario.
     """
     try:
         from importlib.metadata import version

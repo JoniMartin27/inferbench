@@ -33,7 +33,7 @@ calidad. Mide de verdad — no inventa números.
 Ejemplo (mi equipo, medido con la propia app): RTX 3070 8GB · Qwen2.5 7B Q4_K_M ·
 75 tok/s · TTFT 284 ms · 7.96 GB VRAM · calidad 100/100.
 
-Es v0.1.1, binarios para Windows/macOS/Linux en la release. Busco feedback honesto: qué
+Es v0.2.0, binarios para Windows/macOS/Linux en la release. Busco feedback honesto: qué
 motor/modelo os falta, qué se rompe. Repo y descarga en los comentarios.
 ```
 - **Flair:** `Resources`

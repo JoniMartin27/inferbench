@@ -1,7 +1,7 @@
 {
   "name": "inferbench-frontend",
   "productName": "InferBench",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "InferBench desktop UI (Electron + React)",
   "author": "Jonathan Martin",

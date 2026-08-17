@@ -11,9 +11,9 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^6.4.8",
+    "astro": "^7.0.0",
     "@tailwindcss/postcss": "^4.1.0",
     "tailwindcss": "^4.3.0",
-    "postcss": "^8.5.0"
+    "postcss": "^8.5.18"
   }
 }

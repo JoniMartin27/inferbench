@@ -74,7 +74,10 @@ export const dashboard = {
     },
     "rec": {
       "ctx": "ctx {ctx}",
-      "bpw": "{bpw} bits/weight"
+      "bpw": "{bpw} bits/weight",
+      "measured": "{pct}% same top token vs {ref}",
+      "measuredTitle": "Measured on your machine: this quant picks the same most-likely token as {ref} in {pct}% of tokens (perplexity x{ratio}). Not an estimate.",
+      "measuredRef": "reference quant"
     },
     "toast": {
       "loadError": "Could not load dashboard data"
@@ -154,7 +157,10 @@ export const dashboard = {
     },
     "rec": {
       "ctx": "ctx {ctx}",
-      "bpw": "{bpw} bits/peso"
+      "bpw": "{bpw} bits/peso",
+      "measured": "{pct}% mismo token que {ref}",
+      "measuredTitle": "Medido en tu máquina: esta cuantización elige el mismo token más probable que {ref} en el {pct}% de los tokens (perplejidad x{ratio}). No es una estimación.",
+      "measuredRef": "cuantización de referencia"
     },
     "toast": {
       "loadError": "No se pudieron cargar los datos del dashboard"

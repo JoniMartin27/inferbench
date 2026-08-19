@@ -15,6 +15,10 @@ authors:
     given-names: "Jonathan"
     alias: JoniMartin27
     website: "https://fervon.dev"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.22018650
+    description: Concept DOI — always resolves to the latest InferBench release
 repository-code: "https://github.com/JoniMartin27/inferbench"
 url: "https://fervon.dev/inferbench/"
 license: MIT

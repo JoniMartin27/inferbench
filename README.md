@@ -9,6 +9,7 @@
   <img alt="Plataformas" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-2b2b2b">
   <img alt="npm" src="https://img.shields.io/npm/v/inferbench">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-blue">
+  <a href="https://doi.org/10.5281/zenodo.22018650"><img alt="DOI" src="https://zenodo.org/badge/DOI/10.5281/zenodo.22018650.svg"></a>
   <a href="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/JoniMartin27/inferbench/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Electron" src="https://img.shields.io/badge/Electron-42-47848F?logo=electron&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Python%203.11-009688?logo=fastapi&logoColor=white">

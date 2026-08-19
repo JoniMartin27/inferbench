@@ -22,7 +22,7 @@ import psutil
 from loguru import logger
 
 from . import binary_manager, compat, model_manager, native_runtime
-from .hardware import HardwareInfo, detect_hardware
+from .hardware import HardwareInfo, detect_hardware, native_vram_budget_gb
 from .models_catalog import get_model
 from .optimizer import (
     _estimate_moe_offload,
@@ -245,8 +245,16 @@ class ServeManager:
             moe = optimal.moe_offload
             if moe and model.is_moe:
                 moe = _estimate_moe_offload(model, snap, chosen_quant) or moe
+            # Contra la VRAM LIBRE, no la total: si el escritorio ya gasta media tarjeta,
+            # planificar con la total termina en `CUDA error: out of memory` (medido).
             planned_ctx, ngl, ngl_mode = plan_llamacpp_run(
-                model, snap, quant=chosen_quant, kv_k=kv, kv_v=kv, moe_offload=moe
+                model,
+                snap,
+                quant=chosen_quant,
+                kv_k=kv,
+                kv_v=kv,
+                moe_offload=moe,
+                vram_budget_gb=native_vram_budget_gb(),
             )
             chosen_ctx = int(context) if context else planned_ctx
 

@@ -398,6 +398,19 @@ def _default_flags(
     return {}
 
 
+def _vram_disponible(hw: compat.HardwareSnapshot, presupuesto: float | None) -> float:
+    """VRAM con la que planificar: la total de la tarjeta, o el presupuesto REAL si se da.
+
+    `presupuesto` es lo que de verdad hay libre ahora mismo (ver
+    `hardware.native_vram_budget_gb`). Nunca se planifica por encima de la VRAM total, y
+    si no hay medida (`None` o 0) se conserva el comportamiento de siempre para no cambiar
+    los planes de quien no tiene NVML.
+    """
+    if not presupuesto or presupuesto <= 0:
+        return hw.vram_gb
+    return min(presupuesto, hw.vram_gb)
+
+
 def compute_optimal_ngl(
     model: Model,
     hw: compat.HardwareSnapshot,
@@ -405,6 +418,7 @@ def compute_optimal_ngl(
     kv_cache: str,
     context_len: int,
     moe_offload: int | None = None,
+    vram_budget_gb: float | None = None,
 ) -> tuple[int, str]:
     """Calcula cuántas capas (de las n_layer del modelo) ofrecer a GPU.
 
@@ -412,11 +426,14 @@ def compute_optimal_ngl(
     Para "all": modelo completo en VRAM → ngl=999.
     Para "partial": modelo no cabe; calculamos cuántas capas caben.
     Para "moe": el offload por --n-cpu-moe ya manejará reparto, ngl=999.
+
+    `vram_budget_gb` acota el plan a la VRAM realmente libre (ver `_vram_disponible`).
     """
     n_layer = model.n_layer or 32  # fallback razonable
     model_size = compat.get_model_size_gb(model, quant)
     kv_overhead = context_len * compat.get_kv_per_token_gb(model, kv_cache)
     overhead = 0.6  # context, scratch, etc.
+    vram = _vram_disponible(hw, vram_budget_gb)
 
     # MoE con --n-cpu-moe: la GPU lleva gating + atención (poca cosa), el offload manejará el resto
     if model.is_moe and moe_offload and moe_offload > 0:
@@ -424,13 +441,13 @@ def compute_optimal_ngl(
 
     # ¿Cabe entero?
     total = model_size + kv_overhead + overhead
-    if total <= hw.vram_gb:
+    if total <= vram:
         return 999, "all"
 
     # Partial: cuántas capas caben en VRAM disponible (tras KV + overhead)
     # KV cache se reparte por capas igual que los pesos → ambos escalan con ngl
     # Aproximación: avail_for_layers = vram - overhead, size_per_layer_with_kv = (model_size + kv_overhead) / n_layer
-    avail = hw.vram_gb - overhead - 0.3  # 0.3 GB para CUDA context, kernels
+    avail = vram - overhead - 0.3  # 0.3 GB para CUDA context, kernels
     if avail <= 0.5:
         return 0, "partial"  # nada cabe en GPU
     size_per_layer = (model_size + kv_overhead) / n_layer
@@ -450,6 +467,7 @@ def plan_llamacpp_run(
     kv_v: str = "f16",
     kv_in_ram: bool = False,
     moe_offload: int | None = None,
+    vram_budget_gb: float | None = None,
 ) -> tuple[int, int, str]:
     """Plan de arranque para los parámetros EXACTOS que se van a correr.
 
@@ -463,6 +481,7 @@ def plan_llamacpp_run(
     kv_factor = (compat.KV_FACTOR.get(kv_k, 1.0) + compat.KV_FACTOR.get(kv_v, 1.0)) / 2.0
     kv_per_tok_gb = compat.kv_per_token_mb_f16(model) * kv_factor / 1024.0
     overhead = 0.6
+    vram = _vram_disponible(hw, vram_budget_gb)
 
     # VRAM que ocupan los pesos en GPU (con MoE offload solo va shared+gating+atención)
     if model.is_moe and moe_offload and moe_offload > 0:
@@ -473,11 +492,11 @@ def plan_llamacpp_run(
     if kv_in_ram:
         # --no-kv-offload: la KV vive en RAM → el contexto lo limita la RAM, no la VRAM.
         avail_for_kv = hw.ram_gb * 0.6
-    elif weights_vram <= hw.vram_gb:
-        avail_for_kv = hw.vram_gb - weights_vram - overhead
+    elif weights_vram <= vram:
+        avail_for_kv = vram - weights_vram - overhead
     else:
         # Los pesos no caben enteros: offload parcial; la KV comparte lo que quede.
-        avail_for_kv = max(0.0, (hw.vram_gb + hw.ram_gb * 0.7) - model_size - overhead - 0.2)
+        avail_for_kv = max(0.0, (vram + hw.ram_gb * 0.7) - model_size - overhead - 0.2)
 
     if avail_for_kv <= 0.3 or kv_per_tok_gb <= 0:
         # Acotar a max_ctx: este valor va directo al -c de arranque; un modelo con
@@ -488,7 +507,9 @@ def plan_llamacpp_run(
 
     # ngl para ESTE quant. Con KV en RAM, la KV no cuenta en VRAM (ctx=0 para el cálculo).
     ngl_ctx = 0 if kv_in_ram else max_ctx
-    ngl, mode = compute_optimal_ngl(model, hw, quant, kv_k, ngl_ctx, moe_offload=moe_offload)
+    ngl, mode = compute_optimal_ngl(
+        model, hw, quant, kv_k, ngl_ctx, moe_offload=moe_offload, vram_budget_gb=vram_budget_gb
+    )
     return max_ctx, ngl, mode
 
 

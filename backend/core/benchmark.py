@@ -42,7 +42,13 @@ from . import (
     ollama_manager,
     secrets,
 )
-from .hardware import detect_hardware, gpu_memory_gb, gpu_used_gb, safe_gpu_fraction
+from .hardware import (
+    detect_hardware,
+    gpu_memory_gb,
+    gpu_used_gb,
+    native_vram_budget_gb,
+    safe_gpu_fraction,
+)
 from .models_catalog import Model, get_model
 from .optimizer import _estimate_moe_offload, get_optimal_config, plan_llamacpp_run
 
@@ -1012,8 +1018,49 @@ async def _stream_anthropic_chat(
     yield ("done", None)
 
 
-async def _wait_engine_ready(base_url: str, timeout: float = 90.0) -> None:
-    """Espera a que el endpoint /v1/models responda 200."""
+_PISTAS_FALLO = (
+    "out of memory",
+    "cuda error",
+    "failed to load",
+    "error loading model",
+    "unable to load",
+    "assert",
+    "terminate called",
+    "not enough memory",
+    "insufficient",
+)
+
+
+def _causa_de_muerte(engine_id: str, lineas: int = 4) -> str:
+    """Por qué murió el motor nativo, sacado de su propio log. '' si no dice nada útil.
+
+    El log ya está en disco (`%APPDATA%\\InferBench\\logs\\<engine>.log`): la información
+    estaba ahí todo el rato y nadie la miraba.
+    """
+    try:
+        salida = native_runtime.logs(engine_id, tail=120)
+    except Exception:  # noqa: BLE001 - diagnóstico best-effort, nunca debe romper el run
+        return ""
+    interesantes = [
+        línea.strip()
+        for línea in salida.splitlines()
+        if línea.strip() and any(p in línea.lower() for p in _PISTAS_FALLO)
+    ]
+    return " | ".join(interesantes[-lineas:])
+
+
+async def _wait_engine_ready(
+    base_url: str, timeout: float = 90.0, *, engine_id: str | None = None
+) -> None:
+    """Espera a que el endpoint /v1/models responda 200.
+
+    Con `engine_id`, comprueba además en cada vuelta que el proceso del motor SIGUE VIVO.
+    MEDIDO el 2026-08-19: `llama-server` moría a los ~8 s con `CUDA error: out of memory`
+    y esta función seguía reintentando hasta agotar los 120 s para acabar diciendo
+    "All connection attempts failed" — un mensaje que no ayuda a nadie, teniendo la causa
+    escrita en el log del motor. Ahora se aborta en cuanto el proceso desaparece y se
+    reporta lo que dijo al morir.
+    """
     deadline = time.time() + timeout
     last_err = None
     async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
@@ -1025,6 +1072,12 @@ async def _wait_engine_ready(base_url: str, timeout: float = 90.0) -> None:
                 last_err = f"HTTP {r.status_code}"
             except Exception as e:
                 last_err = str(e)
+            if engine_id is not None:
+                estado = native_runtime.status(engine_id)
+                if estado.state != "running":
+                    causa = _causa_de_muerte(engine_id)
+                    detalle = f": {causa}" if causa else f" ({last_err})"
+                    raise RuntimeError(f"The {engine_id} engine died while starting up{detalle}")
             await asyncio.sleep(1.0)
     raise RuntimeError(f"Engine not ready after {timeout}s ({last_err})")
 
@@ -1577,6 +1630,12 @@ class BenchmarkRunner:
             if moe and model.is_moe:
                 moe = _estimate_moe_offload(model, snap, self.req.quant) or moe
 
+            # Planificar contra la VRAM LIBRE, no contra la total de la tarjeta. MEDIDO en
+            # una 3070 de 8 GB con el escritorio ocupando 2,4 GB: el plan de llama-3.1-8b
+            # Q4_K_M salía ctx 23552 con las 33 capas en GPU (4,4 GB de pesos + 2,9 GB de
+            # KV = 7,3 GB) sobre 5,7 GB libres → `CUDA error: out of memory` y benchmark
+            # perdido. Los motores Docker ya se planificaban así; el nativo no.
+            presupuesto = native_vram_budget_gb()
             ctx, ngl, ngl_mode = plan_llamacpp_run(
                 model,
                 snap,
@@ -1585,7 +1644,23 @@ class BenchmarkRunner:
                 kv_v=kv_v,
                 kv_in_ram=kv_in_ram,
                 moe_offload=moe,
+                vram_budget_gb=presupuesto,
             )
+            if presupuesto and presupuesto < snap.vram_gb - 0.5:
+                # El usuario tiene que saber POR QUÉ su plan es más pequeño de lo que la
+                # tarjeta promete: si no, parece que inferbench infrautiliza su GPU.
+                await self.emit(
+                    {
+                        "type": "log",
+                        "level": "warn",
+                        "text": (
+                            f"Planning with {presupuesto:.1f} GB of the {snap.vram_gb:.1f} GB "
+                            f"on this GPU: other apps (the desktop) are using the rest. "
+                            f"Context and GPU layers are sized to what is actually free. "
+                            f"Close them, or set INFERBENCH_NATIVE_VRAM_MARGIN_GB, to use more."
+                        ),
+                    }
+                )
             if req_opts.get("contextLen"):  # el contexto manual del usuario manda
                 ctx = max(256, int(req_opts["contextLen"]))
 
@@ -1689,7 +1764,9 @@ class BenchmarkRunner:
             await self.emit(
                 {"type": "log", "level": "info", "text": "Waiting for engine to be ready…"}
             )
-            await _wait_engine_ready(self.base_url, timeout=120.0)
+            # `engine_id` para que, si llama-server se muere al arrancar (OOM de CUDA,
+            # GGUF corrupto…), se aborte al instante con SU error en vez de esperar 120 s.
+            await _wait_engine_ready(self.base_url, timeout=120.0, engine_id="llamacpp")
             await self.emit({"type": "engine.ready", "base_url": self.base_url})
 
     async def _one_pass(

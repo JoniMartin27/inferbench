@@ -6,6 +6,43 @@ Todos los cambios notables de InferBench. El formato sigue
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-19
+
+Versión de precisión: lo que InferBench recomienda ahora se apoya en lo que ha **medido**,
+no en heurísticas prestadas, y el planificador deja de reventar por OOM en la máquina real.
+
+### Añadido
+- **La recomendación usa el daño de cuantización ya medido** (#56): cada fila de
+  `/api/optimize/recommendations` trae `measured_damage` cuando existe medida de ESE modelo a
+  ESA cuantización, y la UI la enseña junto a los bits/peso ("86,3 % mismo token que Q8_0").
+  Reglas atadas con tests: la referencia no se puntúa contra sí misma, una medida a medias no
+  es una medida, y **sin medir no se afirma nada**.
+- **Batería de calidad de 13 prompts en tres tramos** (easy/medium/hard) con scorer auditable
+  de cinco tipos de check (#54). Validada con inferencia real sobre 3 modelos × 11 prompts: la
+  media crece de forma monótona con la capacidad (qwen2.5-0.5b 33,7 · llama-3.2-1b 49,0 ·
+  llama-3.1-8b 69,9) y 8 de 11 prompts discriminan. Añade `prompt_version` y `scorer` a
+  `benchmark_results`: sin eso, comparar notas entre runs es inválido y no se nota.
+- `scripts/audit_scoring.py` (solo lectura) para re-puntuar el historial y ver techo, suelo y
+  poder discriminante de cada prompt.
+- **Metadatos de citación**: `CITATION.cff` y `.zenodo.json` — cada release queda archivada en
+  Zenodo con un DOI citable, autor, licencia y enlace a la página del proyecto.
+
+### Corregido
+- **OOM del planificador de llama.cpp** (#55): dimensionaba contra la VRAM **total**, no la
+  libre. Medido en una RTX 3070 de 8 GB con 2,4 GB ocupados por el escritorio, planificaba
+  7,3 GB sobre 5,7 GB disponibles y el motor moría con `CUDA error: out of memory`. Ahora se
+  acota al presupuesto real (`INFERBENCH_NATIVE_VRAM_MARGIN_GB`) y se avisa de por qué el
+  contexto es menor de lo que promete la tarjeta. Sin NVML se planifica como antes.
+- Esperar 120 s a un motor **ya muerto** diciendo "All connection attempts failed": ahora
+  aborta al instante y enseña lo que el motor dijo al morir.
+- Runs huérfanas: una fila `running` con todos sus prompts resueltos se recupera como `done`
+  en vez de marcarse `interrupted`, que borraba trabajo bueno del Historial.
+- **La landing no la construía ningún CI** y el bump a astro 7 la dejaba sin estilos con
+  código de salida 0 (#53). Tailwind pasa a `@tailwindcss/vite`, hay job `website` con
+  comprobación de que el CSS pesa >=10 KB, y `npm audit --omit=dev` queda en 0.
+- Materiales de lanzamiento y catálogo puestos al día tras la 0.2.0: **126** entradas
+  (124 de texto + 2 de imagen) (#52).
+
 ## [0.2.0] - 2026-08-16
 
 Segunda versión pública. Suma dos capacidades nuevas —**servir** un modelo por **MCP** y

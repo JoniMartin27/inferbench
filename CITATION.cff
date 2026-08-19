@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use InferBench in your research or benchmarks, please cite it as below."
+title: "InferBench: measured benchmarking of local LLM inference engines"
+abstract: >-
+  InferBench is a cross-platform desktop application that downloads, launches and
+  benchmarks local LLM inference engines (llama.cpp and friends) and cloud APIs from
+  a single click. It detects the host hardware, picks a working configuration per
+  model and quantization, and measures time-to-first-token, tokens per second, VRAM
+  usage and answer quality on real runs — no synthetic or extrapolated numbers. It
+  also exposes the orchestrated models over a Model Context Protocol (MCP) server,
+  covering text and local image generation. Everything runs on the user's machine.
+type: software
+authors:
+  - family-names: "Martín"
+    given-names: "Jonathan"
+    alias: JoniMartin27
+    website: "https://fervon.dev"
+repository-code: "https://github.com/JoniMartin27/inferbench"
+url: "https://fervon.dev/inferbench/"
+license: MIT
+version: 0.2.0
+date-released: "2026-08-16"
+keywords:
+  - llm
+  - benchmark
+  - local-llm
+  - llama.cpp
+  - gguf
+  - quantization
+  - inference-engine
+  - tokens-per-second
+  - model-context-protocol
+  - mcp
+  - image-generation
+  - reproducible-measurement

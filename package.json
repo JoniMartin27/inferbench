@@ -5,7 +5,7 @@
   "description": "Panel de escritorio multiplataforma para descargar, arrancar y benchmarkear motores de inferencia LLM locales (llama.cpp nativo + APIs cloud) con un solo click.",
   "author": "Jonathan Martin",
   "license": "MIT",
-  "homepage": "https://github.com/JoniMartin27/inferbench",
+  "homepage": "https://fervon.dev/inferbench/",
   "repository": {
     "type": "git",
     "url": "https://github.com/JoniMartin27/inferbench.git"

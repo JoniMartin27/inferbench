@@ -1,0 +1,41 @@
+{
+  "upload_type": "software",
+  "title": "InferBench: measured benchmarking of local LLM inference engines",
+  "description": "<p><strong>InferBench</strong> downloads, launches and benchmarks local LLM inference engines and cloud APIs from a single click, on Windows, macOS and Linux.</p><p>It detects the host hardware, derives a working configuration for each model and quantization, and then <em>measures</em> time-to-first-token, tokens per second, VRAM usage and answer quality on real executions &mdash; never extrapolated or synthetic numbers. Results are comparable across runs, so a Q8 versus Q4 decision is backed by data from the same machine.</p><p>InferBench also exposes the orchestrated models through a <a href=\"https://modelcontextprotocol.io\">Model Context Protocol</a> server, covering both text generation and local image generation, so any MCP client can drive them. Models, weights and measurements never leave the user's machine.</p><p>Part of <a href=\"https://fervon.dev\">Fervon</a>.</p>",
+  "creators": [
+    {
+      "name": "Martín, Jonathan",
+      "affiliation": "Fervon"
+    }
+  ],
+  "license": "mit",
+  "access_right": "open",
+  "keywords": [
+    "llm",
+    "benchmark",
+    "local-llm",
+    "llama.cpp",
+    "gguf",
+    "quantization",
+    "inference engine",
+    "tokens per second",
+    "model context protocol",
+    "mcp",
+    "image generation",
+    "reproducible measurement"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://fervon.dev/inferbench/",
+      "relation": "isDescribedBy",
+      "scheme": "url",
+      "resource_type": "other"
+    },
+    {
+      "identifier": "https://github.com/JoniMartin27/inferbench",
+      "relation": "isSupplementTo",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ]
+}

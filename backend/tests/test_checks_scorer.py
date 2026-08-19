@@ -289,3 +289,33 @@ def test_an_empty_or_offtopic_answer_scores_low_everywhere():
             continue
         assert _quality_checks("", p.checks) <= 40.0, p.id
         assert _quality_checks("I am not sure about that, sorry.", p.checks) <= 60.0, p.id
+
+
+# Respuestas REALES de modelos, sacadas de runs de verdad, que el baremo puntuaba mal.
+# Un scorer que suspende una respuesta correcta miente igual que uno que aprueba una
+# incorrecta — y estas se cazaron corriendo la batería, no leyendo el código.
+RESPUESTAS_REALES_CORRECTAS = {
+    # llama-3.1-8b Q4_K_M, run a5a70b051fba (2026-08-19). Rechaza como debe y no inventa
+    # ninguna cifra, pero sacaba 0: la lista de sinónimos no contemplaba "cannot find".
+    "unanswerable": "I cannot find information about the Valencia plant in the passage.",
+}
+
+
+@pytest.mark.parametrize("pid", sorted(RESPUESTAS_REALES_CORRECTAS))
+def test_real_correct_answers_are_not_failed(pid):
+    p = get_prompt(pid)
+    assert p is not None and p.checks
+    respuesta = RESPUESTAS_REALES_CORRECTAS[pid]
+    nota = _quality_checks(respuesta, p.checks)
+    assert nota == 100.0, f"{pid}: {nota} — falla {_failed_checks(respuesta, p.checks)}"
+
+
+def test_unanswerable_sigue_castigando_la_alucinacion():
+    """Ampliar los sinónimos no puede haber aflojado el prompt: inventarse la cifra
+    (o repetir la de Almería) tiene que seguir suspendiendo."""
+    p = get_prompt("unanswerable")
+    for mala in (
+        "The Valencia plant employs 320 people.",
+        "According to the passage, the Valencia plant employs 450 employees.",
+    ):
+        assert _quality_checks(mala, p.checks) <= 60.0, mala

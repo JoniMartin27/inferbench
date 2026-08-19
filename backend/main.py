@@ -28,11 +28,11 @@ async def lifespan(app_: FastAPI):
     # Runs que quedaron colgadas en `running` de una ejecución anterior: el proceso que las
     # ejecutaba ya no existe, así que aquí es donde se cierran. Si no, el Historial las
     # enseña "en curso" para siempre y no hay forma de pararlas.
+    # Las que tenían TODOS sus resultados se recuperan como completadas (lo dice el propio
+    # reconcile en su log): habían terminado y solo les faltó el último UPDATE.
     huerfanas = reconcile_orphan_runs()
     if huerfanas:
-        logger.warning(
-            f"{huerfanas} run(s) quedaron a medias en un arranque anterior; marcadas como interrumpidas."
-        )
+        logger.warning(f"{huerfanas} run(s) quedaron abiertas en un arranque anterior; cerradas.")
     # El transporte HTTP de MCP (montado bajo /mcp) necesita que su gestor de sesiones
     # corra durante la vida de la app. Starlette no ejecuta el lifespan de sub-apps
     # montadas, así que lo encadenamos aquí. Si `mcp` no está instalado, seguimos sin MCP

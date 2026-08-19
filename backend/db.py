@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
+from loguru import logger
 from sqlalchemy import text
 from sqlmodel import Field, Session, SQLModel, create_engine
+
+# Variable de entorno que MANDA sobre cualquier otra ruta. Existe para que el arnés de
+# pruebas pueda apuntar a una base de datos desechable ANTES de que se importe este módulo:
+# `DB_PATH` y `_engine` se calculan al importar, así que parchearlos después siempre llega
+# tarde para lo que corra en un lifespan. Ver `tests/conftest.py`.
+_ENV_DB_PATH = "INFERBENCH_DB_PATH"
 
 
 def _db_path() -> Path:
@@ -27,7 +35,15 @@ def _db_path() -> Path:
 
     Ejecutando desde el código sigue en `backend/data/`, para no mezclar la base de datos
     de desarrollo con la del usuario.
+
+    `INFERBENCH_DB_PATH` gana a todo lo demás (lo usa el arnés de pruebas para no poder
+    tocar la base de datos real ni por accidente).
     """
+    forzada = os.environ.get(_ENV_DB_PATH)
+    if forzada:
+        ruta = Path(forzada).expanduser()
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        return ruta
     if getattr(sys, "frozen", False):
         base = (
             Path(os.environ["APPDATA"]) / "InferBench"
@@ -76,6 +92,12 @@ class BenchmarkResult(SQLModel, table=True):
     tps_std: float | None = None  # desviación estándar del decode tok/s entre muestras
     ttft_std: float | None = None  # desviación estándar del TTFT (ms) entre muestras
     n_samples: int | None = None  # nº de muestras medidas que respaldan estas cifras
+    # Versión del prompt y del scorer con los que se obtuvo esta nota. Sin esto, comparar
+    # notas de runs distintas es inválido en cuanto la batería cambia: MEDIDO sobre el
+    # historial real, filas del prompt `chat` guardaban respuestas a "recomiéndame 3 libros"
+    # y a "lista los ocho planetas" con la misma etiqueta, indistinguibles.
+    prompt_version: int | None = None
+    scorer: str = ""  # checks | checklist | code-exec | heuristic | llm:self | llm:api
 
 
 # Columnas añadidas tras la v0 de la tabla. create_all no altera tablas existentes, así que
@@ -85,6 +107,8 @@ _RESULT_MIGRATIONS = [
     ("tps_std", "FLOAT"),
     ("ttft_std", "FLOAT"),
     ("n_samples", "INTEGER"),
+    ("prompt_version", "INTEGER"),
+    ("scorer", "VARCHAR"),
 ]
 
 
@@ -97,6 +121,39 @@ def _migrate() -> None:
                 conn.execute(text(f"ALTER TABLE benchmark_results ADD COLUMN {col} {sqltype}"))
 
 
+def _runs_con_resultados_completos(conn, estado: str) -> list[str]:
+    """ids de runs en `estado` que tienen resultados para TODOS sus prompts declarados.
+
+    Una fila así NO se quedó a medias: terminó y solo le faltó el último UPDATE de estado.
+    El criterio es deliberadamente conservador —exige cubrir todos los prompts de
+    `opts_json`— porque el error caro es al revés: dar por buena una run que no acabó.
+
+    Nota: el gating de visión puede OMITIR prompts (un modelo sin `mmproj` no los corre),
+    así que una run completa puede tener menos resultados que prompts declarados y aquí
+    contará como incompleta. Se prefiere quedarse corto: dejarla `interrupted` es honesto.
+    """
+    filas = conn.execute(
+        text("SELECT id, opts_json FROM benchmark_runs WHERE status = :estado"),
+        {"estado": estado},
+    ).fetchall()
+    if not filas:
+        return []
+    por_run = dict(
+        conn.execute(
+            text("SELECT run_id, count(*) FROM benchmark_results GROUP BY run_id")
+        ).fetchall()
+    )
+    completas = []
+    for run_id, opts_json in filas:
+        try:
+            prompts = (json.loads(opts_json or "{}") or {}).get("prompts") or []
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue  # opts ilegible: no presuponemos nada
+        if prompts and por_run.get(run_id, 0) >= len(prompts):
+            completas.append(run_id)
+    return completas
+
+
 def reconcile_orphan_runs() -> int:
     """Cierra las runs que quedaron marcadas `running` de una ejecución anterior.
 
@@ -107,21 +164,69 @@ def reconcile_orphan_runs() -> int:
     nuevas runs se quedaban esperando turno detrás de un fantasma.
 
     Al arrancar, cualquier fila en `running` es por definición imposible: el proceso que la
-    ejecutaba ya no existe. Se marcan `interrupted`, que es la verdad.
+    ejecutaba ya no existe. Pero **`interrupted` no es la verdad para todas**: una fila con
+    resultados para todos sus prompts SÍ terminó, solo le faltó el último UPDATE. Marcarla
+    "interrumpida" borra trabajo bueno del Historial, que es justo el daño que hay que
+    evitar. Esas se recuperan como `done`; el resto sí se marcan `interrupted`.
 
-    Devuelve cuántas ha cerrado.
+    Devuelve cuántas filas han dejado de estar en `running`.
     """
     with _engine.begin() as conn:
+        recuperadas = _runs_con_resultados_completos(conn, "running")
+        if recuperadas:
+            conn.execute(
+                text("UPDATE benchmark_runs SET status = 'done' WHERE id = :id"),
+                [{"id": run_id} for run_id in recuperadas],
+            )
         resultado = conn.execute(
             text("UPDATE benchmark_runs SET status = 'interrupted' WHERE status = 'running'")
         )
-        return resultado.rowcount or 0
+        interrumpidas = resultado.rowcount or 0
+    if recuperadas:
+        logger.info(
+            f"{len(recuperadas)} run(s) colgadas tenían todos sus resultados: "
+            "estaban terminadas y se han marcado como completadas, no interrumpidas."
+        )
+    return len(recuperadas) + interrumpidas
+
+
+def repair_misflagged_interrupted_runs() -> int:
+    """Devuelve a `done` las runs marcadas `interrupted` que tienen todos sus resultados.
+
+    Reparación de un incidente real (2026-08-13): un `UPDATE` de reconciliación llegó a
+    correr contra la base de datos del usuario y dejó 135 de 137 filas en `interrupted`;
+    98 de ellas tenían resultados para todos sus prompts, o sea habían terminado bien. El
+    Historial pasó de verde a ámbar casi entero y las runs buenas parecían basura.
+
+    Que una fila `interrupted` tenga TODOS sus resultados es imposible por el camino normal:
+    `api/benchmark.py` escribe `done` y los resultados en la MISMA transacción, y `/stop`
+    solo toca filas en `running`. Así que si se da, es una fila mal marcada — se corrige.
+
+    Idempotente: en cuanto no quedan filas así, no hace nada. Corre en cada arranque para
+    que otras máquinas/instalaciones afectadas se reparen solas.
+
+    Devuelve cuántas ha recuperado.
+    """
+    with _engine.begin() as conn:
+        recuperadas = _runs_con_resultados_completos(conn, "interrupted")
+        if recuperadas:
+            conn.execute(
+                text("UPDATE benchmark_runs SET status = 'done' WHERE id = :id"),
+                [{"id": run_id} for run_id in recuperadas],
+            )
+    if recuperadas:
+        logger.warning(
+            f"{len(recuperadas)} run(s) estaban marcadas como interrumpidas pero tenían todos "
+            "sus resultados; las devuelvo a completadas (reparación idempotente)."
+        )
+    return len(recuperadas)
 
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(_engine)
     _migrate()
+    repair_misflagged_interrupted_runs()
 
 
 def get_session() -> Session:

@@ -479,19 +479,37 @@ inferbench/
 
 ## Suite de prompts
 
-`backend/data/prompts.json` define 7 prompts representativos. **Cada uno tiene un scorer verificable** (no F1 de tokens): la calidad mide corrección real. Cubren razonamiento, código, resumen, conocimiento, **contexto largo** (recuperación sobre ~5k tokens) y visión.
+`backend/data/prompts.json` define **13 prompts en tres tramos de dificultad**. **Cada uno tiene un scorer verificable** (no F1 de tokens): la calidad mide corrección real. Los tramos son deliberados — una batería donde todo el mundo saca 100 no ordena a nadie.
 
-| ID | Tarea | Cómo se puntúa | Tokens |
-|----|-------|----------------|--------|
-| `reasoning` | reparto de alquiler (mates multi-paso) | checklist: aparecen 250 / 500 / 750 | 256 |
-| `code` | `merge_intervals` (solo stdlib) | **ejecuta** el código contra 5 casos → % que pasan | 512 |
-| `summary` | resumir manteniendo hechos clave | checklist: privacidad / sesgos / energía / regulación / código / traducción | 384 |
-| `chat` | planetas en orden desde el Sol | checklist: los 8 planetas (ES/EN) | 128 |
-| `long-context` | recuperar un dato enterrado en un texto de ~5k tokens (needle-in-haystack) | checklist: el código secreto | 32 |
-| `vision-scene` | describir 3 figuras de 3 colores | checklist: forma×3 + color×3 + conteo | 96 |
-| `vision-count` | contar objetos | checklist: nº + forma + color | 48 |
+| ID | Dif. | Tarea | Cómo se puntúa | Tokens |
+|----|------|-------|----------------|--------|
+| `chat` | fácil | planetas en orden desde el Sol | los 8 planetas **+ en orden** + sin planetas enanos | 128 |
+| `reasoning` | medio | reparto de alquiler a 4 (mates multi-paso) | cada cantidad **asignada a su persona** + total + línea de resultado exacta + no caer en el reparto a partes iguales | 512 |
+| `code` | medio | `merge_intervals` (solo stdlib) | **ejecuta** el código contra 5 casos → % que pasan | 512 |
+| `summary` | medio | resumir sin añadir nada | 6 hechos clave + exactamente 5 puntos + **sin porcentajes ni marcas inventadas** | 384 |
+| `logic` | difícil | deducir el orden de llegada de 4 corredores | las 4 posiciones, en el formato pedido, sin inventar una quinta | 512 |
+| `instructions` | difícil | 3 capitales, formato estricto | las 3 en formato `N: Ciudad` + **sin las capitales equivocadas populares** (Sídney, Estambul, Toronto) | 128 |
+| `json-extract` | difícil | pasar una nota a JSON | claves exactas + total **calculado** (61,00) + sin fences markdown | 256 |
+| `unanswerable` | difícil | pregunta que el texto NO responde | dice que no consta **y no reutiliza la cifra del texto** | 192 |
+| `code-hard` | difícil | `summarize_ranges` con duplicados y negativos | **ejecuta** el código contra 8 casos límite | 640 |
+| `long-context` | difícil | 3 códigos en ~4,7k tokens: uno revocado, uno caducado, uno activo | da el activo **y ninguno de los señuelos** | 48 |
+| `long-context-count` | difícil | contar los 7 registros `INCIDENT` entre 120 | responde 7, y con el número solo | 48 |
+| `vision-scene` | medio | describir 3 figuras de 3 colores | formas + colores + conteo + **ata color↔forma** + no inventa figuras | 128 |
+| `vision-count` | medio | contar objetos | nº + forma + color + no inventa otras figuras | 64 |
 
-> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). El prompt `code` **ejecuta** la salida del modelo en un subproceso aislado con sandbox (`python -I`, cwd temporal, timeout, límites de recursos, sin red, sin syscalls destructivas). Activado por defecto; desactívalo con `INFERBENCH_CODE_EXEC=0` (entonces el prompt de código se omite, no se puntúa 0).
+> Los prompts `vision-*` solo corren en **modelos de visión** (con `mmproj`); para el resto se omiten. Las imágenes tienen ground-truth conocido (`data/vision_*.png`, generadas por `scripts/make_vision_test.py`). Los prompts `code*` **ejecutan** la salida del modelo en un subproceso aislado con sandbox (`python -I`, cwd temporal, timeout, límites de recursos, sin red, sin syscalls destructivas). Activado por defecto; desactívalo con `INFERBENCH_CODE_EXEC=0` (entonces esos prompts se omiten, no se puntúan 0).
+
+### Cómo se puntúa: comprobaciones ponderadas
+
+Cada prompt declara `checks`: comprobaciones con peso, de cinco tipos — `any` (sinónimos), `number` (el número completo **y asignado a quien toca**), `order` (la secuencia pedida), `regex` (formato exacto) y `absent` (señuelos y alucinaciones, que restan). La nota es la fracción del peso superada, y el evento SSE `quality` incluye `failed`: **qué comprobación concreta se falló**, para que la nota se pueda auditar en vez de creer un número.
+
+Esto sustituye al checklist de solo-palabras, que daba por buenas respuestas incorrectas. Medido sobre el historial real: 5 de 38 respuestas perfectas de `chat` tenían los planetas **desordenados** aunque el enunciado pedía orden, y `250` contaba como acierto dentro de `2500`.
+
+### Validar la batería, no solo los modelos
+
+- `backend/tests/test_checks_scorer.py` exige que **una respuesta modelo de cada prompt saque 100** y que el fallo típico se quede en ≤60. Un baremo que nadie puede aprobar está tan roto como uno que aprueba cualquier cosa.
+- `python backend/scripts/audit_scoring.py --compare` re-puntúa el historial guardado (**solo lectura**) y reporta por prompt cuántas notas distintas produce, el % que se queda en el techo y qué comprobaciones fallan más. Si un prompt solo da dos notas o el 40% saca 100, ha dejado de discriminar y toca endurecerlo.
+- Cada resultado guarda `prompt_version` y `scorer`. **Sube `version` al cambiar un enunciado o un baremo**: sin eso, comparar notas de runs distintas no significa nada (pasó de verdad — filas de `chat` con respuestas a dos preguntas diferentes).
 
 ### Rigor estadístico (no una sola muestra)
 
@@ -560,8 +578,20 @@ El default es offline a propósito para que funcione en máquinas sin GPU ni API
 
 - Binarios: `%APPDATA%\InferBench\binaries\<engine>\` (Windows) o `~/.inferbench/binaries/` (Linux/Mac)
 - Modelos GGUF: `%APPDATA%\InferBench\models\<repo>\<file>.gguf`
-- DB: `backend/data/inferbench.sqlite`
+- DB: `backend/data/inferbench.sqlite` ejecutando desde el código, `%APPDATA%\InferBench\inferbench.sqlite` en la app empaquetada. `INFERBENCH_DB_PATH` manda sobre las dos (lo usa el arnés de pruebas para no poder tocar tus datos)
 - Logs de motores nativos: `%APPDATA%\InferBench\logs\<engine>.log`
+
+### Estado de las runs en el Historial
+
+`done` (verde) · `error` (rojo) · `running` (en curso) · `interrupted` (ámbar).
+
+Al arrancar, el backend cierra las runs que quedaron en `running` de una ejecución
+anterior — cerraste la app a mitad, se cayó el backend — porque el proceso que las
+ejecutaba ya no existe. **Una run con resultados para todos sus prompts NO se marca
+interrumpida**: terminó y solo le faltó el último cambio de estado, así que se recupera
+como `done`. Además, al arrancar se reparan (de forma idempotente) las runs marcadas
+`interrupted` que sí tienen todos sus resultados, para dejar el Historial fiel en las
+instalaciones donde quedaron mal marcadas.
 
 ---
 

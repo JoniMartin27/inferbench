@@ -27,6 +27,10 @@ import db as db_mod
 
 
 def _ruta(monkeypatch, *, frozen: bool, appdata=None, home=None):
+    # El arnés fija INFERBENCH_DB_PATH para toda la sesión (ver conftest.py) y esa variable
+    # MANDA sobre el resto de la función. Aquí se prueban justo las otras ramas, así que se
+    # quita: sin esto, todos estos tests verían la BD desechable del arnés y pasarían solos.
+    monkeypatch.delenv("INFERBENCH_DB_PATH", raising=False)
     monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     if appdata is None:
         monkeypatch.delenv("APPDATA", raising=False)

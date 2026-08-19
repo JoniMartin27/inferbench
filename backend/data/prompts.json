@@ -1,18 +1,509 @@
 [
   {
+    "id": "chat",
+    "name": "Knowledge (planets)",
+    "type": "chat",
+    "difficulty": "easy",
+    "version": 2,
+    "system": "You are a concise and accurate assistant. Follow the requested format exactly.",
+    "prompt": "List the eight planets of the solar system in order from the Sun, separated by commas. Include only planets: do not list dwarf planets, moons or the Sun itself.",
+    "target_tokens": 128,
+    "reference": "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.",
+    "checks": [
+      {
+        "kind": "any",
+        "of": [
+          "mercury",
+          "mercurio"
+        ],
+        "label": "names Mercury"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "venus"
+        ],
+        "label": "names Venus"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "earth",
+          "tierra"
+        ],
+        "label": "names Earth"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "mars",
+          "marte"
+        ],
+        "label": "names Mars"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "jupiter"
+        ],
+        "label": "names Jupiter"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "saturn",
+          "saturno"
+        ],
+        "label": "names Saturn"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "uranus",
+          "urano"
+        ],
+        "label": "names Uranus"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "neptune",
+          "neptuno"
+        ],
+        "label": "names Neptune"
+      },
+      {
+        "kind": "order",
+        "weight": 4,
+        "label": "in order from the Sun",
+        "of": [
+          [
+            "mercury",
+            "mercurio"
+          ],
+          [
+            "venus"
+          ],
+          [
+            "earth",
+            "tierra"
+          ],
+          [
+            "mars",
+            "marte"
+          ],
+          [
+            "jupiter"
+          ],
+          [
+            "saturn",
+            "saturno"
+          ],
+          [
+            "uranus",
+            "urano"
+          ],
+          [
+            "neptune",
+            "neptuno"
+          ]
+        ]
+      },
+      {
+        "kind": "absent",
+        "weight": 2,
+        "label": "no dwarf planets",
+        "of": [
+          "pluto",
+          "pluton",
+          "ceres",
+          "eris",
+          "makemake",
+          "haumea"
+        ]
+      }
+    ]
+  },
+  {
     "id": "reasoning",
     "name": "Logical reasoning",
     "type": "reasoning",
-    "system": "You are an assistant that reasons step by step. Be concise but rigorous. ALWAYS end with a final result line giving the exact amount in euros for each person, in the format: 'Result: Ana pays X€, Bea pays Y€, Carlos pays Z€'.",
-    "prompt": "Three friends share a 1500€ rent. Ana pays twice as much as Bea, and Carlos pays three times as much as Bea. How much does each one pay? Explain the reasoning briefly and give the final result.",
+    "difficulty": "medium",
+    "version": 2,
+    "system": "You are an assistant that reasons step by step. Be concise but rigorous. ALWAYS end with a single final line in exactly this format, with no other text on it: 'Result: Ana=X, Bea=Y, Carlos=Z, Dana=W' (amounts in euros, digits only).",
+    "prompt": "Four flatmates share a 2450€ monthly rent. Bea pays 200€ more than Ana. Carlos pays twice what Ana pays. Dana pays 150€ less than Carlos. How much does each one pay? Reason briefly, check that the four amounts add up to the rent, and give the final result line.",
     "target_tokens": 512,
-    "reference": "Bea pays 250€, Ana 500€, Carlos 750€. Total 1500€.",
-    "keywords": [["250"], ["500"], ["750"]]
+    "reference": "Ana pays 400€, Bea 600€, Carlos 800€ and Dana 650€. Total 2450€.",
+    "checks": [
+      {
+        "kind": "number",
+        "value": "400",
+        "near": [
+          "ana"
+        ],
+        "weight": 2,
+        "label": "Ana = 400"
+      },
+      {
+        "kind": "number",
+        "value": "600",
+        "near": [
+          "bea"
+        ],
+        "weight": 2,
+        "label": "Bea = 600"
+      },
+      {
+        "kind": "number",
+        "value": "800",
+        "near": [
+          "carlos"
+        ],
+        "weight": 2,
+        "label": "Carlos = 800"
+      },
+      {
+        "kind": "number",
+        "value": "650",
+        "near": [
+          "dana"
+        ],
+        "weight": 2,
+        "label": "Dana = 650"
+      },
+      {
+        "kind": "number",
+        "value": "2450",
+        "label": "checks the total (2450)"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "612.5",
+          "612",
+          "6125"
+        ],
+        "weight": 2,
+        "label": "does not fall for the equal-split trap"
+      },
+      {
+        "kind": "regex",
+        "pattern": "result:\\s*ana\\s*=\\s*400\\s*,\\s*bea\\s*=\\s*600\\s*,\\s*carlos\\s*=\\s*800\\s*,\\s*dana\\s*=\\s*650",
+        "weight": 3,
+        "label": "exact final result line"
+      }
+    ]
+  },
+  {
+    "id": "logic",
+    "name": "Deduction puzzle",
+    "type": "reasoning",
+    "difficulty": "hard",
+    "version": 1,
+    "system": "You are a rigorous logic solver. Think it through, then end your answer with exactly four lines, one per position, in the form 'N: Name' (N from 1 to 4, 1 = winner). No other text after those lines.",
+    "prompt": "Four runners finished a race: Dana, Elena, Farid and Gus. Farid finished immediately after Dana. Elena did not finish last. Gus finished before Elena. There are no ties. Work out the finishing order.",
+    "target_tokens": 512,
+    "reference": "1 Gus, 2 Elena, 3 Dana, 4 Farid.",
+    "checks": [
+      {
+        "kind": "regex",
+        "pattern": "^\\s*1\\s*[:.)\\-]\\s*gus\\b",
+        "weight": 2,
+        "label": "1st = Gus"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*2\\s*[:.)\\-]\\s*elena\\b",
+        "weight": 2,
+        "label": "2nd = Elena"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*3\\s*[:.)\\-]\\s*dana\\b",
+        "weight": 2,
+        "label": "3rd = Dana"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*4\\s*[:.)\\-]\\s*farid\\b",
+        "weight": 2,
+        "label": "4th = Farid"
+      },
+      {
+        "kind": "absent",
+        "pattern": "^\\s*1\\s*[:.)\\-]\\s*dana\\b",
+        "label": "does not start the order with Dana (the tempting wrong read)"
+      },
+      {
+        "kind": "absent",
+        "pattern": "^\\s*5\\s*[:.)\\-]",
+        "label": "does not invent a fifth position"
+      }
+    ]
+  },
+  {
+    "id": "instructions",
+    "name": "Instruction following",
+    "type": "chat",
+    "difficulty": "hard",
+    "version": 1,
+    "system": "Answer with EXACTLY three lines, one per question, each in the form 'N: Answer' where N is the question number. Give only the name of the city. No explanations, no greetings, no extra lines.",
+    "prompt": "1: What is the capital of Australia? 2: What is the capital of Turkey? 3: What is the capital of Canada?",
+    "target_tokens": 128,
+    "reference": "1: Canberra / 2: Ankara / 3: Ottawa",
+    "checks": [
+      {
+        "kind": "regex",
+        "pattern": "^\\s*1\\s*[:.)\\-]\\s*canberra\\b",
+        "weight": 2,
+        "label": "1 = Canberra, in format"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*2\\s*[:.)\\-]\\s*ankara\\b",
+        "weight": 2,
+        "label": "2 = Ankara, in format"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*3\\s*[:.)\\-]\\s*ottawa\\b",
+        "weight": 2,
+        "label": "3 = Ottawa, in format"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "sydney",
+          "melbourne",
+          "istanbul",
+          "toronto",
+          "vancouver"
+        ],
+        "weight": 3,
+        "label": "no popular wrong capitals"
+      },
+      {
+        "kind": "absent",
+        "pattern": "^\\s*4\\s*[:.)\\-]",
+        "label": "exactly three answers"
+      }
+    ]
+  },
+  {
+    "id": "json-extract",
+    "name": "Structured extraction (JSON)",
+    "type": "code",
+    "difficulty": "hard",
+    "version": 1,
+    "system": "You output raw JSON and nothing else: no explanation, no markdown code fences, no text before or after the object.",
+    "prompt": "From this note, output a JSON object with exactly the keys \"invoice\" (string), \"client\" (string) and \"total\" (number, the amount actually due). Note: 'Invoice 88-B for Nordwind GmbH. Three units of cable at 12.50 each, two units of adapter at 7.25 each, plus 9.00 of shipping. No VAT applies.'",
+    "target_tokens": 256,
+    "reference": "{\"invoice\": \"88-B\", \"client\": \"Nordwind GmbH\", \"total\": 61.00}",
+    "checks": [
+      {
+        "kind": "regex",
+        "pattern": "\"invoice\"\\s*:\\s*\"?88-b",
+        "weight": 2,
+        "label": "invoice = 88-B"
+      },
+      {
+        "kind": "regex",
+        "pattern": "\"client\"\\s*:\\s*\"nordwind",
+        "weight": 2,
+        "label": "client = Nordwind GmbH"
+      },
+      {
+        "kind": "regex",
+        "pattern": "\"total\"\\s*:\\s*\"?61(\\.0+)?\"?\\s*[,}\\n]",
+        "weight": 3,
+        "label": "total = 61.00 (line items + shipping)"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "52",
+          "52.00"
+        ],
+        "weight": 2,
+        "label": "did not forget the shipping"
+      },
+      {
+        "kind": "absent",
+        "pattern": "```",
+        "weight": 2,
+        "label": "raw JSON, no markdown fences"
+      }
+    ]
+  },
+  {
+    "id": "summary",
+    "name": "Summary (faithfulness)",
+    "type": "summary",
+    "difficulty": "medium",
+    "version": 2,
+    "system": "You summarize text keeping every key fact and ADDING NOTHING that is not in the source. Answer with exactly five numbered points (1. to 5.) and nothing else.",
+    "prompt": "Summarize in exactly 5 numbered points, using only what the text says: Generative artificial intelligence has transformed the software industry in recent years. Large language models, trained on massive amounts of data, are capable of generating code, translating between languages, drafting documents and reasoning about complex problems. However, they raise challenges around privacy, bias in the training data, energy consumption in data centers, and the need for regulation. Companies and governments around the world are working on ethical frameworks for their responsible deployment.",
+    "target_tokens": 384,
+    "reference": "LLMs generate code, translate and reason; challenges: privacy, bias, energy consumption and regulation.",
+    "checks": [
+      {
+        "kind": "any",
+        "of": [
+          "privacy",
+          "privacidad"
+        ],
+        "label": "privacy"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "bias",
+          "sesgo"
+        ],
+        "label": "bias"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "energy",
+          "energ"
+        ],
+        "label": "energy consumption"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "regulation",
+          "regula"
+        ],
+        "label": "regulation"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "code",
+          "codigo"
+        ],
+        "label": "code generation"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "translat",
+          "traduc"
+        ],
+        "label": "translation"
+      },
+      {
+        "kind": "regex",
+        "pattern": "^\\s*5\\s*[.)]",
+        "weight": 2,
+        "label": "has a fifth point"
+      },
+      {
+        "kind": "absent",
+        "pattern": "^\\s*6\\s*[.)]",
+        "label": "no more than five points"
+      },
+      {
+        "kind": "absent",
+        "pattern": "\\d{1,3}\\s*%",
+        "weight": 2,
+        "label": "invents no percentages (the source has none)"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "chatgpt",
+          "openai",
+          "gpt-4",
+          "anthropic",
+          "gemini"
+        ],
+        "weight": 2,
+        "label": "adds no companies or models absent from the source"
+      }
+    ]
+  },
+  {
+    "id": "unanswerable",
+    "name": "Unanswerable (no hallucination)",
+    "type": "chat",
+    "difficulty": "hard",
+    "version": 2,
+    "system": "Answer using ONLY the passage. If the passage does not contain the answer, say so plainly instead of guessing.",
+    "prompt": "Passage: 'The Almeria plant opened in 1994 and employs 320 people. It produces solar panels and was refurbished in 2011.' Question: according to the passage, how many people does the Valencia plant employ?",
+    "target_tokens": 192,
+    "reference": "The passage says nothing about a Valencia plant; only the Almeria one is described.",
+    "checks": [
+      {
+        "kind": "any",
+        "weight": 3,
+        "label": "says the passage does not answer it",
+        "of": [
+          "not stated",
+          "does not state",
+          "doesn't state",
+          "does not say",
+          "doesn't say",
+          "not mentioned",
+          "does not mention",
+          "doesn't mention",
+          "no information",
+          "not specified",
+          "not provided",
+          "cannot be determined",
+          "can't be determined",
+          "no dice",
+          "no menciona",
+          "only mentions",
+          "only refers",
+          "cannot find",
+          "can't find",
+          "could not find",
+          "couldn't find",
+          "no information about",
+          "not in the passage",
+          "isn't in the passage",
+          "no mention",
+          "is not mentioned",
+          "isn't mentioned",
+          "nothing about",
+          "does not provide",
+          "doesn't provide",
+          "does not include",
+          "doesn't include",
+          "does not contain",
+          "doesn't contain",
+          "unable to",
+          "no encuentro",
+          "no aparece",
+          "no hay informacion",
+          "no hay información"
+        ]
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "320"
+        ],
+        "weight": 3,
+        "label": "does not reuse Almeria's headcount as the answer"
+      },
+      {
+        "kind": "absent",
+        "pattern": "valencia[^.\\n]{0,40}\\d{2,5}\\s*(people|employees|workers|empleados)",
+        "weight": 2,
+        "label": "invents no headcount for Valencia"
+      }
+    ]
   },
   {
     "id": "code",
     "name": "Code generation",
     "type": "code",
+    "difficulty": "medium",
+    "version": 1,
     "system": "You are an expert programming assistant. Use ONLY the Python standard library (no external dependencies) and return the code inside a ```python block.",
     "prompt": "Implement a function `merge_intervals(intervals)` that takes a list of (start, end) tuples and returns the list of merged overlapping intervals, sorted by start. Use only the standard library. Example: merge_intervals([(1,3),(2,6),(8,10)]) -> [(1,6),(8,10)].",
     "target_tokens": 512,
@@ -26,84 +517,250 @@
     ]
   },
   {
-    "id": "summary",
-    "name": "Summary",
-    "type": "summary",
-    "system": "You are an assistant that summarizes text while keeping all the key facts.",
-    "prompt": "Summarize in 5 points: Generative artificial intelligence has transformed the software industry in recent years. Large language models, trained on massive amounts of data, are capable of generating code, translating between languages, drafting documents and reasoning about complex problems. However, they raise challenges around privacy, bias in the training data, energy consumption in data centers, and the need for regulation. Companies and governments around the world are working on ethical frameworks for their responsible deployment.",
-    "target_tokens": 384,
-    "reference": "LLMs generate code, translate and reason; challenges: privacy, bias, energy consumption and regulation.",
-    "keywords": [
-      ["privacy", "privacidad"],
-      ["bias", "sesgo"],
-      ["energy", "energ"],
-      ["regulation", "regula"],
-      ["code", "codigo"],
-      ["translat", "traduc"]
-    ]
-  },
-  {
-    "id": "chat",
-    "name": "Knowledge (planets)",
-    "type": "chat",
-    "system": "You are a concise and accurate assistant.",
-    "prompt": "List the eight planets of the solar system in order from the Sun, separated by commas.",
-    "target_tokens": 128,
-    "reference": "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune.",
-    "keywords": [
-      ["mercury", "mercurio"],
-      ["venus"],
-      ["earth", "tierra"],
-      ["mars", "marte"],
-      ["jupiter"],
-      ["saturn", "saturno"],
-      ["uranus", "urano"],
-      ["neptune", "neptuno"]
+    "id": "code-hard",
+    "name": "Code generation (edge cases)",
+    "type": "code",
+    "difficulty": "hard",
+    "version": 1,
+    "system": "You are an expert programming assistant. Use ONLY the Python standard library (no external dependencies) and return the code inside a ```python block. Handle every edge case described.",
+    "prompt": "Implement `summarize_ranges(nums)`. It receives a list of integers sorted in non-decreasing order, POSSIBLY WITH DUPLICATES, and returns a list of strings describing the consecutive runs: a run of a single value is \"5\", and a longer run is \"1->3\". Duplicates do not break a run. Negative numbers are allowed. An empty list returns an empty list. Example: summarize_ranges([0,1,2,4,5,7]) -> ['0->2','4->5','7'].",
+    "target_tokens": 640,
+    "reference": "Walk the list tracking the start of the run; skip duplicates; a run closes when the next value is neither equal nor the successor.",
+    "code_tests": [
+      "assert list(summarize_ranges([0,1,2,4,5,7])) == ['0->2','4->5','7']",
+      "assert list(summarize_ranges([])) == []",
+      "assert list(summarize_ranges([5])) == ['5']",
+      "assert list(summarize_ranges([1,1,2,3,3,7])) == ['1->3','7']",
+      "assert list(summarize_ranges([-3,-2,-1,1])) == ['-3->-1','1']",
+      "assert list(summarize_ranges([1,3,5])) == ['1','3','5']",
+      "assert list(summarize_ranges([2,2,2])) == ['2']",
+      "assert list(summarize_ranges([-1,0,0,1,5,6])) == ['-1->1','5->6']"
     ]
   },
   {
     "id": "long-context",
     "name": "Long context (retrieval)",
     "type": "long-context",
-    "system": "Read the full text and answer only with the requested value, no explanations.",
-    "prompt": "Question: what is the secret access code for the central system that appears in the text? Answer only with the code.",
-    "target_tokens": 32,
-    "reference": "AZUL-4729",
+    "difficulty": "hard",
+    "version": 2,
+    "system": "Read the full text before answering. Several access codes appear in it, but only one is still valid. Answer with the code alone, nothing else.",
+    "prompt": "Question: which access code for the central system is currently ACTIVE? Answer with the code only.",
+    "target_tokens": 48,
+    "reference": "AZUL-4729 (BRONCE-1188 was revoked and VERDE-2051 expired).",
     "context_file": "context_haystack.txt",
-    "keywords": [["azul"], ["4729"]]
+    "checks": [
+      {
+        "kind": "any",
+        "of": [
+          "azul-4729",
+          "azul 4729"
+        ],
+        "weight": 3,
+        "label": "gives the active code"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "bronce",
+          "1188"
+        ],
+        "weight": 2,
+        "label": "does not give the revoked code"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "verde-2051",
+          "2051"
+        ],
+        "weight": 2,
+        "label": "does not give the expired code"
+      }
+    ]
+  },
+  {
+    "id": "long-context-count",
+    "name": "Long context (aggregation)",
+    "type": "long-context",
+    "difficulty": "hard",
+    "version": 1,
+    "system": "Read the full text and count. Answer with a single integer and nothing else.",
+    "prompt": "Question: how many records in the text are marked as INCIDENT? Answer with the number only.",
+    "target_tokens": 48,
+    "reference": "7",
+    "context_file": "context_haystack.txt",
+    "checks": [
+      {
+        "kind": "regex",
+        "pattern": "^\\W{0,4}(the answer is\\s*)?7\\b",
+        "weight": 3,
+        "label": "answers 7, and answers with the number"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "120"
+        ],
+        "weight": 2,
+        "label": "does not count every record"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "0"
+        ],
+        "label": "does not answer zero"
+      }
+    ]
   },
   {
     "id": "vision-scene",
     "name": "Vision: scene",
     "type": "vision",
-    "system": "You are an assistant that describes images accurately.",
+    "difficulty": "medium",
+    "version": 2,
+    "system": "You are an assistant that describes images accurately. Mention only what is actually there.",
     "prompt": "Describe the image: what geometric shapes are there, what color is each one, and how many are there in total?",
-    "target_tokens": 96,
+    "target_tokens": 128,
     "reference": "Three shapes: a red circle, a blue square and a green triangle.",
     "image": "vision_scene.png",
-    "keywords": [
-      ["circle", "círculo"],
-      ["square", "cuadrado"],
-      ["triangle", "triángulo"],
-      ["red", "rojo"],
-      ["blue", "azul"],
-      ["green", "verde"],
-      ["3", "three", "tres"]
+    "checks": [
+      {
+        "kind": "any",
+        "of": [
+          "circle",
+          "circulo"
+        ],
+        "label": "circle"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "square",
+          "cuadrado"
+        ],
+        "label": "square"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "triangle",
+          "triangulo"
+        ],
+        "label": "triangle"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "red",
+          "rojo"
+        ],
+        "label": "red"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "blue",
+          "azul"
+        ],
+        "label": "blue"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "green",
+          "verde"
+        ],
+        "label": "green"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "3",
+          "three",
+          "tres"
+        ],
+        "label": "counts 3"
+      },
+      {
+        "kind": "regex",
+        "pattern": "red[^.\\n]{0,30}circle|circle[^.\\n]{0,30}red|circulo[^.\\n]{0,30}rojo|rojo[^.\\n]{0,30}circulo",
+        "weight": 2,
+        "label": "binds red to the circle"
+      },
+      {
+        "kind": "regex",
+        "pattern": "blue[^.\\n]{0,30}square|square[^.\\n]{0,30}blue|cuadrado[^.\\n]{0,30}azul|azul[^.\\n]{0,30}cuadrado",
+        "weight": 2,
+        "label": "binds blue to the square"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "hexagon",
+          "star",
+          "pentagon",
+          "rectangle",
+          "oval",
+          "yellow",
+          "purple",
+          "orange"
+        ],
+        "weight": 2,
+        "label": "invents no shapes or colors"
+      }
     ]
   },
   {
     "id": "vision-count",
     "name": "Vision: counting",
     "type": "vision",
+    "difficulty": "medium",
+    "version": 2,
     "system": "You are an assistant that counts objects in images accurately.",
     "prompt": "How many circles are in the image and what color are they? Answer briefly.",
-    "target_tokens": 48,
+    "target_tokens": 64,
     "reference": "Four orange circles.",
     "image": "vision_count.png",
-    "keywords": [
-      ["4", "four", "cuatro"],
-      ["circle", "círculo"],
-      ["orange", "naranja"]
+    "checks": [
+      {
+        "kind": "any",
+        "of": [
+          "4",
+          "four",
+          "cuatro"
+        ],
+        "weight": 3,
+        "label": "counts 4"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "circle",
+          "circulo"
+        ],
+        "label": "circles"
+      },
+      {
+        "kind": "any",
+        "of": [
+          "orange",
+          "naranja"
+        ],
+        "weight": 2,
+        "label": "orange"
+      },
+      {
+        "kind": "absent",
+        "of": [
+          "square",
+          "triangle",
+          "cuadrado",
+          "triangulo"
+        ],
+        "weight": 2,
+        "label": "invents no other shapes"
+      }
     ]
   }
 ]

@@ -55,6 +55,34 @@ MEASURE_ITERS = max(1, int(os.environ.get("INFERBENCH_BENCH_ITERS", "3")))
 WARMUP_ENABLED = os.environ.get("INFERBENCH_BENCH_NO_WARMUP") not in ("1", "true", "True")
 
 
+class Check(BaseModel):
+    """Una comprobación verificable sobre la respuesta del modelo.
+
+    El checklist de `keywords` solo sabe preguntar «¿aparece esta palabra?», y eso deja pasar
+    respuestas incorrectas (MEDIDO sobre el historial real: 5 de 38 notas perfectas del prompt
+    de planetas tenían los planetas DESORDENADOS aunque el enunciado pedía orden, y "250"
+    casaba dentro de "2500"). `Check` añade las preguntas que sí distinguen:
+
+    - `any`     : aparece alguno de los sinónimos de `of` (equivalente a un grupo de keywords).
+    - `number`  : `value` aparece como número COMPLETO (no como prefijo de otro) y, si se da
+                  `near`, cerca de un ancla — así se comprueba la ASIGNACIÓN (Ana→500), no
+                  solo que el número esté suelto por ahí.
+    - `order`   : los grupos de `of` aparecen y además EN ESE ORDEN.
+    - `regex`   : la respuesta casa un patrón (cumplimiento de formato exacto).
+    - `absent`  : NINGUNO de los términos de `of` aparece — trampas: cifras señuelo, datos
+                  que no están en la fuente, respuestas al distractor. Castiga alucinar.
+    """
+
+    kind: str  # any | number | order | regex | absent
+    of: list[str] | list[list[str]] | None = None
+    value: str | None = None  # `number`
+    near: list[str] | None = None  # `number`: anclas de asignación
+    window: int = 64  # `number`: distancia máxima (chars) entre el número y el ancla
+    pattern: str | None = None  # `regex`
+    weight: float = 1.0
+    label: str = ""  # descripción legible, para depurar el scorer
+
+
 class Prompt(BaseModel):
     id: str
     name: str
@@ -63,11 +91,20 @@ class Prompt(BaseModel):
     prompt: str
     target_tokens: int = 256
     reference: str = ""
+    # Dificultad declarada: easy | medium | hard. Sirve para que la suite no se sature (una
+    # batería donde todo el mundo saca 100 no informa) y para reportar la nota por tramos.
+    difficulty: str = "medium"
+    # SÚBELA cada vez que cambie el enunciado o el baremo. Se persiste con cada resultado:
+    # comparar notas de versiones distintas del mismo prompt no significa nada.
+    version: int = 1
     image: str | None = None  # filename (relativo a data/) de una imagen → prompt multimodal
     # Checklist de atributos verificables: lista de grupos de sinónimos. La calidad es la
     # fracción de grupos que aparecen en la respuesta. Útil para visión (ground-truth de la
     # imagen) y para cualquier tarea con hechos comprobables. Tiene prioridad sobre reference.
     keywords: list[list[str]] | None = None
+    # Comprobaciones ponderadas (orden, asignación numérica, formato, ausencia de señuelos).
+    # Tienen prioridad sobre `keywords`: son un superconjunto estricto de lo que aquellas miden.
+    checks: list[Check] | None = None
     # Casos de prueba (aserciones Python) que se ejecutan contra el código del modelo. La
     # calidad es el % de casos que pasan. Mide si el código FUNCIONA, no su parecido textual.
     code_tests: list[str] | None = None
@@ -349,6 +386,10 @@ class ResultPayload(BaseModel):
     tps_std: float = 0.0  # desviación estándar del decode tok/s entre muestras
     ttft_std: float = 0.0  # desviación estándar del TTFT (ms) entre muestras
     n_samples: int = 1  # nº de muestras medidas (warmup excluido)
+    # Con qué versión del prompt y qué scorer se obtuvo la nota: sin esto, dos filas del
+    # mismo `prompt_id` pueden ser respuestas a preguntas distintas (pasó de verdad).
+    prompt_version: int = 1
+    scorer: str = ""
 
 
 # --- Scorer de calidad offline (Python puro, sin GPU/modelo/red: corre en cualquier PC) ---
@@ -481,6 +522,132 @@ def _quality_keywords(output: str, groups: list[list[str]]) -> float:
         if any(re.search(r"\b" + re.escape(_q_norm(term)), low) for term in group)
     )
     return round(hits / len(groups) * 100, 1)
+
+
+def _num_spans(text: str, value: str) -> list[int]:
+    """Posiciones donde `value` aparece como número COMPLETO en `text` (ya normalizado).
+
+    Exige que no haya dígito ni separador de millares pegado a ningún lado: así "250" NO casa
+    dentro de "2500" ni de "1250", pero sí en "250€", "250." o "(250)". Acepta el propio valor
+    escrito con separadores ("1500" casa "1.500" y "1,500").
+    """
+    sep = r"[., ]?"
+    body = sep.join(re.escape(c) for c in value)
+    # Ni dígito ni separador-entre-dígitos pegado por delante/detrás.
+    pat = rf"(?<![\d.,]){body}(?![\d]|[.,]\d)"
+    return [m.start() for m in re.finditer(pat, text)]
+
+
+def _check_passes(check: Check, low: str) -> bool:
+    """¿Se cumple una comprobación sobre la respuesta ya normalizada (minúsculas, sin tildes)?"""
+    kind = check.kind
+
+    if kind == "any":
+        terms = [t for t in (check.of or []) if isinstance(t, str)]
+        return any(re.search(r"\b" + re.escape(_q_norm(t)), low) for t in terms)
+
+    if kind == "absent":
+        terms = [t for t in (check.of or []) if isinstance(t, str)]
+        for t in terms:
+            t = _q_norm(t)
+            # Los señuelos numéricos se buscan como número completo: si el señuelo es 650,
+            # que "6500" no lo dé por presente (ni al revés).
+            hit = _num_spans(low, t) if t.replace(".", "").isdigit() else None
+            if hit if hit is not None else re.search(r"\b" + re.escape(t), low):
+                return False
+        if check.pattern:
+            try:
+                if re.search(check.pattern, low, re.IGNORECASE | re.MULTILINE):
+                    return False
+            except re.error:
+                logger.warning(f"Invalid regex in check {check.label!r}: {check.pattern!r}")
+        return True
+
+    if kind == "number":
+        if not check.value:
+            return False
+        spans = _num_spans(low, _q_norm(check.value))
+        if not spans:
+            return False
+        if not check.near:
+            return True
+        # ASIGNACIÓN: no basta con que el ancla esté cerca — entre el ancla y el número no
+        # puede haber NINGÚN otro dígito. Si no, en una línea compacta como
+        # "Ana=880, Bea=640, Carlos=440" el 880 tendría "carlos" a 19 caracteres y una
+        # asignación cruzada puntuaría como correcta (falso positivo MEDIDO en el diseño).
+        anchors = [_q_norm(a) for a in check.near]
+        for pos in spans:
+            fin = pos + len(_q_norm(check.value))
+            for a in anchors:
+                for m in re.finditer(r"\b" + re.escape(a), low):
+                    if m.end() <= pos:
+                        entre, dist = low[m.end() : pos], pos - m.end()
+                    elif m.start() >= fin:
+                        entre, dist = low[fin : m.start()], m.start() - fin
+                    else:
+                        continue
+                    if dist <= check.window and not re.search(r"\d", entre):
+                        return True
+        return False
+
+    if kind == "order":
+        groups = [g for g in (check.of or []) if isinstance(g, list)]
+        if not groups:
+            return False
+        posiciones = []
+        for group in groups:
+            encontrados = [
+                m.start()
+                for term in group
+                if (m := re.search(r"\b" + re.escape(_q_norm(term)), low))
+            ]
+            if not encontrados:
+                return False
+            posiciones.append(min(encontrados))
+        return posiciones == sorted(posiciones)
+
+    if kind == "regex":
+        if not check.pattern:
+            return False
+        try:
+            # MULTILINE: los patrones de formato anclan en `^` para exigir que la respuesta
+            # empiece una LÍNEA con lo pedido ("1: Canberra"), no que lo diga por ahí suelto.
+            return re.search(check.pattern, low, re.IGNORECASE | re.MULTILINE) is not None
+        except re.error:
+            logger.warning(f"Invalid regex in check {check.label!r}: {check.pattern!r}")
+            return False
+
+    logger.warning(f"Unknown check kind {kind!r} in {check.label!r}")
+    return False
+
+
+def _quality_checks(output: str, checks: list[Check]) -> float:
+    """Calidad 0-100 = fracción PONDERADA de comprobaciones superadas.
+
+    A diferencia del checklist de keywords, aquí una respuesta puede fallar por decir lo
+    correcto de forma incorrecta (orden equivocado, cantidad asignada a quien no es, formato
+    que no se pidió) o por añadir algo que no debía (`absent`).
+    """
+    if not checks:
+        return 0.0
+    low = _q_norm(output)
+    total = sum(c.weight for c in checks if c.weight > 0)
+    if total <= 0:
+        return 0.0
+    pasan = [c for c in checks if c.weight > 0 and _check_passes(c, low)]
+    # Las comprobaciones `absent` («no inventes esto») se cumplen SOLAS con el silencio: una
+    # respuesta vacía sacaba 62,5 en el prompt de no-alucinar (cazado por su propio test).
+    # No se cobra por lo que no has dicho si no has acertado NADA de lo que sí había que decir.
+    if not any(c.kind != "absent" for c in pasan):
+        return 0.0
+    got = sum(c.weight for c in pasan)
+    return round(got / total * 100, 1)
+
+
+def _failed_checks(output: str, checks: list[Check]) -> list[str]:
+    """Etiquetas de las comprobaciones NO superadas — para explicar la nota en la UI/logs."""
+    low = _q_norm(output)
+    return [c.label or c.kind for c in checks if not _check_passes(c, low)]
 
 
 def _extract_code(output: str) -> str:
@@ -1686,10 +1853,16 @@ class BenchmarkRunner:
             error = "the model produced no tokens (KV cache too compressed for this model?)"
             await self.emit({"type": "log", "level": "warn", "text": f"{prompt.id}: {error}"})
 
+        fallos: list[str] = []
         if prompt.code_tests and code_exec_enabled():
             # Ejecuta el código del modelo contra casos reales (en sandbox): mide si FUNCIONA.
             quality = await _quality_code(output, prompt.code_tests)
             method = "code-exec"
+        elif prompt.checks:
+            # Comprobaciones ponderadas: orden, asignación numérica, formato y señuelos.
+            quality = _quality_checks(output, prompt.checks)
+            method = "checks"
+            fallos = _failed_checks(output, prompt.checks)
         elif prompt.keywords:
             # Checklist de atributos (p.ej. ground-truth de una imagen): mide corrección
             # de verdad, no solo solapamiento de tokens con una frase de referencia.
@@ -1699,7 +1872,7 @@ class BenchmarkRunner:
             quality = _quality_heuristic(output, prompt.reference)
             method = "heuristic"
         judge_mode = (self.req.judge or {}).get("mode", "heuristic")
-        verifiable = bool(prompt.keywords or prompt.code_tests)
+        verifiable = bool(prompt.keywords or prompt.code_tests or prompt.checks)
         # El LLM-judge solo aplica a prompts SIN scorer verificable (no a checklist/código).
         if not verifiable and judge_mode in ("self", "api") and output.strip() and not error:
             j_url, j_model, j_headers = self._resolve_judge(headers, model_for_engine)
@@ -1718,7 +1891,17 @@ class BenchmarkRunner:
                         }
                     )
 
-        await self.emit({"type": "phase", "phase": "quality", "score": quality, "method": method})
+        # `failed` explica POR QUÉ la nota no es 100 (qué comprobación falló), en vez de
+        # dejar un número desnudo que no se puede auditar.
+        evt_q: dict[str, Any] = {
+            "type": "phase",
+            "phase": "quality",
+            "score": quality,
+            "method": method,
+        }
+        if fallos:
+            evt_q["failed"] = fallos
+        await self.emit(evt_q)
 
         result = ResultPayload(
             model_id=self.req.model,
@@ -1736,6 +1919,8 @@ class BenchmarkRunner:
             tps_std=round(tps_std, 2),
             ttft_std=round(ttft_std, 2),
             n_samples=n_samples,
+            prompt_version=prompt.version,
+            scorer=method,
         )
         self.results.append(result)
         await self.emit({"type": "result", "result": result.model_dump()})
@@ -1782,6 +1967,10 @@ class BenchmarkRunner:
             ctx_used=0,
             raw_output="",
             error=err,
+            # También en el camino de error: una fila sin versión de prompt no se puede
+            # comparar luego con nada, ni siquiera para saber qué se intentó medir.
+            prompt_version=prompt.version,
+            n_samples=0,
         )
         self.results.append(result)
         await self.emit({"type": "result", "result": result.model_dump()})

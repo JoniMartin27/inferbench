@@ -20,7 +20,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 import db as db_mod
-from db import BenchmarkRun, reconcile_orphan_runs
+from db import (
+    BenchmarkResult,
+    BenchmarkRun,
+    reconcile_orphan_runs,
+    repair_misflagged_interrupted_runs,
+)
 from main import app
 
 
@@ -50,12 +55,16 @@ def sin_restos(bd_limpia):
     from sqlmodel import Session, delete
 
     with Session(bd_limpia) as s:
+        s.exec(delete(BenchmarkResult))  # antes que las runs: hay FK
         s.exec(delete(BenchmarkRun))
         s.commit()
     return bd_limpia
 
 
-def _fila(motor, run_id, status):
+def _fila(motor, run_id, status, prompts=None, resultados=0):
+    """Inserta una run. `prompts` son los que declara, `resultados` los que llegó a guardar."""
+    import json
+
     from sqlmodel import Session
 
     with Session(motor) as s:
@@ -65,10 +74,16 @@ def _fila(motor, run_id, status):
                 ts=int(time.time()),
                 engine="llamacpp",
                 hw_json="{}",
-                opts_json="{}",
+                opts_json=json.dumps({"prompts": prompts}) if prompts else "{}",
                 status=status,
             )
         )
+        for i in range(resultados):
+            s.add(
+                BenchmarkResult(
+                    run_id=run_id, model_id="m", prompt_id=(prompts or ["p"])[i], tps=1.0
+                )
+            )
         s.commit()
 
 
@@ -109,6 +124,107 @@ def test_sin_runs_colgadas_no_hace_nada(bd_limpia):
     _fila(bd_limpia, "buena", "done")
     assert reconcile_orphan_runs() == 0
     assert _estado(bd_limpia, "buena") == "done"
+
+
+# --- 1b. una run con TODOS sus resultados no es huérfana --------------------------------
+#
+# El daño del incidente del 2026-08-13 no fue marcar de más: fue marcar mal. 98 runs que
+# habían terminado enteras acabaron en ámbar. Una fila `running` con resultados para todos
+# sus prompts NO se quedó a medias — le faltó el último UPDATE. Decir "interrumpida" ahí es
+# tirar trabajo bueno del Historial.
+
+
+def test_una_run_colgada_pero_con_todos_sus_resultados_se_recupera_como_terminada(bd_limpia):
+    _fila(bd_limpia, "acabada", "running", prompts=["chat", "code", "summary"], resultados=3)
+
+    assert reconcile_orphan_runs() == 1, "deja de estar en running, que es lo que se cuenta"
+
+    assert (
+        _estado(bd_limpia, "acabada") == "done"
+    ), "tenía resultados para todos sus prompts: terminó, no se interrumpió"
+
+
+def test_una_run_colgada_a_medias_si_se_marca_interrumpida(bd_limpia):
+    """El contraste que mata al mutante 'marca done siempre'."""
+    _fila(bd_limpia, "a-medias", "running", prompts=["chat", "code", "summary"], resultados=2)
+
+    assert reconcile_orphan_runs() == 1
+
+    assert _estado(bd_limpia, "a-medias") == "interrupted"
+
+
+def test_una_run_colgada_sin_ningun_resultado_se_marca_interrumpida(bd_limpia):
+    _fila(bd_limpia, "vacia", "running", prompts=["chat", "code"], resultados=0)
+
+    assert reconcile_orphan_runs() == 1
+
+    assert _estado(bd_limpia, "vacia") == "interrupted"
+
+
+def test_se_recuperan_y_se_interrumpen_en_la_misma_pasada(bd_limpia):
+    _fila(bd_limpia, "acabada", "running", prompts=["chat"], resultados=1)
+    _fila(bd_limpia, "a-medias", "running", prompts=["chat", "code"], resultados=1)
+
+    assert reconcile_orphan_runs() == 2
+
+    assert _estado(bd_limpia, "acabada") == "done"
+    assert _estado(bd_limpia, "a-medias") == "interrupted"
+
+
+# --- 1c. reparación idempotente de las filas que ya quedaron mal marcadas ---------------
+#
+# Para las máquinas que ya sufrieron el incidente: corre en `init_db()`, en cada arranque.
+
+
+def test_repara_las_interrumpidas_que_tenian_todos_sus_resultados(bd_limpia):
+    _fila(bd_limpia, "mal-marcada", "interrupted", prompts=["chat", "code"], resultados=2)
+
+    assert repair_misflagged_interrupted_runs() == 1
+
+    assert _estado(bd_limpia, "mal-marcada") == "done"
+
+
+def test_la_reparacion_no_toca_las_interrumpidas_de_verdad(bd_limpia):
+    _fila(bd_limpia, "parcial", "interrupted", prompts=["chat", "code"], resultados=1)
+    _fila(bd_limpia, "vacia", "interrupted", prompts=["chat"], resultados=0)
+
+    assert repair_misflagged_interrupted_runs() == 0
+
+    assert _estado(bd_limpia, "parcial") == "interrupted"
+    assert _estado(bd_limpia, "vacia") == "interrupted"
+
+
+def test_la_reparacion_es_idempotente(bd_limpia):
+    """Corre en cada arranque: la segunda vez no debe encontrar nada que hacer."""
+    _fila(bd_limpia, "mal-marcada", "interrupted", prompts=["chat"], resultados=1)
+
+    assert repair_misflagged_interrupted_runs() == 1
+    assert repair_misflagged_interrupted_runs() == 0, "la segunda pasada no cambia nada"
+    assert _estado(bd_limpia, "mal-marcada") == "done"
+
+
+def test_la_reparacion_no_toca_runs_en_curso(bd_limpia):
+    """Una run viva no es asunto de la reparación."""
+    _fila(bd_limpia, "en-curso", "running", prompts=["chat"], resultados=1)
+
+    assert repair_misflagged_interrupted_runs() == 0
+
+    assert _estado(bd_limpia, "en-curso") == "running"
+
+
+def test_opts_json_ilegible_no_recupera_nada(bd_limpia):
+    """Sin poder leer los prompts no se presupone que terminó: fail-closed."""
+    from sqlmodel import Session
+
+    _fila(bd_limpia, "rota", "interrupted", prompts=["chat"], resultados=1)
+    with Session(bd_limpia) as s:
+        fila = s.get(BenchmarkRun, "rota")
+        fila.opts_json = "{esto no es json"
+        s.add(fila)
+        s.commit()
+
+    assert repair_misflagged_interrupted_runs() == 0
+    assert _estado(bd_limpia, "rota") == "interrupted"
 
 
 # --- 2. poder pararla desde la API ------------------------------------------------------

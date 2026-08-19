@@ -81,7 +81,9 @@ def test_vision_prompts_registered_with_checklist():
         p = benchmark.get_prompt(pid)
         assert p is not None and p.type == "vision"
         assert p.image and p.image.endswith(".png")
-        assert p.keywords and all(isinstance(g, list) and g for g in p.keywords)
+        # Los prompts de visión puntúan con comprobaciones ponderadas (`checks`): además del
+        # checklist de atributos, atan color↔forma y castigan inventarse figuras.
+        assert p.checks and all(c.kind for c in p.checks)
 
 
 # ---- scorer por checklist (la mejora de calidad de verdad) ----
@@ -110,9 +112,13 @@ def test_keywords_accent_and_language_insensitive():
 
 
 def test_scene_checklist_scores_a_correct_answer_high():
-    # Respuesta ideal a vision-scene → debería puntuar 100 con su propio checklist.
+    # Respuesta ideal a vision-scene → debería puntuar 100 con su propio baremo.
+    from core.benchmark import _quality_checks
+
     p = benchmark.get_prompt("vision-scene")
-    ideal = "Hay 3 figuras: un círculo rojo, un cuadrado azul y un triángulo verde."
-    assert _quality_keywords(ideal, p.keywords) == 100.0
+    ideal = "Hay 3 figuras: un circulo rojo, un cuadrado azul y un triangulo verde."
+    assert _quality_checks(ideal, p.checks) == 100.0
     # Una respuesta pobre puntúa mucho menos.
-    assert _quality_keywords("Una figura azul.", p.keywords) < 50.0
+    assert _quality_checks("Una figura azul.", p.checks) < 50.0
+    # Y describir figuras que no están castiga, aunque acierte el conteo.
+    assert _quality_checks("3 estrellas amarillas y un hexagono.", p.checks) < 40.0

@@ -138,3 +138,88 @@ def test_run_one_emits_result_event_when_base_url_missing():
     result_events = [e for e in events if e["type"] == "result"]
     assert len(result_events) == 1
     assert result_events[0]["result"]["error"] == runner.results[0].error
+
+
+def test_error_rows_still_record_which_prompt_version_was_attempted():
+    # Una fila de error sin versión de prompt no se puede comparar luego con nada, ni
+    # siquiera para saber qué se intentó medir.
+    req = BenchmarkRequest(engine="unknown-engine", model="m", prompts=["chat"], auto=False)
+    runner = BenchmarkRunner(req)
+    prompt = get_prompt("chat")
+    assert prompt is not None
+
+    asyncio.run(runner._run_one(prompt, {}))
+
+    fila = runner.results[0]
+    assert fila.error
+    assert fila.prompt_version == prompt.version
+    assert fila.scorer == ""  # no se puntuó nada: no se inventa un scorer
+    assert fila.n_samples == 0
+
+
+def _runner_con_respuesta(prompt_id: str, salida: str):
+    """Runner con el motor sustituido por una respuesta fija: puntúa sin red ni GPU."""
+    req = BenchmarkRequest(
+        engine="llamacpp",
+        model="m",
+        prompts=[prompt_id],
+        auto=False,
+        base_url="http://localhost:8080",
+    )
+    runner = BenchmarkRunner(req)
+
+    async def _fake_pass(prompt, headers, model_for_engine, measure=True):
+        return {
+            "decode_tps": 100.0,
+            "ttft_ms": 50,
+            "prefill_tps": 200.0,
+            "vram_peak": 1.0,
+            "ram_peak": 2.0,
+            "token_count": 10,
+            "output": salida,
+            "error": "",
+        }
+
+    runner._one_pass = _fake_pass
+    return runner
+
+
+def test_result_records_the_prompt_version_and_the_scorer_used():
+    # Sin estos dos campos, comparar notas entre runs es inválido en cuanto la batería
+    # cambia: MEDIDO sobre el historial real, filas del prompt `chat` guardaban respuestas
+    # a dos preguntas distintas ("recomiéndame 3 libros" y "lista los ocho planetas") con
+    # la misma etiqueta y sin forma de distinguirlas.
+    prompt = get_prompt("chat")
+    assert prompt is not None
+    runner = _runner_con_respuesta(
+        "chat", "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune"
+    )
+
+    asyncio.run(runner._run_one(prompt, {}))
+
+    fila = runner.results[0]
+    assert not fila.error
+    assert fila.quality == 100.0
+    assert fila.prompt_version == prompt.version
+    assert fila.scorer == "checks"
+
+
+def test_quality_event_says_which_checks_failed():
+    # La nota tiene que ser auditable: un número desnudo no se puede discutir.
+    prompt = get_prompt("chat")
+    assert prompt is not None
+    # Los ocho planetas, pero desordenados y con Plutón de propina.
+    runner = _runner_con_respuesta(
+        "chat", "Venus, Mercury, Earth, Mars, Jupiter, Saturn, Neptune, Uranus and Pluto"
+    )
+
+    asyncio.run(runner._run_one(prompt, {}))
+
+    eventos = []
+    while not runner.queue.empty():
+        eventos.append(runner.queue.get_nowait())
+    calidad = [e for e in eventos if e.get("phase") == "quality"]
+    assert len(calidad) == 1
+    assert calidad[0]["method"] == "checks"
+    assert set(calidad[0]["failed"]) == {"in order from the Sun", "no dwarf planets"}
+    assert 0 < calidad[0]["score"] < 100

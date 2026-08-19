@@ -156,10 +156,10 @@ def test_long_context_prompt_loads_haystack():
 
 
 def test_every_prompt_has_a_verifiable_scorer():
-    # Política: ningún prompt se evalúa por F1 de tokens a secas — todos llevan checklist
-    # (keywords) o ejecución de código (code_tests).
+    # Política: ningún prompt se evalúa por F1 de tokens a secas — todos llevan comprobaciones
+    # ponderadas (checks), checklist (keywords) o ejecución de código (code_tests).
     for p in load_prompts():
-        assert p.keywords or p.code_tests, f"{p.id} no tiene scorer verificable"
+        assert p.checks or p.keywords or p.code_tests, f"{p.id} no tiene scorer verificable"
 
 
 def test_parse_judge_score():

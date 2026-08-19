@@ -5,16 +5,34 @@ import { PageHeader, Card, Field, Select, Input, Button, Badge, Stat } from "../
 import { useToast } from "../components/toast.jsx";
 import { useT } from "../i18n/index.jsx";
 
+// `tier` = dificultad declarada en data/prompts.json. La batería cubre los tres tramos a
+// propósito: si todos los prompts son fáciles, los modelos buenos empatan en 100 y la nota
+// deja de ordenar nada. `on` marca la selección por defecto: uno de cada capacidad, con
+// tramos mezclados, sin dispararle el tiempo de ejecución.
 const ALL_PROMPTS = [
-  { id: "reasoning", labelKey: "benchmark.prompts.reasoning" },
-  { id: "code", labelKey: "benchmark.prompts.code" },
-  { id: "summary", labelKey: "benchmark.prompts.summary" },
-  { id: "chat", labelKey: "benchmark.prompts.chat" },
-  { id: "long-context", labelKey: "benchmark.prompts.longContext" },
-  { id: "vision-scene", labelKey: "benchmark.prompts.visionScene", vision: true },
-  { id: "vision-count", labelKey: "benchmark.prompts.visionCount", vision: true },
+  { id: "chat", labelKey: "benchmark.prompts.chat", tier: "easy", on: true },
+  { id: "reasoning", labelKey: "benchmark.prompts.reasoning", tier: "medium", on: true },
+  { id: "code", labelKey: "benchmark.prompts.code", tier: "medium", on: true },
+  { id: "summary", labelKey: "benchmark.prompts.summary", tier: "medium", on: true },
+  { id: "logic", labelKey: "benchmark.prompts.logic", tier: "hard", on: true },
+  { id: "instructions", labelKey: "benchmark.prompts.instructions", tier: "hard", on: true },
+  { id: "long-context", labelKey: "benchmark.prompts.longContext", tier: "hard", on: true },
+  { id: "json-extract", labelKey: "benchmark.prompts.jsonExtract", tier: "hard" },
+  { id: "unanswerable", labelKey: "benchmark.prompts.unanswerable", tier: "hard" },
+  { id: "code-hard", labelKey: "benchmark.prompts.codeHard", tier: "hard" },
+  { id: "long-context-count", labelKey: "benchmark.prompts.longContextCount", tier: "hard" },
+  { id: "vision-scene", labelKey: "benchmark.prompts.visionScene", tier: "medium", vision: true },
+  { id: "vision-count", labelKey: "benchmark.prompts.visionCount", tier: "medium", vision: true },
 ];
 const VISION_PROMPT_IDS = ALL_PROMPTS.filter((p) => p.vision).map((p) => p.id);
+
+// Distintivo de dificultad. Las escalas emerald/amber/rose están remapeadas a la paleta
+// Fervon en tailwind.config.js, así que no introducen colores fríos.
+const TIER_CLASS = {
+  easy: "bg-emerald-500/15 text-emerald-300",
+  medium: "bg-amber-500/15 text-amber-300",
+  hard: "bg-rose-500/15 text-rose-300",
+};
 
 // Mapea kv_cache del optimizador → preset de compresión del frontend
 const KV_TO_COMPRESSION = { f16: "quality", q8_0: "balanced", q5_0: "compressed", q4_0: "aggressive" };
@@ -154,7 +172,7 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
       cancelled = true;
     };
   }, [model, engine, localModel]);
-  const [prompts, setPrompts] = useState(ALL_PROMPTS.filter((p) => !p.vision).map((p) => p.id));
+  const [prompts, setPrompts] = useState(ALL_PROMPTS.filter((p) => p.on).map((p) => p.id));
   const [keepAlive, setKeepAlive] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [judgeMode, setJudgeMode] = useState("heuristic"); // heuristic | self | api
@@ -645,6 +663,12 @@ export default function BenchmarkView({ dockerDown, navPayload, benchmark }) {
                     >
                       {p.vision && <ImageIcon size={11} />}
                       {t(p.labelKey)}
+                      <span
+                        className={`ml-1 rounded px-1 text-[10px] uppercase ${TIER_CLASS[p.tier]}`}
+                        title={t(`benchmark.prompts.tier.${p.tier}`)}
+                      >
+                        {t(`benchmark.prompts.tierShort.${p.tier}`)}
+                      </span>
                     </button>
                   );
                 })}

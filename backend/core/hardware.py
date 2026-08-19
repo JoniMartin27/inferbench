@@ -299,6 +299,37 @@ def gpu_display_reserve_gb(total_gb: float) -> float:
     return round(max(2.0, total_gb * 0.25), 1)
 
 
+def native_vram_budget_gb() -> float:
+    """VRAM que un motor NATIVO (llama.cpp) puede ocupar AHORA MISMO sin reventar.
+
+    Los motores Docker se planifican con `safe_gpu_fraction()`, que parte de la VRAM libre;
+    el plan de llama.cpp nativo, en cambio, se calculaba contra la VRAM **total** de la
+    tarjeta. MEDIDO el 2026-08-19 en una 3070 de 8 GB con el escritorio ocupando 2,4 GB:
+    para `llama-3.1-8b` Q4_K_M el plan salió ctx 23552 con las 33 capas en GPU, o sea
+    4,4 GB de pesos + 2,9 GB de KV = 7,3 GB sobre 5,7 GB libres. `llama-server` murió con
+    `CUDA error: out of memory` y el benchmark se perdió entero.
+
+    Aquí se parte de la VRAM **libre** (que ya descuenta lo que gasta el escritorio, así
+    que NO se le resta además `gpu_display_reserve_gb`: sería contarlo dos veces) menos un
+    margen pequeño para el contexto de CUDA y para que el escritorio pueda crecer un poco
+    mientras corre el benchmark. Ajustable con `INFERBENCH_NATIVE_VRAM_MARGIN_GB`.
+
+    Devuelve 0.0 si no hay NVIDIA/pynvml detectable: en ese caso el llamante debe seguir
+    planificando como antes, porque aquí no hay medida en la que basarse.
+    """
+    free, total = gpu_memory_gb()
+    if total <= 0:
+        return 0.0
+    margen = 0.8
+    env = os.environ.get("INFERBENCH_NATIVE_VRAM_MARGIN_GB")
+    if env is not None:
+        try:
+            margen = max(0.0, float(env))
+        except ValueError:
+            pass
+    return round(max(0.0, min(free, total) - margen), 2)
+
+
 def safe_gpu_fraction() -> float:
     """Fracción MÁXIMA de VRAM total que un motor Docker puede pedir sin saturar la pantalla.
 

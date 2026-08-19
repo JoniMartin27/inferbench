@@ -74,3 +74,39 @@ jobs:
         run: npm run test:unit --workspace frontend
       - name: Audit (no rompe el build)
         run: npm audit --omit=dev || true
+
+  website:
+    name: Website · build
+    runs-on: ubuntu-latest
+    # La landing NO estaba cubierta por ningún CI: se construye y despliega desde
+    # `deploy-website.yml`, que solo corre al empujar a master. MEDIDO el 2026-08-19 con la
+    # PR #53 (bump de Snyk a astro 7): los checks salían todos verdes y el build de la
+    # landing estaba ROTO — `@import "tailwindcss"` dejaba de resolverse y `astro build`
+    # moría con `ENOENT ... /website/tailwindcss`. Mergear habría tumbado el despliegue.
+    # Node 24 para igualar al deploy: astro exige >= 22.12 y validar en otra versión no
+    # prueba lo que se publica.
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install deps (lockfile)
+        run: npm ci
+      - name: Build (Astro)
+        run: npm run build
+      # Un build verde no basta: si la tubería de Tailwind se rompe en silencio, astro
+      # sigue saliendo con código 0 y publica la landing SIN estilos. El CSS ronda los
+      # 25 KB; por debajo de 10 KB es que Tailwind no ha generado nada.
+      - name: El CSS tiene contenido de verdad
+        run: |
+          css=$(ls dist/_astro/*.css | head -1)
+          bytes=$(wc -c < "$css")
+          echo "$css -> $bytes bytes"
+          test "$bytes" -ge 10000
+      - name: Audit (no rompe el build)
+        run: npm audit --omit=dev || true

@@ -34,8 +34,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # `npm ci` y no `npm install`: con `install` el lockfile es una sugerencia y el
+      # deploy puede resolver versiones que no ha validado nadie. Lo que se publica tiene
+      # que ser exactamente lo que el CI construyó.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build
         run: npm run build
       - name: Upload artifact

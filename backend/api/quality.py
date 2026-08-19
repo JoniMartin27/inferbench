@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import uuid
 from pathlib import Path
 
@@ -28,34 +27,11 @@ _TRABAJOS: dict[str, asyncio.Queue] = {}
 _TAREAS: dict[str, asyncio.Task] = {}
 
 
-def _fichero_resultados() -> Path:
-    base = (
-        Path(os.environ["APPDATA"]) / "InferBench"
-        if os.name == "nt" and "APPDATA" in os.environ
-        else Path.home() / ".inferbench"
-    )
-    base.mkdir(parents=True, exist_ok=True)
-    return base / "quant_damage.json"
-
-
-def cargar_resultados() -> list[dict]:
-    f = _fichero_resultados()
-    if not f.exists():
-        return []
-    try:
-        return json.loads(f.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
-        # Un fichero corrupto no puede tumbar la vista: se avisa y se sigue con lista vacía.
-        logger.warning(f"quant_damage.json ilegible: {e}")
-        return []
-
-
-def guardar_resultado(comp: dict) -> None:
-    datos = [c for c in cargar_resultados() if c.get("modelo") != comp.get("modelo")]
-    datos.append(comp)
-    _fichero_resultados().write_text(
-        json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+# La persistencia vive en `core/perplexity.py`: la recomendación del Dashboard también
+# necesita leer estas medidas, y una capa `api/` no debe importar de otra `api/`.
+_fichero_resultados = ppl.fichero_resultados
+cargar_resultados = ppl.cargar_resultados
+guardar_resultado = ppl.guardar_resultado
 
 
 class Candidato(BaseModel):

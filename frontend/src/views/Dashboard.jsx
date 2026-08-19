@@ -341,7 +341,7 @@ function Row({ k, v }) {
 
 function ModelRecRow({ row, onNavigate, accent }) {
   const t = useT();
-  const { model, config, techniques, engine_note, bits_per_weight: bpw } = row;
+  const { model, config, techniques, engine_note, bits_per_weight: bpw, measured_damage: dano } = row;
   const accents = {
     emerald: "from-emerald-500/20 to-cyan-500/20 text-emerald-300",
     purple: "from-purple-500/20 to-indigo-500/20 text-purple-300",
@@ -371,6 +371,28 @@ function ModelRecRow({ row, onNavigate, accent }) {
           {bpw != null && (
             <Badge tone={bpw < 4 ? "amber" : "slate"}>
               {t("dashboard.rec.bpw", { bpw })}
+            </Badge>
+          )}
+          {/* Si el usuario ha MEDIDO el daño de esta cuantización (vista Calidad), se
+              enseña la medida en vez de dejar solo la heurística: los bits/peso vienen
+              de la literatura, esto es su modelo en su máquina. La referencia se marca
+              aparte porque compararla consigo misma no es una medida. */}
+          {dano?.es_referencia && (
+            <Badge tone="emerald">{t("dashboard.rec.measuredRef")}</Badge>
+          )}
+          {dano && !dano.es_referencia && dano.same_top_pct != null && (
+            <Badge
+              tone="emerald"
+              title={t("dashboard.rec.measuredTitle", {
+                ref: dano.referencia,
+                pct: dano.same_top_pct.toFixed(1),
+                ratio: (dano.ppl_ratio ?? 1).toFixed(3),
+              })}
+            >
+              {t("dashboard.rec.measured", {
+                pct: dano.same_top_pct.toFixed(1),
+                ref: dano.referencia,
+              })}
             </Badge>
           )}
           {config.engine !== "llamacpp" && <Badge tone="amber">{config.engine}</Badge>}

@@ -108,7 +108,10 @@ export function Button({ children, variant = "primary", size = "md", className =
   );
 }
 
-export function Badge({ children, tone = "slate", className = "" }) {
+// `...rest` para que un `title` (tooltip) llegue al DOM: sin esto se descartaba en
+// silencio y la explicación al pasar el ratón simplemente no existía, aunque el
+// código de quien la puso pareciera correcto.
+export function Badge({ children, tone = "slate", className = "", ...rest }) {
   const tones = {
     slate: "bg-slate-800/60 text-slate-300 border-slate-700/60",
     indigo: "bg-indigo-500/10 text-indigo-300 border-indigo-700/40",
@@ -121,6 +124,7 @@ export function Badge({ children, tone = "slate", className = "" }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-none ${tones[tone]} ${className}`}
+      {...rest}
     >
       {children}
     </span>

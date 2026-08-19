@@ -7,7 +7,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from core import binary_manager, compat as _compat, docker_mgr, ollama_manager
+from core import binary_manager, compat as _compat, docker_mgr, ollama_manager, perplexity as ppl
 from core.hardware import detect_hardware
 from core.model_manager import (
     gguf_installed,
@@ -61,6 +61,10 @@ class RecommendationRow(BaseModel):
     # «IQ1_S» no le dice nada a nadie; «1,5 bits/peso» sí. Va aquí para que la UI pueda
     # enseñar cuánto se está comprimiendo de verdad sin tener que replicar la tabla.
     bits_per_weight: float | None = None
+    # Daño REAL de esta cuantización, si el usuario lo ha medido (vista Calidad). Los
+    # bits/peso son una heurística prestada de la literatura; esto es una medida de SU
+    # modelo en SU máquina. `None` = nadie lo ha medido, y entonces no se afirma nada.
+    measured_damage: dict | None = None
 
 
 class QuantOption(BaseModel):
@@ -188,6 +192,12 @@ async def recommendations(
                 techniques=techniques,
                 engine_note=engine_note,
                 bits_per_weight=_compat.bits_per_weight(winner.quant) if winner.quant else None,
+                measured_damage=ppl.dano_medido(
+                    ppl.modelo_base_de_plantilla(
+                        model.hf_gguf.file_template if model.hf_gguf else None
+                    ),
+                    winner.quant,
+                ),
             )
         )
 

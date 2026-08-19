@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import re
 import time
@@ -96,6 +97,86 @@ def _dir_logits() -> Path:
     d = base / "kld"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _dir_datos() -> Path:
+    base = (
+        Path(os.environ["APPDATA"]) / "InferBench"
+        if os.name == "nt" and "APPDATA" in os.environ
+        else Path.home() / ".inferbench"
+    )
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def fichero_resultados() -> Path:
+    """Dónde se guardan las comparaciones de daño por cuantización ya medidas."""
+    return _dir_datos() / "quant_damage.json"
+
+
+def cargar_resultados() -> list[dict]:
+    f = fichero_resultados()
+    if not f.exists():
+        return []
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        # Un fichero corrupto no puede tumbar una vista: se avisa y se sigue con lista vacía.
+        logger.warning(f"quant_damage.json ilegible: {e}")
+        return []
+
+
+def guardar_resultado(comp: dict) -> None:
+    datos = [c for c in cargar_resultados() if c.get("modelo") != comp.get("modelo")]
+    datos.append(comp)
+    fichero_resultados().write_text(
+        json.dumps(datos, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def modelo_base_de_plantilla(file_template: str | None) -> str | None:
+    """`Llama-3.2-1B-Instruct-{quant}.gguf` → `Llama-3.2-1B-Instruct`.
+
+    Es el mismo nombre con el que se guardan las medidas (que salen del fichero GGUF de
+    disco), así que sirve de puente entre el catálogo y lo ya medido.
+    """
+    if not file_template:
+        return None
+    nombre = file_template.replace("{quant}", "Q4_K_M")
+    return _modelo_del_nombre(Path(nombre))
+
+
+def dano_medido(modelo_base: str | None, quant: str | None) -> dict | None:
+    """La medida real de daño de ESTE modelo a ESTE quant, si existe. None si no se ha medido.
+
+    Devuelve `{referencia, same_top_pct, ppl_ratio, kld_media}`. Sirve para que la
+    recomendación deje de apoyarse solo en la heurística de bits/peso cuando hay una
+    medida de verdad: `same_top_pct` es el % de tokens en los que el modelo cuantizado
+    elige el MISMO token más probable que la referencia.
+    """
+    if not modelo_base or not quant:
+        return None
+    objetivo = quant.upper()
+    for comp in cargar_resultados():
+        if comp.get("modelo") != modelo_base:
+            continue
+        for m in comp.get("medidas") or []:
+            if (m.get("quant") or "").upper() != objetivo or m.get("error"):
+                continue
+            if m.get("es_referencia"):
+                # La referencia no tiene daño CONTRA sí misma: decir 100% sería inventarse
+                # una medida que nadie ha hecho.
+                return {"referencia": comp.get("referencia"), "es_referencia": True}
+            if m.get("same_top_pct") is None:
+                return None
+            return {
+                "referencia": comp.get("referencia"),
+                "es_referencia": False,
+                "same_top_pct": m.get("same_top_pct"),
+                "ppl_ratio": m.get("ppl_ratio"),
+                "kld_media": m.get("kld_media"),
+            }
+    return None
 
 
 def rango_calidad(quant: str) -> int:
